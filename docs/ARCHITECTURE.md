@@ -209,15 +209,30 @@ adds it here first, the way a new dependency is added to section 2 first.
   cell coordinates, and in text fields `Insert(char)` and the editing
   keys.
 - `KeyContext`: `Home { pane }`, `Notes { pane }`, `Review { step }`,
-  `Popup(kind)`, each with a `text_field: bool` overlay. When the overlay
-  is set, printable keys become `Insert` and only `Enter`, `Escape`,
-  `Tab`, `Up`, `Down`, the editing keys and the `Alt` shortcuts keep a
-  name.
+  `Popup { kind }`, each with a `text_field: bool` overlay, and
+  `KeyContext::text_field()` to read it. When the overlay is set,
+  printable keys become `Insert` and only `Enter`, `Escape`, `Tab`, `Up`,
+  `Down`, the editing keys and the `Alt` shortcuts keep a name. The
+  editing keys belong to the field rather than to the table, so they are
+  never a row of the hint bar.
+- `Pane`, `NotesPane`, `ReviewStep` and `PopupKind`: what a context is of.
 - `action_for(Event, KeyContext) -> Option<Action>`.
 - `bindings(KeyContext) -> &[Binding]`: the rows of the key table for a
-  context, each a key, an action and a label. The hint bar, the command
-  palette and the help overlay are drawn from these rows and from nothing
-  else, so they cannot disagree with the dispatcher.
+  context. The hint bar, the command palette and the help overlay are
+  drawn from these rows and from nothing else, so they cannot disagree
+  with the dispatcher. A `Binding` is
+  - `keys`: every key that runs the row, with the action each one means,
+    because `J` and `K` are one row called "reorder" and the arrow keys
+    stand in for `j` and `k`;
+  - `shown`: how those keys are written when the row is named, `J/K` or
+    `tab h/l`. A row with no keys at all, "type to filter", is a line of
+    the hint bar and nothing else;
+  - `label`: what the row is called, in all three places;
+  - `bar` and `narrow`: where the hint bar puts the row when the window
+    has two panes and when it has collapsed to tabs, as a `Bar` of `Off`,
+    `Left`, `Right`, or `Short(Side, name)` where the bar is tight.
+- `name(KeyContext) -> &str`: what the hint bar calls the context, the
+  `TODAY` or `BACKLOG` that opens the bar.
 
 ### `app`
 
@@ -226,11 +241,24 @@ adds it here first, the way a new dependency is added to section 2 first.
   gate and `start_review` if the review opens.
 - `App::update(&mut self, Action) -> Flow`, `Flow` being `Continue` or
   `Quit`. The single entry point for every event, ticks included.
-- `App::key_context() -> KeyContext`.
+- `App::key_context() -> KeyContext`, and `App::page_context()` for the
+  context of the page under an open popup, which is the one the palette
+  lists the commands of.
 - `Layout`: which pane and which row, with its task or note id, occupies
-  which cell rectangle. `App::set_layout(Layout)` stores the last one and
-  the mouse actions are resolved against it.
-- Read access to the model and the application state for `ui`.
+  which cell rectangle, as a `narrow` flag, a `ListArea` per pane and a
+  `RowArea` per row, over a `Rect` of the terminal's own cells. `app` may
+  not name ratatui, so the rectangle is its own.
+  `App::set_layout(Layout)` stores the last one and the mouse actions are
+  resolved against it.
+- Read access to the model and the application state for `ui`:
+  `today`, `model`, `page`, `pane`, `notes_pane`, `focused`, `popup`,
+  `view`, `cursor`, `palette_rows`, `search_results` and `layout`.
+  `Page` is `Home` or `Notes`; `List` is `Day`, `Backlog` or `Notes`, one
+  cursor each, held by id; `Popup` carries the kind, the text typed into
+  it, the caret and the selected row.
+- `app::demo`: the fake data phase 6 draws, and the shape `ui` needs it
+  in, in one module so that phase 7 replaces it with the domain's views
+  by deleting one file. `App::fixture()` hands it out.
 
 ### `ui`
 
