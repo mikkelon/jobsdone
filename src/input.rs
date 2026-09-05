@@ -509,6 +509,18 @@ const NOTES_LIST: &[Binding] = &[
         narrow: Bar::Off,
     },
     Binding {
+        keys: &[
+            ("j", Action::Down),
+            ("k", Action::Up),
+            ("down", Action::Down),
+            ("up", Action::Up),
+        ],
+        shown: "j/k",
+        label: "move",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
         keys: &[("u", Action::Undo)],
         shown: "u",
         label: "undo",

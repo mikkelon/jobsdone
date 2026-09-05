@@ -71,6 +71,37 @@ fn typing(typed: char) -> Event {
 }
 
 #[test]
+fn every_list_of_rows_moves_with_j_and_k() {
+    // Every list but the review's, where `k` is "keep" and the arrows
+    // stand in for it (DESIGN.md section 4).
+    let lists = [
+        home(Pane::Day),
+        home(Pane::Backlog),
+        KeyContext::Notes {
+            pane: NotesPane::List,
+            text_field: false,
+        },
+    ];
+    for context in lists {
+        for wanted in [
+            ("j", Action::Down),
+            ("k", Action::Up),
+            ("down", Action::Down),
+            ("up", Action::Up),
+        ] {
+            assert!(
+                bindings(context)
+                    .iter()
+                    .flat_map(|binding| binding.keys)
+                    .any(|key| *key == wanted),
+                "{context:?} does not move with {:?}",
+                wanted.0
+            );
+        }
+    }
+}
+
+#[test]
 fn no_context_binds_a_key_twice() {
     for context in every_context() {
         let mut seen: Vec<&str> = Vec::new();
