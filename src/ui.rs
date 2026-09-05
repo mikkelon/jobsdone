@@ -176,6 +176,13 @@ impl Canvas<'_> {
     }
 }
 
+/// A count and the noun it counts, in the number the count puts it in.
+/// The plural is written out, because English does not always make one by
+/// adding an s.
+fn counted(n: usize, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
+}
+
 /// How many cells a string takes, which is not how many characters it
 /// has: a CJK character or an emoji takes two, a combining mark none.
 fn count(text: &str) -> u16 {
@@ -265,7 +272,7 @@ fn rule_label(rule: &Rule) -> String {
             MonthDay::Day(day) => format!("{day}{} of the month", ordinal(*day)),
             MonthDay::Last => "last of the month".to_owned(),
         },
-        Rule::EveryNWeeks { n, .. } => format!("every {n} weeks"),
+        Rule::EveryNWeeks { n, .. } => format!("every {}", counted(*n as usize, "week", "weeks")),
     }
 }
 
@@ -277,7 +284,6 @@ fn schedule_label(rule: &Rule) -> String {
         Rule::Weekly { weekdays } if weekdays.len() == 1 => {
             format!("every {}", weekday_word(weekdays[0]))
         }
-        Rule::EveryNWeeks { n, .. } if *n == 1 => "every week".to_owned(),
         other => rule_label(other),
     }
 }
@@ -395,7 +401,7 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
         (format!("Today · {}", day_label(app.today())), bold())
     };
     let count = app.notes().count;
-    let notes = format!("{count} note{}", if count == 1 { "" } else { "s" });
+    let notes = counted(count, "note", "notes");
     // A day that is not today says how far off it is and how to come
     // back, which leaves the right end no room for its own words.
     let short = vec![
@@ -1264,8 +1270,7 @@ fn how_late(due: domain::DueChip, today: Date) -> String {
         .on
         .until(today)
         .map_or(0, |span| i64::from(span.get_days()));
-    let day = if days == 1 { "day" } else { "days" };
-    format!(" · {days} {day} over")
+    format!(" · {} over", counted(days as usize, "day", "days"))
 }
 
 /// The right-hand words that are not a chip: that the row is being

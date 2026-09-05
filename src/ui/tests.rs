@@ -1833,3 +1833,28 @@ fn stopping_a_repeat_says_what_stopping_does() {
         );
     }
 }
+
+/// One of anything is one, not one of several: the search count said
+/// `1 matches` (F12), and a repeat every one week said `every 1 weeks`.
+#[test]
+fn a_count_of_one_puts_its_noun_in_the_singular() {
+    let mut app = app();
+    app.update(Action::Search);
+    for typed in "Renew passport".chars() {
+        app.update(Action::Insert(typed));
+    }
+    let text = look(&app, 120, 36).join("\n");
+    assert!(text.contains("1 match"), "{text}");
+    assert!(!text.contains("1 matches"), "{text}");
+
+    app.update(Action::Cancel);
+    app.update(Action::Repeat);
+    app.update(Action::EveryFewWeeks);
+    app.update(Action::Left);
+    let text = look(&app, 120, 36).join("\n");
+    assert!(text.contains("[ 1 ] week from"), "{text}");
+
+    // And a count of none keeps the plural.
+    let empty = look(&empty(), 120, 36).join("\n");
+    assert!(empty.contains("0 notes"), "{empty}");
+}

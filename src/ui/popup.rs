@@ -179,7 +179,7 @@ fn search(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     canvas.rput(
         x + width - 2,
         y + 1,
-        &format!("{} matches", results.total),
+        &super::counted(results.total, "match", "matches"),
         dim(),
     );
     divide(canvas, x, y + 2, width);
@@ -632,7 +632,8 @@ fn shape_of(
             canvas.rput(right.saturating_sub(10), y, &format!("[ {day} ]"), bold());
         }
         Action::EveryFewWeeks => {
-            let from = format!("weeks from {}", day_label(draft.from));
+            let unit = if draft.weeks == 1 { "week" } else { "weeks" };
+            let from = format!("{unit} from {}", day_label(draft.from));
             canvas.rput(right, y, &from, dim());
             canvas.rput(
                 right.saturating_sub(count(&from) + 1),
