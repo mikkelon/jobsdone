@@ -5,6 +5,8 @@ daily work routine: plan today, work through it, review what yesterday
 left behind. It lives in a floating terminal that a keybind opens for a
 moment and closes again, next to btop and lazygit.
 
+![Today's plan and the backlog in a floating terminal on Omarchy](assets/screenshot.png)
+
 Omarchy is the first-class home: the install wires up the window rule,
 the keybind and a launcher entry, and the app takes its colours from
 whatever theme the terminal is in, dark or light. Any other Linux gets
