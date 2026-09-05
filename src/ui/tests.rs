@@ -403,6 +403,7 @@ fn every_colour_is_one_the_terminal_themes() {
         Action::Help,
         Action::Search,
         Action::MoveToDay,
+        Action::DueBy,
         Action::Add,
     ] {
         app.update(action);
@@ -587,6 +588,51 @@ fn the_move_card_names_the_task_and_the_days() {
 }
 
 #[test]
+fn the_date_card_types_picks_and_walks_the_month() {
+    let mut app = app();
+    app.update(Action::PaneRight);
+    app.update(Action::Down);
+    app.update(Action::DueBy);
+    for typed in "30 sep".chars() {
+        app.update(Action::Insert(typed));
+    }
+    let drawn = look(&app, 120, 36);
+    let text = drawn.join("\n");
+
+    assert!(text.contains("Due by Write the Q4 planning doc"));
+    assert!(text.contains("alt-r remind on"), "the card's other mode");
+    assert!(text.contains("Tue 30 Sep"), "what the typed date reads as");
+    assert!(text.contains("alt-3"));
+    assert!(text.contains("In a week"));
+    assert!(text.contains("no due date"), "what clearing answers");
+    assert!(text.contains("September 2025"));
+    assert!(text.contains(" Mo Tu We Th Fr Sa Su"));
+    assert!(text.contains("⏎ set"));
+    assert!(text.contains("tab calendar"));
+}
+
+#[test]
+fn the_date_cards_calendar_takes_the_keyboard_on_tab() {
+    let mut app = app();
+    app.update(Action::PaneRight);
+    app.update(Action::DueBy);
+    app.update(Action::NextPane);
+    app.update(Action::Right);
+    let drawn = look(&app, 120, 36);
+    let text = drawn.join("\n");
+
+    assert!(text.contains("h/l/j/k day"), "the calendar's own keys");
+    assert!(text.contains("</> month"));
+    assert!(text.contains("tab type it"), "and the way back");
+    assert!(
+        drawn
+            .iter()
+            .any(|row| row.contains('▏') && row.contains("Sat 13 Sep")),
+        "the card opened on the due date the task has and l walked a day on"
+    );
+}
+
+#[test]
 fn the_copy_question_spells_both_answers_out() {
     let mut app = app();
     app.update(Action::Edit);
@@ -638,6 +684,7 @@ fn no_size_the_window_can_take_makes_the_drawing_panic() {
         Action::Help,
         Action::Search,
         Action::MoveToDay,
+        Action::DueBy,
         Action::Add,
     ] {
         app.update(action);

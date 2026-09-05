@@ -6,10 +6,12 @@
 //! Their contents come from the key table, so they cannot teach a key the
 //! dispatcher does not have.
 
-use ratatui::style::{Color, Style};
+use jiff::Span;
+use jiff::civil::{Date, Weekday};
+use ratatui::style::{Color, Modifier, Style};
 
 use super::{Canvas, Rows, accent, bold, count, cursor, day_label, dim, place_label, plain};
-use crate::app::{App, MoveTarget, Popup};
+use crate::app::{App, DateDraft, DateKind, MoveTarget, Popup};
 use crate::domain::Row;
 use crate::input::{self, Binding, KeyContext, NotesPane, Pane, PopupKind, ReviewStep};
 
@@ -22,6 +24,7 @@ pub(super) fn draw(canvas: &mut Canvas, app: &App, rows: &Rows) {
         PopupKind::Search => search(canvas, app, popup, rows),
         PopupKind::Help => help(canvas, rows),
         PopupKind::Move => move_card(canvas, app, popup, rows),
+        PopupKind::Date => date_card(canvas, app, popup, rows),
         PopupKind::CopyQuestion => copy_question(canvas, app, popup, rows),
     }
 }
@@ -264,19 +267,45 @@ fn beside(found: &Row, closed: bool, today: jiff::civil::Date) -> String {
 
 const CARD_WIDTH: u16 = 50;
 
-/// A card over the row it is about, named after the task in its border.
-fn card(canvas: &mut Canvas, rows: &Rows, title: &str, lines: u16) -> (u16, u16) {
-    let width = CARD_WIDTH.min(canvas.width().saturating_sub(4));
-    let height = lines + 4;
-    let (x, y) = place(canvas, rows, width, height);
+/// A card over the row it is about: what it does in its border, and the
+/// task it is about beside that.
+fn card(canvas: &mut Canvas, x: u16, y: u16, width: u16, height: u16, title: &str, about: &str) {
     frame(canvas, x, y, width, height);
-    canvas.put(
+    let at = canvas.put(
         x + 2,
         y,
         super::clip(&format!(" {title} "), width.saturating_sub(4)),
         accent(),
     );
-    (x, y)
+    canvas.put(
+        at,
+        y,
+        super::clip(&format!("{about} "), (x + width).saturating_sub(at + 2)),
+        dim(),
+    );
+}
+
+/// The task a card is about, by the id it captured when it opened.
+fn about(app: &App, popup: &Popup) -> String {
+    popup
+        .target
+        .and_then(|task| app.model().live_task(task))
+        .map_or("a task", |task| task.title.as_str())
+        .to_owned()
+}
+
+/// A card's footer, drawn from the rows of its own key table so that it
+/// cannot offer a key the dispatcher does not have.
+fn keys_of(context: KeyContext) -> Vec<(&'static str, &'static str)> {
+    input::bindings(context)
+        .iter()
+        .filter_map(|binding| {
+            binding
+                .bar
+                .slot(binding.label)
+                .map(|(_, name)| (binding.shown, name))
+        })
+        .collect()
 }
 
 /// The days a task can be sent to, each with the date it works out as.
@@ -284,12 +313,10 @@ fn card(canvas: &mut Canvas, rows: &Rows, title: &str, lines: u16) -> (u16, u16)
 /// the application's.
 fn move_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     let choices = app.move_choices();
-    let name = popup
-        .target
-        .and_then(|task| app.model().live_task(task))
-        .map_or("a task", |task| task.title.as_str());
     let width = CARD_WIDTH.min(canvas.width().saturating_sub(4));
-    let (x, y) = card(canvas, rows, &format!("Move {name}"), choices.len() as u16);
+    let height = choices.len() as u16 + 4;
+    let (x, y) = place(canvas, rows, width, height);
+    card(canvas, x, y, width, height, "Move", &about(app, popup));
 
     for (at, choice) in choices.iter().enumerate() {
         let row = y + 2 + at as u16;
@@ -307,6 +334,182 @@ fn move_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     }
 }
 
+// ---- the date card ---------------------------------------------------
+
+/// Wide enough for the five picks and their dates, and for a calendar
+/// with room around it.
+const DATE_WIDTH: u16 = 54;
+
+/// The columns the month grid takes: seven days of two figures, each
+/// under a space.
+const CALENDAR: u16 = 21;
+
+/// Due by, remind on, or the day the move card was asked to pick. One
+/// card with three ways to a date: type it, pick it, or walk the month.
+fn date_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
+    let Some(draft) = popup.date() else {
+        return;
+    };
+    let choices = app.date_choices();
+    let weeks = weeks_of(draft.on);
+    let width = DATE_WIDTH.min(canvas.width().saturating_sub(4));
+    let body = rows.bottom - rows.top + 1;
+
+    // The border, a blank, the field, a blank, the picks, the calendar
+    // under a blank, then a blank, the rule, the footer and the border.
+    let around = choices.len() as u16 + 8;
+    let month = 3 + weeks.len() as u16;
+    // A window with no room for the calendar keeps the card that types
+    // and picks rather than losing the card altogether.
+    let shown = around + month <= body;
+    let height = around + if shown { month } else { 0 };
+    let (x, y) = place(canvas, rows, width, height);
+
+    card(
+        canvas,
+        x,
+        y,
+        width,
+        height,
+        name_of(draft.kind),
+        &about(app, popup),
+    );
+    if let Some(other) = switch(draft.kind) {
+        canvas.rput(x + width - 2, y, other, dim());
+    }
+
+    // What has been typed, and the day it and the calendar agree on.
+    let typed: String = popup.text.chars().take(popup.caret).collect();
+    let rest: String = popup.text.chars().skip(popup.caret).collect();
+    let at = canvas.put(x + 3, y + 2, &typed, plain());
+    let at = canvas.put(at, y + 2, "▏", bold());
+    canvas.put(at, y + 2, &rest, plain());
+    canvas.rput(x + width - 2, y + 2, &day_label(draft.on), dim());
+
+    for (at, choice) in choices.iter().enumerate() {
+        let row = y + 4 + at as u16;
+        canvas.put(x + 2, row, choice.key, accent());
+        canvas.put(x + 8, row, choice.label, plain());
+        let day = match choice.date {
+            Some(day) => day_label(day),
+            None => no_date(draft.kind).to_owned(),
+        };
+        canvas.rput(x + width - 2, row, &day, dim());
+    }
+
+    if shown {
+        calendar(
+            canvas,
+            x + 2,
+            y + choices.len() as u16 + 5,
+            &weeks,
+            draft,
+            app.today(),
+        );
+    }
+    let last = y + height - 3;
+    divide(canvas, x, last, width);
+    footer(
+        canvas,
+        x,
+        last + 1,
+        width,
+        &keys_of(KeyContext::Popup {
+            kind: PopupKind::Date,
+            text_field: !draft.in_calendar,
+        }),
+    );
+}
+
+/// What the card is called, which is what it is setting.
+fn name_of(kind: DateKind) -> &'static str {
+    match kind {
+        DateKind::Due => "Due by",
+        DateKind::Remind => "Remind on",
+        DateKind::Move => "Move",
+    }
+}
+
+/// The other mode of the card, offered in its border. The move card's
+/// day is not a date the task carries, so it switches to nothing.
+fn switch(kind: DateKind) -> Option<&'static str> {
+    match kind {
+        DateKind::Due => Some(" alt-r remind on "),
+        DateKind::Remind => Some(" alt-d due by "),
+        DateKind::Move => None,
+    }
+}
+
+/// What the "clear date" row answers with.
+fn no_date(kind: DateKind) -> &'static str {
+    match kind {
+        DateKind::Due => "no due date",
+        DateKind::Remind => "no reminder",
+        DateKind::Move => "no day",
+    }
+}
+
+/// The whole weeks a month is spread over, Monday first, so that the
+/// days either side of it are drawn dim rather than left blank.
+fn weeks_of(on: Date) -> Vec<Vec<Date>> {
+    let first = on.first_of_month();
+    let mut day = first
+        .nth_weekday_of_month(1, Weekday::Monday)
+        .unwrap_or(first);
+    if day > first {
+        day = day.saturating_sub(Span::new().days(7));
+    }
+    let last = on.last_of_month();
+
+    let mut weeks = Vec::new();
+    while day <= last {
+        let week: Vec<Date> = (0..7)
+            .map(|at| day.saturating_add(Span::new().days(at)))
+            .collect();
+        day = day.saturating_add(Span::new().days(7));
+        weeks.push(week);
+    }
+    weeks
+}
+
+/// The month the card is on: its name, the weekdays, and the days, with
+/// the day the card is on marked and today in bold.
+fn calendar(
+    canvas: &mut Canvas,
+    x: u16,
+    y: u16,
+    weeks: &[Vec<Date>],
+    draft: &DateDraft,
+    today: Date,
+) {
+    let month = draft.on.strftime("%B %Y").to_string();
+    let left = |text: &str| x + CALENDAR.saturating_sub(count(text)) / 2;
+    canvas.put(left(&month), y, &month, dim());
+    canvas.put(x, y + 1, " Mo Tu We Th Fr Sa Su", dim());
+
+    for (down, week) in weeks.iter().enumerate() {
+        for (across, day) in week.iter().enumerate() {
+            let style = if *day == draft.on {
+                // The one thing to press Enter on, marked the way the
+                // cursor row is.
+                accent().add_modifier(Modifier::REVERSED)
+            } else if *day == today {
+                bold()
+            } else if day.month() != draft.on.month() {
+                dim()
+            } else {
+                plain()
+            };
+            canvas.put(
+                x + across as u16 * 3,
+                y + 2 + down as u16,
+                &format!(" {:>2}", day.day()),
+                style,
+            );
+        }
+    }
+}
+
 /// The one deliberate question, with both answers spelled out because
 /// PRODUCT.md gives each of them a meaning (DESIGN.md section 8).
 fn copy_question(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
@@ -318,16 +521,10 @@ fn copy_question(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     .filter(|binding| binding.shown != "esc")
     .collect();
 
-    let name = popup
-        .target
-        .and_then(|task| app.model().live_task(task))
-        .map_or("a task", |task| task.title.as_str());
-    let (x, y) = card(
-        canvas,
-        rows,
-        &format!("Rename {name}"),
-        answers.len() as u16 + 2,
-    );
+    let width = CARD_WIDTH.min(canvas.width().saturating_sub(4));
+    let height = answers.len() as u16 + 6;
+    let (x, y) = place(canvas, rows, width, height);
+    card(canvas, x, y, width, height, "Rename", &about(app, popup));
 
     canvas.put(x + 2, y + 2, "This task repeats. Rename:", dim());
     for (at, answer) in answers.iter().enumerate() {

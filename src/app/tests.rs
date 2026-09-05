@@ -730,6 +730,140 @@ fn the_move_card_acts_on_the_row_it_was_opened_on() {
     assert_eq!(app.model().task(first).and_then(|task| task.day), None);
 }
 
+// ---- the date card ---------------------------------------------------
+
+/// An app with one task in the backlog and the cursor on it.
+fn with_a_backlog_task(title: &str) -> (App, Id) {
+    let mut app = started();
+    app.update(Action::PaneRight);
+    let id = add(&mut app, title);
+    app.update(Action::Cancel);
+    (app, id)
+}
+
+fn due_on(app: &App, task: Id) -> Option<String> {
+    app.model()
+        .task(task)
+        .and_then(|task| task.due_on)
+        .map(|date| date.to_string())
+}
+
+#[test]
+fn d_writes_a_due_date_and_r_a_reminder() {
+    let (mut app, task) = with_a_backlog_task("Write the Q4 planning doc");
+
+    app.update(Action::DueBy);
+    type_in(&mut app, "30 sep");
+    app.update(Action::Confirm);
+
+    assert_eq!(due_on(&app, task).as_deref(), Some("2025-09-30"));
+    assert_eq!(hint(&app), "Due date on \"Write the Q4 planning doc\"");
+    assert!(app.popup().is_none(), "the card is done");
+    // The task stays in the backlog: a date surfaces it, never moves it.
+    assert_eq!(titles(&app, List::Backlog), ["Write the Q4 planning doc"]);
+
+    app.update(Action::RemindOn);
+    type_in(&mut app, "1 oct");
+    app.update(Action::Confirm);
+
+    assert_eq!(
+        app.model()
+            .task(task)
+            .and_then(|task| task.remind_on)
+            .map(|date| date.to_string())
+            .as_deref(),
+        Some("2025-10-01")
+    );
+    assert_eq!(due_on(&app, task).as_deref(), Some("2025-09-30"), "both");
+}
+
+#[test]
+fn the_date_card_is_one_card_with_two_modes() {
+    let (mut app, task) = with_a_backlog_task("Renew passport");
+
+    app.update(Action::DueBy);
+    type_in(&mut app, "30 sep");
+    // alt-r inside the card: the same typed date, the other meaning.
+    app.update(Action::RemindOn);
+    app.update(Action::Confirm);
+
+    assert_eq!(due_on(&app, task), None);
+    assert_eq!(
+        app.model()
+            .task(task)
+            .and_then(|task| task.remind_on)
+            .map(|date| date.to_string())
+            .as_deref(),
+        Some("2025-09-30")
+    );
+}
+
+#[test]
+fn a_quick_pick_is_the_answer_and_closes_the_card() {
+    let (mut app, task) = with_a_backlog_task("Book dentist");
+
+    app.update(Action::DueBy);
+    app.update(Action::EndOfMonth);
+
+    assert!(app.popup().is_none());
+    assert_eq!(due_on(&app, task).as_deref(), Some("2025-09-30"));
+
+    app.update(Action::DueBy);
+    app.update(Action::ClearDate);
+
+    assert_eq!(due_on(&app, task), None);
+    assert_eq!(hint(&app), "Cleared the due date on \"Book dentist\"");
+}
+
+#[test]
+fn the_calendar_walks_days_and_months_once_tab_is_pressed() {
+    let (mut app, task) = with_a_backlog_task("Renew passport");
+
+    app.update(Action::DueBy);
+    app.update(Action::NextPane);
+    for action in [Action::Right, Action::Down, Action::NextMonth] {
+        app.update(action);
+    }
+    app.update(Action::Confirm);
+
+    // Friday 5 September, a day on, a week on, a month on.
+    assert_eq!(due_on(&app, task).as_deref(), Some("2025-10-13"));
+}
+
+#[test]
+fn text_that_is_not_a_date_is_refused_rather_than_guessed() {
+    let (mut app, task) = with_a_backlog_task("Renew passport");
+
+    app.update(Action::DueBy);
+    type_in(&mut app, "someday");
+    app.update(Action::Confirm);
+
+    assert_eq!(hint(&app), "That is not a date I can read.");
+    assert!(app.popup().is_some(), "the card stays open");
+    assert_eq!(due_on(&app, task), None);
+
+    app.update(Action::Cancel);
+    assert!(app.popup().is_none());
+    assert_eq!(due_on(&app, task), None, "escape writes nothing");
+}
+
+#[test]
+fn the_move_cards_pick_a_date_moves_the_task_to_the_day() {
+    let (mut app, task) = with_a_backlog_task("Clean out the garage");
+
+    app.update(Action::MoveToDay);
+    app.update(Action::GoToDate);
+    type_in(&mut app, "8 sep");
+    app.update(Action::Confirm);
+
+    assert_eq!(
+        app.model().task(task).and_then(|task| task.day),
+        Some(on("2025-09-08"))
+    );
+    assert!(titles(&app, List::Backlog).is_empty());
+    assert_eq!(hint(&app), "Moved \"Clean out the garage\" to Mon 8 Sep");
+}
+
 // ---- waiting ---------------------------------------------------------
 
 #[test]
@@ -871,10 +1005,10 @@ fn a_key_a_later_phase_owns_says_so_and_does_nothing() {
     add(&mut app, "Clean out the garage");
 
     for (action, said) in [
-        (Action::DueBy, "Due dates and reminders are not built yet."),
         (Action::Repeat, "The repeat card is not built yet."),
         (Action::PrevDay, "Stepping through days is not built yet."),
-        (Action::GoToDate, "The date card is not built yet."),
+        // `g` on the page is going to another day, which is stepping.
+        (Action::GoToDate, "Stepping through days is not built yet."),
     ] {
         app.update(action);
         assert_eq!(hint(&app), said);

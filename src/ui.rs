@@ -867,7 +867,7 @@ fn chips_of(row: &domain::Row, kind: Kind, today: Date) -> Vec<Chip> {
     }
     if let Some(due) = row.due {
         chips.push(Chip {
-            text: format!("due {}", when(due.on, today)),
+            text: format!("due {}{}", when(due.on, today), how_late(due, today)),
             short: "due",
             style: Style::new().fg(if due.overdue {
                 Color::Red
@@ -884,6 +884,20 @@ fn chips_of(row: &domain::Row, kind: Kind, today: Date) -> Vec<Chip> {
         });
     }
     chips
+}
+
+/// How long a due date has been past, which is the cost of leaving it
+/// there and the reason the chip is red.
+fn how_late(due: domain::DueChip, today: Date) -> String {
+    if !due.overdue {
+        return String::new();
+    }
+    let days = due
+        .on
+        .until(today)
+        .map_or(0, |span| i64::from(span.get_days()));
+    let day = if days == 1 { "day" } else { "days" };
+    format!(" · {days} {day} over")
 }
 
 /// The right-hand words that are not a chip: that the row is being

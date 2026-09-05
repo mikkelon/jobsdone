@@ -195,6 +195,11 @@ apply immediately and offer `u` in the hint bar until the next key. Editing
 is always in place; the only forms are the three small cards (date, repeat,
 move).
 
+A card's picks are answers, not settings. A row of the move card and a
+quick date on the date card apply and close it, the way a key on a row
+does. Only what has to be composed first waits for Enter: a typed date, a
+day walked to in the calendar, a repeat rule.
+
 A field on a row is a mode like any other, so its keys are in the hint
 bar rather than beside it: while a title is being typed the bar says what
 Enter does there, "add & keep typing" when adding and "save" when

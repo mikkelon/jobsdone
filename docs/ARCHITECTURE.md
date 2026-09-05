@@ -265,11 +265,13 @@ adds it here first, the way a new dependency is added to section 2 first.
   `today`, `model`, the views `day`, `backlog`, `notes` and
   `review_count`, `page`, `pane`, `notes_pane`, `focused`, `popup`,
   `editor`, `message`, `cursor`, `palette_rows`, `search_results`,
-  `move_choices` and `layout`.
+  `move_choices`, `date_choices` and `layout`.
   `Page` is `Home` or `Notes`; `List` is `Day`, `Backlog` or `Notes`, one
   cursor each, held by id; `Popup` carries the kind, the text typed into
-  it, the caret, the selected row and the task it is about; `Editor` is a
-  title being typed on a row; `Message` is what the hint bar says until
+  it, the caret, the selected row, the task it is about, and the `Draft` a
+  card is building before Enter turns it into a command, which for the
+  date card is the day it is on and which of its two controls has the
+  keyboard; `Editor` is a title being typed on a row; `Message` is what the hint bar says until
   the next key, and whether `u` takes it back; `MoveChoice` is a row of
   the move card, its key and name from the key table and its day worked
   out here.

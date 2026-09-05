@@ -1,8 +1,8 @@
 //! Application state, the launch sequence, reloading, turning actions
 //! into commands, and the screen layout.
 
-use jiff::Zoned;
 use jiff::civil::Date;
+use jiff::{Span, Zoned};
 use tracing::warn;
 
 use crate::domain::{
@@ -106,6 +106,60 @@ pub struct Popup {
     /// The task the popup is about, held by id so that a reload cannot
     /// turn it into another one.
     pub target: Option<Id>,
+    /// What a card is building before Enter turns it into a command.
+    pub draft: Draft,
+}
+
+impl Popup {
+    /// The date card's draft, if that is what this popup is.
+    pub fn date(&self) -> Option<&DateDraft> {
+        match &self.draft {
+            Draft::Date(draft) => Some(draft),
+            Draft::None => None,
+        }
+    }
+}
+
+/// A card is a form, so it holds what it has been told until Enter turns
+/// it into a command. Uncommitted state, like the text beside it
+/// (ARCHITECTURE.md rule 8).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Draft {
+    /// A popup that answers with a key or a row, and builds nothing.
+    None,
+    Date(DateDraft),
+}
+
+/// Which date the card is setting. One card, three things to set, and the
+/// title says which (wireframe 06).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DateKind {
+    Due,
+    Remind,
+    /// The day the move card was asked to pick.
+    Move,
+}
+
+/// The date card: the day it is on, however that day was arrived at, and
+/// which of its two controls has the keyboard.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DateDraft {
+    pub kind: DateKind,
+    /// What the calendar marks and what Enter applies. Typing a date the
+    /// domain can read moves it, and so do the calendar keys.
+    pub on: Date,
+    /// Whether `tab` has moved the keyboard into the calendar, where
+    /// single keys work again (DESIGN.md section 4).
+    pub in_calendar: bool,
+}
+
+/// One row of the date card: its key and name from the key table, and the
+/// day it means. No day is the pick that takes the date off.
+#[derive(Clone, Copy, Debug)]
+pub struct DateChoice {
+    pub key: &'static str,
+    pub label: &'static str,
+    pub date: Option<Date>,
 }
 
 /// Where the move card sends a task.
@@ -325,11 +379,21 @@ impl App {
             }
             Action::Resize => {}
 
-            Action::Down => self.step(true),
-            Action::Up => self.step(false),
+            // In the date card's calendar the four keys walk the month
+            // rather than a list of rows.
+            Action::Down => {
+                if !self.walk_the_calendar(Span::new().days(7)) {
+                    self.step(true);
+                }
+            }
+            Action::Up => {
+                if !self.walk_the_calendar(Span::new().days(-7)) {
+                    self.step(false);
+                }
+            }
             Action::PaneLeft => self.shift_pane(false, false),
             Action::PaneRight => self.shift_pane(true, false),
-            Action::NextPane => self.shift_pane(true, true),
+            Action::NextPane => self.next_control(),
             Action::NotesPage => self.turn_the_page(),
 
             Action::Commands => self.open(PopupKind::Palette, None),
@@ -347,11 +411,11 @@ impl App {
             Action::MoveUp => self.reorder(false),
             Action::ToToday => self.move_it(MoveTarget::Day(self.today)),
             Action::ToBacklog => self.move_it(MoveTarget::Backlog),
-            Action::Tomorrow => self.move_it(self.target_for(Action::Tomorrow)),
-            Action::NextWorkDay => self.move_it(self.target_for(Action::NextWorkDay)),
-            Action::NextMonday => self.move_it(self.target_for(Action::NextMonday)),
+            Action::Tomorrow | Action::NextWorkDay | Action::NextMonday => self.quick_pick(action),
+            Action::InAWeek | Action::EndOfMonth => self.quick_pick(action),
+            Action::ClearDate => self.take_the_date(None),
             Action::MoveToDay => self.open_the_move_card(),
-            Action::GoToDate => self.not_yet("The date card is not built yet."),
+            Action::GoToDate => self.pick_a_date(),
             Action::ThisCopy => self.answer_the_question(false),
             Action::ThisAndFuture => self.answer_the_question(true),
             Action::Undo => self.undo(),
@@ -360,8 +424,13 @@ impl App {
                 self.not_yet("Stepping through days is not built yet.");
             }
             Action::Today => {}
-            Action::DueBy | Action::RemindOn => {
-                self.not_yet("Due dates and reminders are not built yet.");
+            Action::DueBy => self.open_the_date_card(DateKind::Due),
+            Action::RemindOn => self.open_the_date_card(DateKind::Remind),
+            Action::PrevMonth => {
+                self.walk_the_calendar(Span::new().months(-1));
+            }
+            Action::NextMonth => {
+                self.walk_the_calendar(Span::new().months(1));
             }
             Action::Waiting => self.wait_on_someone(),
             Action::Repeat => self.not_yet("The repeat card is not built yet."),
@@ -370,8 +439,16 @@ impl App {
             Action::Insert(typed) => self.type_in(typed),
             Action::Backspace => self.rub_out(),
             Action::DeleteForward => self.rub_forward(),
-            Action::Left => self.move_caret(false),
-            Action::Right => self.move_caret(true),
+            Action::Left => {
+                if !self.walk_the_calendar(Span::new().days(-1)) {
+                    self.move_caret(false);
+                }
+            }
+            Action::Right => {
+                if !self.walk_the_calendar(Span::new().days(1)) {
+                    self.move_caret(true);
+                }
+            }
             Action::LineStart => self.set_caret(0),
             Action::LineEnd => self.set_caret(usize::MAX),
 
@@ -734,21 +811,26 @@ impl App {
     /// the cursor is on.
     fn move_it(&mut self, target: MoveTarget) {
         if target == MoveTarget::Pick {
-            self.not_yet("The date card is not built yet.");
+            self.pick_a_date();
             return;
         }
         let carded = self.take_the_card();
         let Some(id) = carded.or_else(|| self.task_at_cursor()) else {
             return;
         };
-        let list = self.focused();
-        let next = self.neighbour_of(list, id);
-
         let place = match target {
             MoveTarget::Day(day) => Place::Day(day),
             MoveTarget::Backlog => Place::Backlog,
             MoveTarget::Pick => return,
         };
+        self.move_task(id, place);
+    }
+
+    /// A task to a place, wherever the key came from. The row leaves its
+    /// group, so the cursor steps to the next one (DESIGN.md section 4).
+    fn move_task(&mut self, id: Id, place: Place) {
+        let list = self.focused();
+        let next = self.neighbour_of(list, id);
         if self.run(Command::Move { task: id, place }).is_some()
             && let Some(next) = next
         {
@@ -774,31 +856,47 @@ impl App {
         self.open(PopupKind::Move, Some(id));
     }
 
-    /// The day each row of the move card means. "Next work day" is the
-    /// work-days rule's own definition of one (DOMAIN.md section 10).
-    fn target_for(&self, action: Action) -> MoveTarget {
-        // A day the calendar cannot reach, which is only ever the last
-        // day it has, is offered as the date card rather than as some
-        // other day the row does not name.
-        let next = |rule: Rule| {
-            domain::next_dates(&rule, self.today, 1)
-                .first()
-                .copied()
-                .map_or(MoveTarget::Pick, MoveTarget::Day)
-        };
+    /// The day a quick pick on either card means. "Next work day" and
+    /// "next Monday" are the rules' own definitions of those days
+    /// (DOMAIN.md section 10); the rest are arithmetic.
+    fn day_for(&self, action: Action) -> Option<Date> {
+        let next = |rule: Rule| domain::next_dates(&rule, self.today, 1).first().copied();
         match action {
-            Action::ToToday => MoveTarget::Day(self.today),
-            Action::Tomorrow => self
-                .today
-                .tomorrow()
-                .map_or(MoveTarget::Pick, MoveTarget::Day),
+            Action::ToToday => Some(self.today),
+            Action::Tomorrow => self.today.tomorrow().ok(),
             Action::NextWorkDay => next(Rule::Workdays),
             Action::NextMonday => next(Rule::Weekly {
                 weekdays: vec![Weekday::Mon],
             }),
-            Action::ToBacklog => MoveTarget::Backlog,
-            _ => MoveTarget::Pick,
+            Action::InAWeek => self.today.checked_add(Span::new().days(7)).ok(),
+            Action::EndOfMonth => Some(self.today.last_of_month()),
+            _ => None,
         }
+    }
+
+    /// The day each row of the move card sends a task to.
+    fn target_for(&self, action: Action) -> MoveTarget {
+        // A day the calendar cannot reach, which is only ever the last
+        // day it has, is offered as the date card rather than as some
+        // other day the row does not name.
+        match action {
+            Action::ToBacklog => MoveTarget::Backlog,
+            _ => self
+                .day_for(action)
+                .map_or(MoveTarget::Pick, MoveTarget::Day),
+        }
+    }
+
+    /// A quick pick, on whichever card is open: a day to move a task to,
+    /// or a day to write on it.
+    fn quick_pick(&mut self, action: Action) {
+        if self.popup.as_ref().and_then(Popup::date).is_some() {
+            if let Some(date) = self.day_for(action) {
+                self.take_the_date(Some(date));
+            }
+            return;
+        }
+        self.move_it(self.target_for(action));
     }
 
     /// The rows of the move card: the keys and names from the key table,
@@ -827,6 +925,175 @@ impl App {
             })
         })
         .collect()
+    }
+
+    // ---- the date card -----------------------------------------------
+
+    /// `d` and `r`: the card that puts a date on a backlog task. Pressed
+    /// again inside the card they switch which date is being set, keeping
+    /// the day and the text, because it is one card with two modes
+    /// (wireframe 06).
+    fn open_the_date_card(&mut self, kind: DateKind) {
+        if let Some(popup) = &mut self.popup {
+            if let Draft::Date(draft) = &mut popup.draft {
+                // The move card's day is not a date the task carries.
+                if draft.kind != DateKind::Move {
+                    draft.kind = kind;
+                }
+            }
+            return;
+        }
+        let Some(id) = self.task_at_cursor() else {
+            return;
+        };
+        let Some(task) = self.model.live_task(id) else {
+            return;
+        };
+        // The card opens on the date the task already has, so a date is
+        // adjusted rather than looked up again.
+        let on = match kind {
+            DateKind::Due => task.due_on,
+            DateKind::Remind => task.remind_on,
+            DateKind::Move => task.day,
+        }
+        .unwrap_or(self.today);
+        self.open_card(PopupKind::Date, Some(id), kind, on);
+    }
+
+    /// `g`: on the move card, the calendar for the day it could not
+    /// name. On the page itself, going to another day is phase 10's.
+    fn pick_a_date(&mut self) {
+        let Some(task) = self.take_the_card() else {
+            self.not_yet("Stepping through days is not built yet.");
+            return;
+        };
+        let on = self
+            .model
+            .live_task(task)
+            .and_then(|task| task.day)
+            .unwrap_or(self.today);
+        self.open_card(PopupKind::Date, Some(task), DateKind::Move, on);
+    }
+
+    fn open_card(&mut self, kind: PopupKind, target: Option<Id>, date: DateKind, on: Date) {
+        self.open(kind, target);
+        if let Some(popup) = &mut self.popup {
+            popup.draft = Draft::Date(DateDraft {
+                kind: date,
+                on,
+                in_calendar: false,
+            });
+        }
+    }
+
+    /// The rows of the date card: the keys and names from the key table,
+    /// and the day each one means. The move card's date has no "clear":
+    /// a task with no day is in the backlog, which is a place, not a
+    /// missing date.
+    pub fn date_choices(&self) -> Vec<DateChoice> {
+        let clears = self
+            .popup
+            .as_ref()
+            .and_then(Popup::date)
+            .is_some_and(|draft| draft.kind != DateKind::Move);
+        input::bindings(KeyContext::Popup {
+            kind: PopupKind::Date,
+            text_field: true,
+        })
+        .iter()
+        .filter_map(|binding| {
+            let (key, action) = *binding.keys.first()?;
+            let date = match action {
+                Action::Tomorrow | Action::NextMonday | Action::InAWeek | Action::EndOfMonth => {
+                    Some(self.day_for(action)?)
+                }
+                Action::ClearDate if clears => None,
+                _ => return None,
+            };
+            Some(DateChoice {
+                key,
+                label: binding.label,
+                date,
+            })
+        })
+        .collect()
+    }
+
+    /// Enter on the date card. What was typed has already moved the day
+    /// the card is on, so the day is the answer; text the domain cannot
+    /// read is refused rather than turned into some other day.
+    fn take_the_typed_date(&mut self) {
+        let Some(popup) = &self.popup else {
+            return;
+        };
+        let typed = popup.text.trim().to_owned();
+        let Some(draft) = popup.date().copied() else {
+            return;
+        };
+        if !typed.is_empty() && domain::parse_date(&typed, self.today).is_none() {
+            self.say("That is not a date I can read.", false);
+            return;
+        }
+        self.take_the_date(Some(draft.on));
+    }
+
+    /// The day the card ended on: a date the task carries, or the day it
+    /// is moved to. Either way the card has said its piece and closes.
+    fn take_the_date(&mut self, date: Option<Date>) {
+        let (Some(task), Some(draft)) = (
+            self.popup.as_ref().and_then(|popup| popup.target),
+            self.popup.as_ref().and_then(Popup::date).copied(),
+        ) else {
+            return;
+        };
+        self.popup = None;
+        match draft.kind {
+            DateKind::Due => {
+                self.run(Command::SetDue { task, date });
+            }
+            DateKind::Remind => {
+                self.run(Command::SetRemind { task, date });
+            }
+            DateKind::Move => {
+                if let Some(day) = date {
+                    self.move_task(task, Place::Day(day));
+                }
+            }
+        }
+    }
+
+    /// The calendar keys. Says whether the card took the key, because the
+    /// same four actions move a cursor everywhere else.
+    fn walk_the_calendar(&mut self, span: Span) -> bool {
+        let Some(popup) = &mut self.popup else {
+            return false;
+        };
+        let Draft::Date(draft) = &mut popup.draft else {
+            return false;
+        };
+        if !draft.in_calendar {
+            return false;
+        }
+        if let Ok(date) = draft.on.checked_add(span) {
+            draft.on = date;
+        }
+        // The field and the calendar are two ways to the same day, so
+        // what was typed goes when the calendar is used.
+        popup.text.clear();
+        popup.caret = 0;
+        true
+    }
+
+    /// `tab`: the card's other control if a card is open, and the next
+    /// pane or tab otherwise.
+    fn next_control(&mut self) {
+        if let Some(popup) = &mut self.popup
+            && let Draft::Date(draft) = &mut popup.draft
+        {
+            draft.in_calendar = !draft.in_calendar;
+            return;
+        }
+        self.shift_pane(true, true);
     }
 
     // ---- the title being typed ---------------------------------------
@@ -954,9 +1221,14 @@ impl App {
         match &self.popup {
             Some(popup) => KeyContext::Popup {
                 kind: popup.kind,
-                // The palette and search are typed into; the others are
-                // read and answered with a key.
-                text_field: matches!(popup.kind, PopupKind::Palette | PopupKind::Search),
+                // The palette and search are typed into; the date card
+                // is until `tab` moves the keyboard into its calendar;
+                // the others are read and answered with a key.
+                text_field: match popup.kind {
+                    PopupKind::Palette | PopupKind::Search => true,
+                    PopupKind::Date => popup.date().is_none_or(|draft| !draft.in_calendar),
+                    _ => false,
+                },
             },
             None => self.page_context(),
         }
@@ -1260,6 +1532,7 @@ impl App {
             caret: 0,
             selected: 0,
             target,
+            draft: Draft::None,
         });
     }
 
@@ -1281,6 +1554,7 @@ impl App {
             PopupKind::Palette => return self.run_the_selected_command(),
             PopupKind::Search => self.take_the_search(),
             PopupKind::Move => self.take_the_chosen_day(),
+            PopupKind::Date => self.take_the_typed_date(),
             // The question has no answer safe enough to be Enter's.
             PopupKind::Help | PopupKind::CopyQuestion => {}
         }
@@ -1345,7 +1619,12 @@ impl App {
     /// in a popup that is typed into.
     fn field(&mut self) -> Option<(&mut String, &mut usize)> {
         if let Some(popup) = &mut self.popup {
-            if !matches!(popup.kind, PopupKind::Palette | PopupKind::Search) {
+            let typed = match popup.kind {
+                PopupKind::Palette | PopupKind::Search => true,
+                PopupKind::Date => !matches!(&popup.draft, Draft::Date(draft) if draft.in_calendar),
+                _ => false,
+            };
+            if !typed {
                 return None;
             }
             return Some((&mut popup.text, &mut popup.caret));
@@ -1354,10 +1633,22 @@ impl App {
         Some((&mut editor.text, &mut editor.caret))
     }
 
-    /// Typing puts the selection of a filtered list back at the top.
-    fn select_the_first(&mut self) {
+    /// What a keystroke changes besides the text: a filtered list starts
+    /// at the top again, and the date card follows what has been typed as
+    /// far as the domain can read it.
+    fn after_typing(&mut self) {
         if let Some(popup) = &mut self.popup {
             popup.selected = 0;
+        }
+        let today = self.today;
+        let Some(popup) = &mut self.popup else {
+            return;
+        };
+        let Some(date) = domain::parse_date(&popup.text, today) else {
+            return;
+        };
+        if let Draft::Date(draft) = &mut popup.draft {
+            draft.on = date;
         }
     }
 
@@ -1367,7 +1658,7 @@ impl App {
             text.insert(at, typed);
             *caret += 1;
         }
-        self.select_the_first();
+        self.after_typing();
     }
 
     fn rub_out(&mut self) {
@@ -1379,7 +1670,7 @@ impl App {
             text.remove(at);
             *caret -= 1;
         }
-        self.select_the_first();
+        self.after_typing();
     }
 
     fn rub_forward(&mut self) {
@@ -1389,7 +1680,7 @@ impl App {
                 text.remove(at);
             }
         }
-        self.select_the_first();
+        self.after_typing();
     }
 
     fn move_caret(&mut self, forward: bool) {
