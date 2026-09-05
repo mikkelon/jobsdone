@@ -515,3 +515,17 @@ fn the_copy_question_has_a_key_for_each_answer_and_no_default() {
         "there is no answer safe enough to be the one Enter picks"
     );
 }
+
+/// The backlog is ordered by hand, so the keys that reorder a day reorder
+/// it too: dragging a row was the only way (F2).
+#[test]
+fn the_backlog_reorders_by_keyboard_as_a_day_does() {
+    assert_eq!(
+        action_for(&typing('J'), home(Pane::Backlog)),
+        Some(Action::MoveDown)
+    );
+    assert_eq!(
+        action_for(&typing('K'), home(Pane::Backlog)),
+        Some(Action::MoveUp)
+    );
+}

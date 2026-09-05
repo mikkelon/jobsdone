@@ -488,6 +488,16 @@ const HOME_BACKLOG: &[Binding] = home_table![
     steps: Bar::Off, Bar::Off;
     today: Bar::Off, Bar::Off;
     go_to: Bar::Off, Bar::Off;
+    // The backlog is ordered by hand, like a day, so it reorders by
+    // keyboard, like a day (DOMAIN.md section 4). Ten keys already fill
+    // the bar here, so the palette and the help overlay teach it.
+    Binding {
+        keys: &[("J", Action::MoveDown), ("K", Action::MoveUp)],
+        shown: "J/K",
+        label: "reorder",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
     Binding {
         keys: &[("space", Action::Close)],
         shown: "space",
