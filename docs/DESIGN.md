@@ -110,6 +110,11 @@ Conventions, so the map is guessable:
   one uppercase key that is not about the cursor row, which is what makes
   it hard to press by accident.
 - `Enter` confirms, `Escape` backs out one level, `u` undoes.
+- `ctrl-c` quits from wherever the keyboard is, a card or an open field
+  included, and puts the terminal back the way `q` does. It is the one key
+  that is not a row of any table: a terminal program that ignores it reads
+  as hung, and since every change is already written, leaving costs at
+  most the line being typed.
 - After a task is closed, moved or deleted the cursor steps to the next
   row of the group it left, so a list is worked down without moving the
   cursor by hand. Everything else leaves the cursor on the task it acted

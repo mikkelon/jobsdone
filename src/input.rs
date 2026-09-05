@@ -1714,6 +1714,12 @@ pub fn action_for(event: &Event, context: KeyContext) -> Option<Action> {
 }
 
 fn key_action(key: &KeyEvent, context: KeyContext) -> Option<Action> {
+    // The one key that belongs to no context: it leaves from wherever the
+    // keyboard is, a card or a field included, and puts the terminal back
+    // (DESIGN.md section 4).
+    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
+        return Some(Action::Quit);
+    }
     if !context.text_field() {
         return bound(context, &key_name(key)?);
     }

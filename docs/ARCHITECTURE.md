@@ -237,7 +237,8 @@ adds it here first, the way a new dependency is added to section 2 first.
   printable keys become `Insert` and only `Enter`, `Escape`, `Tab`, `Up`,
   `Down`, the editing keys and the `Alt` shortcuts keep a name. The
   editing keys belong to the field rather than to the table, so they are
-  never a row of the hint bar.
+  never a row of the hint bar. `ctrl-c` is answered before any context is
+  consulted, because it means the same thing in all of them.
 - `Pane`, `NotesPane`, `ReviewStep`, `Shown`, `Field` and `PopupKind`:
   what a context is of.
 - `action_for(Event, KeyContext) -> Option<Action>`.

@@ -350,14 +350,14 @@ fn a_text_field_has_the_editing_keys_without_the_key_table() {
 fn a_control_key_is_not_a_key_this_program_has() {
     assert_eq!(
         action_for(
-            &press_with(KeyCode::Char('c'), KeyModifiers::CONTROL),
+            &press_with(KeyCode::Char('t'), KeyModifiers::CONTROL),
             home(Pane::Day)
         ),
         None
     );
     assert_eq!(
         action_for(
-            &press_with(KeyCode::Char('c'), KeyModifiers::CONTROL),
+            &press_with(KeyCode::Char('t'), KeyModifiers::CONTROL),
             field(PopupKind::Search)
         ),
         None,
@@ -528,4 +528,20 @@ fn the_backlog_reorders_by_keyboard_as_a_day_does() {
         action_for(&typing('K'), home(Pane::Backlog)),
         Some(Action::MoveUp)
     );
+}
+
+/// Ctrl-C belongs to no context: it left the program running everywhere,
+/// including on the home list where `q` quits (F4).
+#[test]
+fn ctrl_c_quits_from_every_context() {
+    for context in every_context() {
+        assert_eq!(
+            action_for(
+                &press_with(KeyCode::Char('c'), KeyModifiers::CONTROL),
+                context
+            ),
+            Some(Action::Quit),
+            "{context:?}"
+        );
+    }
 }
