@@ -461,6 +461,11 @@ fn hint_bar(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
 
     let mut edge = canvas.width() - 1;
     for (shown, name) in right.into_iter().rev() {
+        // A row that would reach what the left end has already drawn is
+        // left out rather than written over it.
+        if edge.saturating_sub(count(name) + count(shown) + 1) < x {
+            break;
+        }
         edge = canvas.rput(edge, y, name, dim()) - count(name) - 1;
         edge = canvas.rput(edge, y, shown, accent()) - count(shown) - 2;
     }
@@ -740,9 +745,13 @@ fn day_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
                 "Nothing planned.",
                 "a add a task · l then t pull from the backlog",
             ],
-            _ => [
+            Shown::Past => [
                 "Nothing was planned on this day.",
                 "[ keeps stepping back · g pick a date",
+            ],
+            Shown::Future => [
+                "Nothing planned for this day.",
+                "] keeps stepping on · g pick a date",
             ],
         },
     }

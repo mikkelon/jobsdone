@@ -172,6 +172,12 @@ groups in the same order, Focus, Plan, Done, Moved, and a group with
 nothing in it is not drawn at all. That is why today rarely shows a Moved
 group and a finished past day rarely shows a Focus one.
 
+A future day is the same again, and holds only what has actually been put
+there: tasks moved onto it, and whatever is added to it. The recurring
+copies a schedule will make are not drawn ahead of time, because the app
+creates them when the day arrives (section 7) and a preview would be the
+one place a screen showed something the model does not hold.
+
 ## 7. Nothing moves on its own
 
 The app never reorders, carries over, expires, or tidies.

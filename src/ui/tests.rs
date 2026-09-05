@@ -518,6 +518,25 @@ fn the_narrow_window_makes_the_day_and_the_day_list_its_tabs() {
 }
 
 #[test]
+fn a_hint_bar_too_full_for_its_right_end_leaves_it_out() {
+    let mut app = history();
+    // A day ahead: "FUTURE DAY" is the longest name a context has, and
+    // its bar is the longest too.
+    for _ in 0..8 {
+        app.update(Action::NextDay);
+    }
+    let drawn = look(&app, 120, 36);
+    let bar = drawn[34].clone();
+
+    assert!(bar.starts_with(" FUTURE DAY  [ ] day  . today"));
+    assert!(
+        !bar.contains("pane"),
+        "the row that does not fit is left out, not written over"
+    );
+    assert!(bar.len() <= 120, "and nothing runs past the window");
+}
+
+#[test]
 fn the_frame_keeps_its_one_cell_margin() {
     let drawn = look(&app(), 120, 36);
 
