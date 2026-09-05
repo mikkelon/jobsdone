@@ -1986,3 +1986,28 @@ fn a_step_with_nothing_to_decide_says_so_and_draws_no_bar() {
         "and no bar over a total of none: {text}"
     );
 }
+
+/// Adding leaves the field open after Enter, and the hint bar went on
+/// offering `u undo` for the task just added, where `u` types a letter.
+#[test]
+fn the_hint_bar_does_not_offer_a_key_the_open_field_would_type() {
+    let mut app = empty();
+    app.update(Action::Add);
+    for typed in "Task".chars() {
+        app.update(Action::Insert(typed));
+    }
+    app.update(Action::Confirm);
+
+    let bar = look(&app, 120, 36).remove(34);
+    assert!(
+        bar.contains("Added \"Task\""),
+        "what just happened: {bar:?}"
+    );
+    assert!(!bar.contains("undo"), "and no key the field types: {bar:?}");
+
+    // Out of the field, and the offer is there again.
+    app.update(Action::Cancel);
+    app.update(Action::Close);
+    let bar = look(&app, 120, 36).remove(34);
+    assert!(bar.contains("u  undo"), "{bar:?}");
+}

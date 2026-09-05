@@ -475,7 +475,10 @@ fn hint_bar(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
 
     if let Some(message) = app.message() {
         x = canvas.put(x, y, &message.text, plain()) + 2;
-        if message.undo {
+        // Not while a field has the keyboard: `u` types there, so the bar
+        // would be offering a key the line would swallow (DESIGN.md
+        // section 8).
+        if message.undo && !context.text_field() {
             x = canvas.put(x, y, "u", accent());
             canvas.put(x + 2, y, "undo", dim());
         }

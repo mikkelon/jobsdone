@@ -257,7 +257,9 @@ bar rather than beside it: while a title is being typed the bar says what
 Enter does there, "add & keep typing" when adding and "save" when
 renaming. A line longer than the field scrolls with the caret rather than
 clipping at its end, so what is being typed is always the part on screen. What just happened takes the same line over until the next key,
-which is where the offer of `u` is.
+which is where the offer of `u` is. The offer is left off while a field
+has the keyboard, because `u` types there: the bar never names a key the
+line would swallow.
 
 The one deliberate question: editing the title of a recurring copy asks
 whether the change is for this copy or this and future copies, because
