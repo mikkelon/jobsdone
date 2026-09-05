@@ -48,7 +48,13 @@ like it belongs to the first two.
   labels are dim capitals with a rule. Focus items are bold. Done and
   waiting rows are dim.
 - Popups are lazygit-style: a centred box drawn over the panes, accent
-  border, no dimming of what is behind.
+  border, no dimming of what is behind. Centred means centred in the pane
+  area, between the rule under the pane headers and the rule over the
+  hint bar: a card is about what is in the panes, so that is what it sits
+  in the middle of, and the status line and the hint bar keep saying what
+  they said. A window shorter than the card is the exception: the box
+  keeps its size and covers the hint bar rather than shrinking, because
+  its own footer names every key that works while it is open.
 - No window chrome of its own: the top line is a status line, the bottom
   line a hint bar.
 

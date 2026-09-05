@@ -2249,3 +2249,52 @@ fn a_note_of_clusters_wraps_and_saves_them_whole() {
         "cafe\u{301}X \u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}"
     );
 }
+
+/// Where a centred box is centred (DESIGN.md section 2): the pane area,
+/// between the rule under the pane headers and the rule over the hint
+/// bar, with the same room above it as below.
+#[test]
+fn a_card_is_centred_in_the_pane_area_between_the_two_rules() {
+    let mut app = app();
+    app.update(Action::Repeat);
+
+    for height in [36, 48] {
+        let drawn = look(&app, 120, height);
+        let top = drawn
+            .iter()
+            .position(|row| row.contains('┌'))
+            .unwrap_or_else(|| panic!("the top of the card at {height}"));
+        let foot = drawn
+            .iter()
+            .rposition(|row| row.contains('└'))
+            .unwrap_or_else(|| panic!("the foot of the card at {height}"));
+
+        // The first and last row the panes have.
+        let first = 5;
+        let last = height as usize - 4;
+        let above = top - first;
+        let below = last - foot;
+        assert!(
+            above.abs_diff(below) <= 1,
+            "the same room above and below at {height}: {above} and {below}"
+        );
+    }
+}
+
+/// A window shorter than the card keeps the card whole and lets it cover
+/// the hint bar, because the card's own footer names its keys.
+#[test]
+fn a_card_taller_than_the_window_covers_the_hint_bar_whole() {
+    let mut app = app();
+    app.update(Action::Repeat);
+
+    let drawn = look(&app, 60, 20);
+    assert!(
+        drawn.iter().any(|row| row.contains('┌')),
+        "the top of the card: {drawn:?}"
+    );
+    assert!(
+        drawn.iter().any(|row| row.contains("⏎ save")),
+        "and its footer, which is where its keys are: {drawn:?}"
+    );
+}
