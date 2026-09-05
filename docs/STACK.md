@@ -137,6 +137,9 @@ Rejected:
 `rustfmt` and `clippy` with their defaults. A `Makefile` with:
 
 - `make check`: format check, clippy with warnings denied, tests.
+- `make fmt` and `make test`: the halves of it, on their own.
+- `make run`: the program against a scratch database in `.dev`, so
+  development never touches the real one.
 - `make install`: see section 7.
 
 GitHub Actions runs `make check` on every push. The repository is
@@ -185,6 +188,18 @@ With the defaults these are `~/.local/share/jobsdone/` and
 `~/.local/state/jobsdone/`. A backup of the data directory is a backup of
 everything that matters.
 
+Two environment variables are read, both for development and neither
+documented for users, because the program is still one with no
+configuration:
+
+| Variable            | Effect                                        |
+|---------------------|-----------------------------------------------|
+| `JOBSDONE_DATA_DIR` | the data directory, in place of the XDG one   |
+| `JOBSDONE_LOG`      | the log level, `info` if unset                |
+
+The log level is not read from `RUST_LOG`, so a variable set for some
+other tool cannot change what this one writes to disk.
+
 Rejected:
 
 - **Everything under one directory.** One place to look, but the log
@@ -195,7 +210,13 @@ Rejected:
 ## 9. Errors and logging
 
 Errors and diagnostics are written with `tracing` to a file in the state
-directory. A panic hook restores the terminal before the panic message is
-printed, so a crash never leaves the terminal in raw mode. Nothing is
-written to stderr on purpose; a program launched from a keybind has no
-stderr anyone reads.
+directory, started again once it passes a megabyte. A panic hook restores
+the terminal before the panic message is printed, so a crash never leaves
+the terminal in raw mode. Nothing routine is written to stderr; a program
+launched from a keybind has no stderr anyone reads.
+
+The exception is a failure to start: the XDG directories, opening or
+migrating the database, or building the application. That message goes to
+the log and to stderr, and when there is a terminal on the other end the
+program waits for Enter before exiting, because a keybind's window would
+otherwise close and take the message with it.

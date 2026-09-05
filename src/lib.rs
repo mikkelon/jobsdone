@@ -104,6 +104,21 @@ mod seams {
 
     // ---- the dependencies in Cargo.toml -----------------------------
 
+    /// The crate's own name. `main.rs` is a separate crate that reaches
+    /// the library by this name rather than by `crate::`, so a path
+    /// starting with it is an internal dependency like any other.
+    fn package_name() -> String {
+        let text = fs::read_to_string(manifest_dir().join("Cargo.toml")).expect("Cargo.toml");
+        for line in text.lines() {
+            if let Some((key, value)) = line.split_once('=')
+                && key.trim() == "name"
+            {
+                return normalise(value.trim().trim_matches('"'));
+            }
+        }
+        panic!("Cargo.toml has no package name");
+    }
+
     /// The `[dependencies]` and `[dev-dependencies]` keys, normalised.
     fn dependencies() -> (BTreeSet<String>, BTreeSet<String>) {
         let text = fs::read_to_string(manifest_dir().join("Cargo.toml")).expect("Cargo.toml");
@@ -348,7 +363,7 @@ mod seams {
     /// The roots of every path in a file: `crate::<module>` as an internal
     /// root, and every other `<root>::` as an external one. Bodies count,
     /// not only `use` lines.
-    fn roots(source: &str) -> (BTreeSet<String>, BTreeSet<String>) {
+    fn roots(source: &str, package: &str) -> (BTreeSet<String>, BTreeSet<String>) {
         let tokens = tokenise(&strip(source));
         let (mut internal, mut external) = (BTreeSet::new(), BTreeSet::new());
 
@@ -365,7 +380,7 @@ mod seams {
             if NEVER_COUNTED.contains(&name.as_str()) {
                 continue;
             }
-            if name == "crate" {
+            if name == "crate" || name == package {
                 if let Some(Token::Ident(module)) = tokens.get(i + 2) {
                     internal.insert(module.clone());
                 }
@@ -381,6 +396,7 @@ mod seams {
     #[test]
     fn boundaries() {
         let table = allowed();
+        let package = package_name();
         let (deps, dev_deps) = dependencies();
         let mut broken = Vec::new();
 
@@ -394,7 +410,7 @@ mod seams {
 
             for file in files {
                 let source = fs::read_to_string(&file).expect("a source file");
-                let (internal, external) = roots(&source);
+                let (internal, external) = roots(&source, &package);
                 let where_ = file
                     .strip_prefix(manifest_dir())
                     .unwrap_or(&file)

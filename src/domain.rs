@@ -11,7 +11,7 @@ use jiff::civil::Date;
 use jiff::{Span, Zoned};
 
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 /// The hour a day begins, so 01:30 on Saturday belongs to Friday. A
 /// constant, not a setting (DOMAIN.md section 2).

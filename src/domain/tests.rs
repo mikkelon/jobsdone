@@ -1,35 +1,55 @@
 use super::*;
 
-/// An in-memory `Store`: a `Model` and `Model::apply`. It is `pub(crate)`
-/// because the tests of every module that holds a `Box<dyn Store>` drive
-/// it through this.
+use std::cell::RefCell;
+use std::rc::Rc;
+
+/// An in-memory `Store`: a `Model` and `Model::apply`.
+///
+/// A clone is another handle on the same data, which is how a test plays
+/// the part of a second window. It is `pub(crate)` because the tests of
+/// every module that holds a `Box<dyn Store>` drive it through this.
+#[derive(Clone, Default)]
 pub(crate) struct MemStore {
+    shared: Rc<RefCell<Shared>>,
+}
+
+#[derive(Default)]
+struct Shared {
     model: Model,
     version: u64,
 }
 
 impl MemStore {
     pub(crate) fn new() -> Self {
+        Self::default()
+    }
+
+    /// A store that already holds something, for a test of loading.
+    pub(crate) fn holding(model: Model) -> Self {
         MemStore {
-            model: Model::empty(),
-            version: 0,
+            shared: Rc::new(RefCell::new(Shared { model, version: 0 })),
         }
     }
 }
 
 impl Store for MemStore {
     fn load(&self) -> Result<Model, StoreError> {
-        Ok(self.model.clone())
+        Ok(self.shared.borrow().model.clone())
     }
 
     fn commit(&mut self, change: &Change) -> Result<(), StoreError> {
-        self.model.apply(change);
-        self.version += 1;
+        let mut shared = self.shared.borrow_mut();
+        shared.model.apply(change);
+        // SQLite moves data_version only for a write from another
+        // connection; every handle here shares one counter, so a commit
+        // always moves it. The application re-reads the version after its
+        // own commit either way.
+        shared.version += 1;
         Ok(())
     }
 
     fn version(&self) -> Result<u64, StoreError> {
-        Ok(self.version)
+        Ok(self.shared.borrow().version)
     }
 }
 

@@ -288,8 +288,10 @@ works from files, not from the compiler:
    other than `lib.rs`, plus `main.rs`. A module not in the table fails
    the test.
 4. For each module, scan every `.rs` file under it for path roots: every
-   `crate::<module>` and every `<root>::` where `<root>` is a dependency
-   from step 2. `std`, `core`, `alloc`, `crate`, `self` and `super` are
+   `crate::<module>`, every `jobsdone::<module>` (`main.rs` is a separate
+   crate and reaches the library by its name, not by `crate::`; without
+   this the binary's dependencies are invisible to the test), and every
+   `<root>::` where `<root>` is a dependency from step 2. `std`, `core`, `alloc`, `crate`, `self` and `super` are
    never counted, nor is a module's path to itself. Bodies count, not
    only `use` lines: a fully qualified call is a dependency too.
 5. Internal roots must appear in the module's Internal column. External
