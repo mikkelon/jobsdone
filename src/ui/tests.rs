@@ -2011,3 +2011,36 @@ fn the_hint_bar_does_not_offer_a_key_the_open_field_would_type() {
     let bar = look(&app, 120, 36).remove(34);
     assert!(bar.contains("u  undo"), "{bar:?}");
 }
+
+/// The search box ran its query under the match count, so the end of a
+/// long query and its caret were both lost (F14).
+#[test]
+fn a_long_query_scrolls_with_its_caret_and_stops_before_the_count() {
+    let mut app = app();
+    app.update(Action::Search);
+    let typed = "0123456789".repeat(8);
+    for glyph in typed.chars() {
+        app.update(Action::Insert(glyph));
+    }
+
+    for width in [120, 60] {
+        let box_row = look(&app, width, 36)
+            .into_iter()
+            .find(|row| row.contains("matches"))
+            .unwrap_or_else(|| panic!("the search box at {width}"));
+        assert!(
+            box_row.contains('▏'),
+            "the caret is on it at {width}: {box_row:?}"
+        );
+        let (query, count) = box_row.split_once('▏').expect("the caret");
+        assert!(
+            query.ends_with("6789"),
+            "the end of what was typed at {width}: {box_row:?}"
+        );
+        assert!(
+            count.starts_with("  0 matches "),
+            "a gap, then the count with nothing of the query under it, \
+             at {width}: {box_row:?}"
+        );
+    }
+}

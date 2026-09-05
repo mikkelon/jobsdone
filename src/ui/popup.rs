@@ -56,10 +56,14 @@ fn divide(canvas: &mut Canvas, x: u16, y: u16, width: u16) {
 }
 
 /// `:  wa▏`, with the caret where the next character goes.
-fn input(canvas: &mut Canvas, x: u16, y: u16, width: u16, prompt: &str, popup: &Popup) {
+///
+/// `taken` is how many cells at the right of the box something else has
+/// already had, so the line stops short of it rather than running under
+/// it (F14).
+fn input(canvas: &mut Canvas, x: u16, y: u16, width: u16, prompt: &str, popup: &Popup, taken: u16) {
     canvas.put(x + 2, y, prompt, bold());
     // From under the prompt to the box's other side.
-    let room = width.saturating_sub(7);
+    let room = width.saturating_sub(7 + taken);
     super::caret_line(canvas, x + 5, y, room, &popup.text, popup.caret);
 }
 
@@ -125,7 +129,7 @@ fn palette(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     let (x, y) = place(canvas, rows, width, height);
 
     frame(canvas, x, y, width, height);
-    input(canvas, x, y + 1, width, ":", popup);
+    input(canvas, x, y + 1, width, ":", popup, 0);
     divide(canvas, x, y + 2, width);
 
     let mut command_at = 0;
@@ -230,13 +234,13 @@ fn search(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     let (x, y) = place(canvas, rows, width, height);
 
     frame(canvas, x, y, width, height);
-    input(canvas, x, y + 1, width, "/", popup);
-    canvas.rput(
-        x + width - 2,
-        y + 1,
-        &super::counted(results.total, "match", "matches"),
-        dim(),
-    );
+    // The count is measured first and the query stops two cells short of
+    // it, so a long query scrolls with its caret instead of running under
+    // the count (F14).
+    let matches = super::counted(results.total, "match", "matches");
+    let matches = super::clip(&matches, width.saturating_sub(4));
+    input(canvas, x, y + 1, width, "/", popup, count(matches) + 2);
+    canvas.rput(x + width - 2, y + 1, matches, dim());
     divide(canvas, x, y + 2, width);
 
     let mut found_at = 0;

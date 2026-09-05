@@ -1451,6 +1451,9 @@ fn field_text(canvas: &mut Canvas, x: u16, y: u16, width: u16, editor: &Editor) 
 /// the caret fits, and what is after it is cut off at the end of the line
 /// (DESIGN.md section 8).
 fn caret_line(canvas: &mut Canvas, x: u16, y: u16, width: u16, text: &str, caret: usize) {
+    if width == 0 {
+        return;
+    }
     let before: String = text.chars().take(caret).collect();
     let after: String = text.chars().skip(caret).collect();
 
