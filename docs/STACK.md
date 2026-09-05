@@ -107,9 +107,9 @@ Rejected:
 
 ## 5. Tests: cargo test, unit tests only
 
-Every test runs with `cargo test`. The domain is tested against an
-in-memory implementation of the storage interface; the storage module is
-tested against a temporary database.
+Every test runs with `cargo test`. The domain is tested as pure functions
+over `Model` and `Change`; the storage module is tested against a
+temporary database.
 
 Module boundaries are checked by a unit test in the crate: it reads the
 `use crate::` lines of each top-level module and fails when one names a
