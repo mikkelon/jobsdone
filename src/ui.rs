@@ -459,6 +459,17 @@ struct Column {
     width: u16,
 }
 
+/// Everything about a row that is not in the row: which group it is in,
+/// the day the pane is showing, whether the pane has room for words, and
+/// whether this row is the one being carried up or down.
+#[derive(Clone, Copy)]
+struct Look {
+    kind: Kind,
+    today: Date,
+    narrow: bool,
+    moving: bool,
+}
+
 /// How a row is drawn, which is what its group says rather than anything
 /// the drawing works out for itself.
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -684,7 +695,18 @@ fn pane(
                         Some(editor) => {
                             title_field(canvas, x, width, y, mark_of(row, kind).0, editor)
                         }
-                        None => task_row(canvas, column, y, row, kind, narrow, today),
+                        None => task_row(
+                            canvas,
+                            column,
+                            y,
+                            row,
+                            Look {
+                                kind,
+                                today,
+                                narrow,
+                                moving: app.moving() == Some(row.task),
+                            },
+                        ),
                     }
                     if on == Some(row.task) && renaming.is_none() {
                         canvas.restyle(x, y, width, cursor());
@@ -834,9 +856,13 @@ fn chips_of(row: &domain::Row, kind: Kind, today: Date) -> Vec<Chip> {
     chips
 }
 
-/// The right-hand words that are not a chip: where a moved task went,
-/// that a task came in from the backlog, that a closed one was focus.
-fn meta_of(row: &domain::Row, kind: Kind, today: Date) -> String {
+/// The right-hand words that are not a chip: that the row is being
+/// carried up or down, where a moved task went, that a task came in from
+/// the backlog, that a closed one was focus.
+fn meta_of(row: &domain::Row, kind: Kind, today: Date, moving: bool) -> String {
+    if moving {
+        return "moving ▲▼".to_owned();
+    }
     if kind == Kind::Moved {
         return format!("to {}", place_label(row.place, today));
     }
@@ -850,16 +876,14 @@ fn meta_of(row: &domain::Row, kind: Kind, today: Date) -> String {
 }
 
 /// `[ ] Book dentist                          [◷ today]`
-fn task_row(
-    canvas: &mut Canvas,
-    column: Column,
-    y: u16,
-    row: &domain::Row,
-    kind: Kind,
-    narrow: bool,
-    today: Date,
-) {
+fn task_row(canvas: &mut Canvas, column: Column, y: u16, row: &domain::Row, look: Look) {
     let Column { x, width } = column;
+    let Look {
+        kind,
+        today,
+        narrow,
+        moving,
+    } = look;
     let (mark, mark_style, title_style) = mark_of(row, kind);
     canvas.put(x + 1, y, mark, mark_style);
     canvas.put(
@@ -882,7 +906,7 @@ fn task_row(
     }
     // A narrow pane drops the row's words but keeps a moved row's pointer,
     // which is the whole content of the row.
-    let meta = meta_of(row, kind, today);
+    let meta = meta_of(row, kind, today, moving);
     if !meta.is_empty() && (!narrow || kind == Kind::Moved) {
         canvas.rput(edge, y, &meta, dim());
     }

@@ -221,6 +221,12 @@ pub struct App {
     editor: Option<Editor>,
     message: Option<Message>,
     cursors: Cursors,
+    /// The row a reorder is happening to, marked "moving" until the next
+    /// key. Application state, like the title being typed (DOMAIN.md
+    /// section 18).
+    moving: Option<Id>,
+    /// The row the mouse took hold of, while it holds it.
+    dragging: Option<(List, Id)>,
     layout: Layout,
     /// Where the clock comes from. The application is the only module
     /// that reads it (ARCHITECTURE.md section 3), which is also what
@@ -251,6 +257,8 @@ impl App {
             editor: None,
             message: None,
             cursors: Cursors::default(),
+            moving: None,
+            dragging: None,
             layout: Layout::default(),
             #[cfg(test)]
             clock: now.clone(),
@@ -262,9 +270,11 @@ impl App {
 
     /// The single entry point for every event, ticks included.
     pub fn update(&mut self, action: Action) -> Flow {
-        // What the hint bar last said stands until the next key.
+        // What the hint bar last said, and the mark on a row being
+        // carried, stand until the next key.
         if !matches!(action, Action::Tick | Action::Resize | Action::FocusGained) {
             self.message = None;
+            self.moving = None;
         }
 
         match action {
@@ -332,8 +342,9 @@ impl App {
             Action::LineEnd => self.set_caret(usize::MAX),
 
             Action::MouseDown { column, row } => self.point_at(column, row),
+            Action::MouseDrag { column, row } => self.drag_to(column, row),
+            Action::MouseUp { .. } => self.dragging = None,
             Action::Scroll { down, .. } => self.step(down),
-            Action::MouseUp { .. } | Action::MouseDrag { .. } => {}
         }
         Flow::Continue
     }
@@ -643,7 +654,16 @@ impl App {
         let Some(position) = self.model.live_task(*other).map(|task| task.position) else {
             return;
         };
-        self.run(Command::Reorder { task: id, position });
+        self.reorder_to(id, position);
+    }
+
+    /// One step of a reorder, wherever it came from. The row is marked
+    /// "moving" until the next key, which is the only sign the screen has
+    /// that a row is being carried rather than just selected.
+    fn reorder_to(&mut self, task: Id, position: usize) {
+        if self.run(Command::Reorder { task, position }).is_some() {
+            self.moving = Some(task);
+        }
     }
 
     /// `t`, `b`, and the days of the move card. With the card open the
@@ -953,6 +973,11 @@ impl App {
         self.message.as_ref()
     }
 
+    /// The row being carried up or down its group, if one is.
+    pub fn moving(&self) -> Option<Id> {
+        self.moving
+    }
+
     /// The cursor of a list, re-resolved against what the list holds now:
     /// a row that has gone clamps to the first one (ARCHITECTURE.md rule
     /// 6).
@@ -1113,7 +1138,33 @@ impl App {
         self.focus_on(list);
         if let Some(clicked) = self.layout.row_at(column, row) {
             self.set_cursor(clicked.list, clicked.id);
+            self.dragging = Some((clicked.list, clicked.id));
         }
+    }
+
+    /// Dragging carries the row under the pointer, one reorder per row it
+    /// passes, so that it follows the mouse instead of jumping when the
+    /// button comes up. Nothing is only reachable by mouse: this is the
+    /// same command `J` and `K` send.
+    fn drag_to(&mut self, column: u16, row: u16) {
+        let Some((list, task)) = self.dragging else {
+            return;
+        };
+        let Some(over) = self.layout.row_at(column, row) else {
+            return;
+        };
+        if over.list != list || over.id == task {
+            return;
+        }
+        let group = self.group_of(list, task);
+        if group != self.group_of(list, over.id) || !group.is_some_and(Group::is_ordered_by_hand) {
+            return;
+        }
+        let Some(position) = self.model.live_task(over.id).map(|task| task.position) else {
+            return;
+        };
+        self.set_cursor(list, task);
+        self.reorder_to(task, position);
     }
 
     fn focus_on(&mut self, list: List) {

@@ -5,6 +5,24 @@ use jiff::civil::Date;
 use crate::domain::tests::MemStore;
 use crate::domain::{Change, Placement, Rule, Schedule, Task, Write};
 
+/// A store that refuses to write, so that a failed commit can be seen to
+/// leave the model as it was (ARCHITECTURE.md rule 10).
+struct Broken(MemStore);
+
+impl Store for Broken {
+    fn load(&self) -> Result<Model, StoreError> {
+        self.0.load()
+    }
+
+    fn commit(&mut self, _change: &Change) -> Result<(), StoreError> {
+        Err(StoreError::Other("the disk is full".to_owned()))
+    }
+
+    fn version(&self) -> Result<u64, StoreError> {
+        self.0.version()
+    }
+}
+
 /// The wireframes' own day, which is a Friday.
 const NOW: &str = "2025-09-05T09:00:00+02:00[Europe/Copenhagen]";
 
@@ -1105,4 +1123,131 @@ fn the_wheel_moves_the_cursor() {
     });
 
     assert_ne!(app.cursor(List::Day), first);
+}
+
+#[test]
+fn a_reorder_marks_the_row_it_is_carrying_until_the_next_key() {
+    let mut app = started();
+    add(&mut app, "One");
+    let two = add(&mut app, "Two");
+
+    app.update(Action::MoveUp);
+    assert_eq!(app.moving(), Some(two));
+
+    app.update(Action::Down);
+    assert_eq!(app.moving(), None, "the mark goes with the message");
+}
+
+#[test]
+fn dragging_a_row_carries_it_the_way_the_keys_do() {
+    let mut app = started();
+    let one = add(&mut app, "One");
+    add(&mut app, "Two");
+    let three = add(&mut app, "Three");
+
+    let rows: Vec<RowArea> = app
+        .rows_of(List::Day)
+        .into_iter()
+        .enumerate()
+        .map(|(at, (id, _))| RowArea {
+            list: List::Day,
+            id,
+            area: Rect {
+                x: 0,
+                y: 5 + at as u16,
+                width: 59,
+                height: 1,
+            },
+        })
+        .collect();
+    app.set_layout(Layout {
+        narrow: false,
+        lists: vec![ListArea {
+            list: List::Day,
+            area: Rect {
+                x: 0,
+                y: 5,
+                width: 59,
+                height: 28,
+            },
+        }],
+        rows,
+    });
+
+    // Take hold of the third row and drag it over the first.
+    app.update(Action::MouseDown { column: 4, row: 7 });
+    app.update(Action::MouseDrag { column: 4, row: 6 });
+    app.update(Action::MouseDrag { column: 4, row: 5 });
+    app.update(Action::MouseUp { column: 4, row: 5 });
+
+    assert_eq!(titles(&app, List::Day), ["Three", "One", "Two"]);
+    assert_eq!(app.cursor(List::Day), Some(three));
+    assert_eq!(
+        app.model().task(one).map(|task| task.position),
+        Some(1),
+        "and the rows it passed shifted, once each"
+    );
+}
+
+#[test]
+fn a_change_that_cannot_be_saved_is_a_hint_and_not_a_crash() {
+    let store = MemStore::new();
+    let mut app = app_at(store.clone(), NOW);
+    add(&mut app, "Book dentist");
+
+    let mut app = App::new(Box::new(Broken(store)), &at(NOW)).expect("an app");
+    app.update(Action::Delete);
+
+    assert_eq!(hint(&app), "The change could not be saved.");
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Book dentist"],
+        "the model is left as it was"
+    );
+}
+
+#[test]
+fn an_undo_that_no_longer_applies_is_dropped_and_says_so() {
+    // An entry left by an instance that has since been overtaken: the
+    // task it would put back is not gone at all.
+    let mut app = started();
+    add(&mut app, "Book dentist");
+    let id = app.cursor(List::Day).expect("the task");
+    let mut model = app.model().clone();
+    model.undo.push(domain::UndoEntry {
+        id: 99,
+        at: at(NOW),
+        label: "Deleted \"Book dentist\"".to_owned(),
+        inverse: Command::RestoreTask {
+            task: id,
+            position: 0,
+        },
+    });
+    let mut app = app_at(MemStore::holding(model), NOW);
+
+    app.update(Action::Undo);
+
+    assert_eq!(
+        hint(&app),
+        "Deleted \"Book dentist\" could not be undone: That task is already back."
+    );
+    assert_eq!(titles(&app, List::Day), ["Book dentist"]);
+    assert_eq!(
+        app.model().undo.last().map(|entry| entry.label.as_str()),
+        Some("Added \"Book dentist\""),
+        "the entry that could not be undone is dropped off the stack"
+    );
+}
+
+#[test]
+fn going_to_a_search_result_is_not_built_yet() {
+    let mut app = started();
+    add(&mut app, "Ship invoice export");
+    app.update(Action::Search);
+    type_in(&mut app, "invoice");
+
+    app.update(Action::Confirm);
+
+    assert_eq!(hint(&app), "Going to a task from search is not built yet.");
+    assert!(app.popup().is_some(), "and the search stays open");
 }
