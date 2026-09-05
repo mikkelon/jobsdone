@@ -1048,12 +1048,6 @@ fn task_row(canvas: &mut Canvas, column: Column, y: u16, row: &domain::Row, look
     } = look;
     let (mark, mark_style, title_style) = mark_of(row, kind);
     canvas.put(x + 1, y, mark, mark_style);
-    canvas.put(
-        x + 5,
-        y,
-        clip(&row.title, width.saturating_sub(6)),
-        title_style,
-    );
 
     // The right of the row, filled from its edge inwards: the time it was
     // closed, then the chips, then whatever text is left.
@@ -1070,8 +1064,19 @@ fn task_row(canvas: &mut Canvas, column: Column, y: u16, row: &domain::Row, look
     // which is the whole content of the row.
     let meta = meta_of(row, kind, today, moving);
     if !meta.is_empty() && (!narrow || kind == Kind::Moved) {
-        canvas.rput(edge, y, &meta, dim());
+        edge = canvas
+            .rput(edge, y, &meta, dim())
+            .saturating_sub(count(&meta) + 1);
     }
+
+    // The title has whatever is left, so a row carrying three chips loses
+    // the end of its own title rather than running under them.
+    canvas.put(
+        x + 5,
+        y,
+        clip(&row.title, edge.saturating_sub(x + 5)),
+        title_style,
+    );
 }
 
 /// The time a task was closed, or the date when it was closed on a later

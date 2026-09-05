@@ -611,6 +611,48 @@ fn the_move_card_names_the_task_and_the_days() {
 }
 
 #[test]
+fn a_row_with_more_chips_than_room_loses_the_end_of_its_title() {
+    let now = at(NOW);
+    let mut model = Model::empty();
+    model.tasks.insert(
+        1,
+        Task {
+            due_on: Some(on("2025-09-30")),
+            remind_on: Some(on("2025-09-12")),
+            schedule_id: Some(1),
+            scheduled_on: Some(on("2025-09-05")),
+            ..task(1, "Write the Q4 planning doc and the one after it", None, 0)
+        },
+    );
+    model.schedules.insert(
+        1,
+        Schedule {
+            id: 1,
+            title: "Write the Q4 planning doc".to_owned(),
+            rule: Rule::Workdays,
+            generated_through: on("2025-09-05"),
+            stopped_on: None,
+            created_at: now.clone(),
+        },
+    );
+    let app = App::new(Box::new(MemStore::holding(model)), &now).expect("an app");
+
+    let row = look(&app, 120, 36)
+        .into_iter()
+        .find(|row| row.contains("[due 30 Sep]"))
+        .expect("the backlog row");
+
+    assert!(
+        row.contains("[↻ work days]  [due 30 Sep]  [◷ 12 Sep]"),
+        "every chip is drawn: {row:?}"
+    );
+    assert!(
+        !row.contains("doc[↻"),
+        "and the title stops before them: {row:?}"
+    );
+}
+
+#[test]
 fn the_backlog_lists_the_schedules_under_its_groups() {
     let drawn = look(&app(), 120, 36);
     let text = drawn.join("\n");
