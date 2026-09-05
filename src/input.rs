@@ -19,6 +19,18 @@ pub enum Pane {
     Backlog,
 }
 
+/// Which day the day pane of the home page is on, because history is the
+/// same page stepped to another day and its keys are not the same
+/// (DESIGN.md section 6): `t` puts a task from a past day onto today,
+/// which on today itself would mean nothing, and the pane beside it is
+/// the list of days rather than the backlog.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Shown {
+    Today,
+    Past,
+    Future,
+}
+
 /// A pane of the notes page.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NotesPane {
@@ -67,10 +79,23 @@ pub enum Field {
 /// shortcuts keep a name of their own.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum KeyContext {
-    Home { pane: Pane, field: Option<Field> },
-    Notes { pane: NotesPane, text_field: bool },
-    Review { step: ReviewStep, text_field: bool },
-    Popup { kind: PopupKind, text_field: bool },
+    Home {
+        pane: Pane,
+        day: Shown,
+        field: Option<Field>,
+    },
+    Notes {
+        pane: NotesPane,
+        text_field: bool,
+    },
+    Review {
+        step: ReviewStep,
+        text_field: bool,
+    },
+    Popup {
+        kind: PopupKind,
+        text_field: bool,
+    },
 }
 
 impl KeyContext {
@@ -252,13 +277,38 @@ pub struct Binding {
 // bar; a row the bar leaves out still teaches its key in the palette and
 // the help overlay.
 
-/// A home table: its own rows, then switching pane, then the day keys and
-/// the rows every page shares. One macro rather than one const per group,
-/// because [`bindings`] hands out a single slice and the order of the rows
-/// is the order of the hint bar.
+/// A home table: the three day keys, its own rows, then switching pane
+/// and the rows every page shares. One macro rather than one const per
+/// group, because [`bindings`] hands out a single slice and the order of
+/// the rows is the order of the hint bar.
+///
+/// The day keys take their places in the bar as an argument, because on
+/// today they are worth no room and on any other day they are what the
+/// pane is for (wireframe 08).
 macro_rules! home_table {
-    ($($own:expr),* $(,)?) => {
+    ($steps:expr, $today:expr, $goto:expr; $($own:expr),* $(,)?) => {
         &[
+            Binding {
+                keys: &[("[", Action::PrevDay), ("]", Action::NextDay)],
+                shown: "[ ]",
+                label: "prev/next day",
+                bar: $steps,
+                narrow: Bar::Off,
+            },
+            Binding {
+                keys: &[(".", Action::Today)],
+                shown: ".",
+                label: "today",
+                bar: $today,
+                narrow: Bar::Off,
+            },
+            Binding {
+                keys: &[("g", Action::GoToDate)],
+                shown: "g",
+                label: "go to date",
+                bar: $goto,
+                narrow: Bar::Off,
+            },
             $($own,)*
             Binding {
                 keys: &[
@@ -269,27 +319,6 @@ macro_rules! home_table {
                 shown: "tab h/l",
                 label: "pane",
                 bar: Bar::Right,
-                narrow: Bar::Off,
-            },
-            Binding {
-                keys: &[("[", Action::PrevDay), ("]", Action::NextDay)],
-                shown: "[ ]",
-                label: "prev/next day",
-                bar: Bar::Off,
-                narrow: Bar::Off,
-            },
-            Binding {
-                keys: &[(".", Action::Today)],
-                shown: ".",
-                label: "today",
-                bar: Bar::Off,
-                narrow: Bar::Off,
-            },
-            Binding {
-                keys: &[("g", Action::GoToDate)],
-                shown: "g",
-                label: "go to date",
-                bar: Bar::Off,
                 narrow: Bar::Off,
             },
             Binding {
@@ -351,6 +380,9 @@ macro_rules! home_table {
 }
 
 const HOME_DAY: &[Binding] = home_table![
+    Bar::Off,
+    Bar::Off,
+    Bar::Off;
     Binding {
         keys: &[("J", Action::MoveDown), ("K", Action::MoveUp)],
         shown: "J/K",
@@ -424,9 +456,21 @@ const HOME_DAY: &[Binding] = home_table![
         bar: Bar::Off,
         narrow: Bar::Off,
     },
+    // Today has a Moved group as readily as a past day does, so the key
+    // that follows a pointer belongs here too.
+    Binding {
+        keys: &[("enter", Action::Confirm)],
+        shown: "⏎",
+        label: "follow moved",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
 ];
 
 const HOME_BACKLOG: &[Binding] = home_table![
+    Bar::Off,
+    Bar::Off,
+    Bar::Off;
     Binding {
         keys: &[("space", Action::Close)],
         shown: "space",
@@ -496,6 +540,88 @@ const HOME_BACKLOG: &[Binding] = home_table![
         label: "delete",
         bar: Bar::Left,
         narrow: Bar::Short(Side::Left, "del"),
+    },
+];
+
+/// A day that is not today. Stepping is what the pane is for, so the day
+/// keys lead the bar; `t` puts a task from a day that has passed onto
+/// today, which on today itself would mean nothing (wireframe 08).
+const HOME_OTHER_DAY: &[Binding] = home_table![
+    Bar::Short(Side::Left, "day"),
+    Bar::Left,
+    Bar::Left;
+    Binding {
+        keys: &[("space", Action::Close)],
+        shown: "space",
+        label: "close",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("t", Action::ToToday)],
+        shown: "t",
+        label: "to today",
+        bar: Bar::Left,
+        narrow: Bar::Short(Side::Left, "today"),
+    },
+    Binding {
+        keys: &[("b", Action::ToBacklog)],
+        shown: "b",
+        label: "to backlog",
+        bar: Bar::Left,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("m", Action::MoveToDay)],
+        shown: "m",
+        label: "move…",
+        bar: Bar::Left,
+        narrow: Bar::Off,
+    },
+    // A moved row is a pointer, so Enter goes to wherever the task is
+    // now rather than doing anything to the row (DESIGN.md section 6).
+    Binding {
+        keys: &[("enter", Action::Confirm)],
+        shown: "⏎",
+        label: "follow moved",
+        bar: Bar::Left,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("a", Action::Add)],
+        shown: "a",
+        label: "add to this day",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("e", Action::Edit)],
+        shown: "e",
+        label: "edit",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("x", Action::Delete)],
+        shown: "x",
+        label: "delete",
+        bar: Bar::Off,
+        narrow: Bar::Short(Side::Left, "del"),
+    },
+];
+
+/// The list of days the backlog pane becomes while history is browsed.
+/// Its rows are days, so nothing that acts on a task is bound here.
+const HOME_DAYS: &[Binding] = home_table![
+    Bar::Short(Side::Left, "day"),
+    Bar::Left,
+    Bar::Left;
+    Binding {
+        keys: &[("enter", Action::Confirm)],
+        shown: "⏎",
+        label: "go to that day",
+        bar: Bar::Left,
+        narrow: Bar::Left,
     },
 ];
 
@@ -1259,12 +1385,22 @@ pub fn bindings(context: KeyContext) -> &'static [Binding] {
             ..
         } => HOME_RENAMING,
         KeyContext::Home {
-            pane: Pane::Day, ..
+            pane: Pane::Day,
+            day: Shown::Today,
+            ..
         } => HOME_DAY,
+        KeyContext::Home {
+            pane: Pane::Day, ..
+        } => HOME_OTHER_DAY,
+        KeyContext::Home {
+            pane: Pane::Backlog,
+            day: Shown::Today,
+            ..
+        } => HOME_BACKLOG,
         KeyContext::Home {
             pane: Pane::Backlog,
             ..
-        } => HOME_BACKLOG,
+        } => HOME_DAYS,
         KeyContext::Notes {
             pane: NotesPane::List,
             ..
@@ -1316,12 +1452,29 @@ pub fn bindings(context: KeyContext) -> &'static [Binding] {
 pub fn name(context: KeyContext) -> &'static str {
     match context {
         KeyContext::Home {
-            pane: Pane::Day, ..
+            pane: Pane::Day,
+            day: Shown::Today,
+            ..
         } => "TODAY",
+        KeyContext::Home {
+            pane: Pane::Day,
+            day: Shown::Past,
+            ..
+        } => "PAST DAY",
+        KeyContext::Home {
+            pane: Pane::Day,
+            day: Shown::Future,
+            ..
+        } => "FUTURE DAY",
+        KeyContext::Home {
+            pane: Pane::Backlog,
+            day: Shown::Today,
+            ..
+        } => "BACKLOG",
         KeyContext::Home {
             pane: Pane::Backlog,
             ..
-        } => "BACKLOG",
+        } => "DAYS",
         KeyContext::Notes {
             pane: NotesPane::List,
             ..

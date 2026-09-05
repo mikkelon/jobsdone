@@ -596,14 +596,14 @@ def p07():
 def p08():
     g = Grid(120, 36)
     strip(g, [('‹', 'd'), ('Mon 1 Sep', 'b'), ('›', 'd'), ('4 days ago', 'd'), ('. back to today', 'd')],
-          [('● 2 in review', 'R b'), ('4 notes n', 'd'), ('/', 'd'), (':', 'd'), ('?', 'd')])
+          [('● 5 in review', 'R b'), ('4 notes n', 'd'), ('/', 'd'), (':', 'd'), ('?', 'd')])
     g.callout(48, 0, 1)
     lx, lw, rx, rw, y0, y1 = frame2(g, ('Mon 1 Sep', 'past day', '8 planned · 3 done · 2 open · 3 moved'), ('Days', '', 'g go to date'), 'left')
     g.callout(rx + rw - 15, 2, 4)
     y = y0
     group(g, lx, lw, y, 'Plan'); y += 1
     task(g, lx, lw, y, 'Call the accountant about VAT', cursor=True, chips=[('pile', 'on the pile')]); g.callout(lx + 36, y, 2); y += 1
-    task(g, lx, lw, y, 'Write standup notes', chips=[('rep', '↻'), ('pile', 'on the pile')]); y += 1
+    task(g, lx, lw, y, 'Write standup notes', chips=[('rep', '↻ work days'), ('pile', 'on the pile')]); y += 1
     add_row(g, lx, lw, y, 'add a task to this day'); y += 2
     group(g, lx, lw, y, 'Done', 3); g.callout(lx + 10, y, 3); y += 1
     task(g, lx, lw, y, 'Weekly planning', state='done', done_at='09:05'); y += 1
@@ -628,7 +628,7 @@ def p08():
     group(g, rx, rw, y, 'Earlier'); y += 1
     g.put(rx + 5, y, 'Fri 22 Aug'); g.rput(rx + rw - 1, y, '1 / 2 · 1 open', 'd'); y += 1
     g.put(rx + 5, y, '…'); g.rput(rx + rw - 1, y, 'days with nothing planned are skipped', 'd')
-    hints(g, g.h - 1, 'Past day', [('[ ]', 'day'), ('.', 'today'), ('g', 'go to date'), ('space', 'close'), ('t', 'to today'), ('b', 'to backlog'), ('m', 'move…'), ('⏎', 'follow moved')])
+    hints(g, g.h - 1, 'Past day', [('[ ]', 'day'), ('.', 'today'), ('g', 'go to date'), ('space', 'close'), ('t', 'to today'), ('b', 'to backlog'), ('m', 'move…'), ('⏎', 'follow moved')], PANE_KEYS)
     page('08-history', 'History', [('120×36 · floating window', g)], '''
 <h2>History: browsing past days</h2>
 <p>History is not a separate screen: it is the same day view stepped backwards. A past day is drawn exactly as it was while it was today, and the two panes stay in place.</p>

@@ -3,12 +3,26 @@ use super::*;
 use crossterm::event::{KeyEventState, MouseButton};
 
 fn home(pane: Pane) -> KeyContext {
-    KeyContext::Home { pane, field: None }
+    KeyContext::Home {
+        pane,
+        day: Shown::Today,
+        field: None,
+    }
+}
+
+/// The same two panes with the day pane stepped off today.
+fn browsing(pane: Pane) -> KeyContext {
+    KeyContext::Home {
+        pane,
+        day: Shown::Past,
+        field: None,
+    }
 }
 
 fn writing(field: Field) -> KeyContext {
     KeyContext::Home {
         pane: Pane::Day,
+        day: Shown::Today,
         field: Some(field),
     }
 }
@@ -32,6 +46,8 @@ fn every_context() -> Vec<KeyContext> {
     vec![
         home(Pane::Day),
         home(Pane::Backlog),
+        browsing(Pane::Day),
+        browsing(Pane::Backlog),
         KeyContext::Notes {
             pane: NotesPane::List,
             text_field: false,
@@ -80,6 +96,8 @@ fn every_list_of_rows_moves_with_j_and_k() {
     let lists = [
         home(Pane::Day),
         home(Pane::Backlog),
+        browsing(Pane::Day),
+        browsing(Pane::Backlog),
         KeyContext::Notes {
             pane: NotesPane::List,
             text_field: false,

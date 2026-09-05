@@ -14,7 +14,9 @@ use ratatui::style::{Color, Modifier, Style};
 use super::{Canvas, Rows, accent, bold, count, cursor, day_label, dim, place_label, plain};
 use crate::app::{App, DateDraft, DateKind, MoveTarget, Popup, RepeatDraft, RowId};
 use crate::domain::{Row, Weekday};
-use crate::input::{self, Action, Binding, KeyContext, NotesPane, Pane, PopupKind, ReviewStep};
+use crate::input::{
+    self, Action, Binding, KeyContext, NotesPane, Pane, PopupKind, ReviewStep, Shown,
+};
 
 pub(super) fn draw(canvas: &mut Canvas, app: &App, rows: &Rows) {
     let Some(popup) = app.popup() else {
@@ -289,15 +291,18 @@ fn card(canvas: &mut Canvas, x: u16, y: u16, width: u16, height: u16, title: &st
 
 /// The task a card is about, by the id it captured when it opened.
 fn about(app: &App, popup: &Popup) -> String {
-    let named = match popup.target {
-        Some(RowId::Task(task)) => app.model().live_task(task).map(|task| task.title.clone()),
+    match popup.target {
+        Some(RowId::Task(task)) => app
+            .model()
+            .live_task(task)
+            .map_or_else(|| "a task".to_owned(), |task| task.title.clone()),
         Some(RowId::Schedule(id)) => app
             .model()
             .schedule(id)
-            .map(|schedule| schedule.title.clone()),
-        _ => None,
-    };
-    named.unwrap_or_else(|| "a task".to_owned())
+            .map_or_else(|| "a task".to_owned(), |schedule| schedule.title.clone()),
+        // The card that goes to a day is about no row at all.
+        _ => String::new(),
+    }
 }
 
 /// A card's footer, drawn from the rows of its own key table so that it
@@ -433,6 +438,7 @@ fn name_of(kind: DateKind) -> &'static str {
         DateKind::Due => "Due by",
         DateKind::Remind => "Remind on",
         DateKind::Move => "Move",
+        DateKind::Go => "Go to day",
     }
 }
 
@@ -442,7 +448,7 @@ fn switch(kind: DateKind) -> Option<&'static str> {
     match kind {
         DateKind::Due => Some(" alt-r remind on "),
         DateKind::Remind => Some(" alt-d due by "),
-        DateKind::Move => None,
+        DateKind::Move | DateKind::Go => None,
     }
 }
 
@@ -451,7 +457,7 @@ fn no_date(kind: DateKind) -> &'static str {
     match kind {
         DateKind::Due => "no due date",
         DateKind::Remind => "no reminder",
-        DateKind::Move => "no day",
+        DateKind::Move | DateKind::Go => "no day",
     }
 }
 
@@ -673,7 +679,21 @@ enum Help {
 }
 
 fn context(pane: Pane) -> KeyContext {
-    KeyContext::Home { pane, field: None }
+    KeyContext::Home {
+        pane,
+        day: Shown::Today,
+        field: None,
+    }
+}
+
+/// The same two panes with the day pane stepped off today, which is what
+/// gives them their other set of keys.
+fn browsing(pane: Pane) -> KeyContext {
+    KeyContext::Home {
+        pane,
+        day: Shown::Past,
+        field: None,
+    }
 }
 
 /// A row is the same row in two contexts when it says the same thing.
@@ -705,6 +725,9 @@ fn columns() -> Vec<(&'static str, Vec<Help>)> {
 
     let mut third = only(context(Pane::Backlog), &shared);
     third.push(Help::Blank);
+    third.push(Help::Heading("DAYS"));
+    third.extend(only(browsing(Pane::Backlog), &shared));
+    third.push(Help::Blank);
     third.push(Help::Heading("REVIEW"));
     third.extend(only(
         KeyContext::Review {
@@ -715,6 +738,9 @@ fn columns() -> Vec<(&'static str, Vec<Help>)> {
     ));
 
     let mut second = only(context(Pane::Day), &shared);
+    second.push(Help::Blank);
+    second.push(Help::Heading("PAST DAY"));
+    second.extend(only(browsing(Pane::Day), &shared));
     second.push(Help::Blank);
     second.push(Help::Heading("NOTES"));
     second.extend(only(
