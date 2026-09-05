@@ -205,8 +205,18 @@ is still on D, `moved` = placed − kept:
 |---------------------------|------------------------------------------------------|
 | Today header              | open = kept open · done = kept closed · moved        |
 | Past day header           | planned = placed · done · open · moved               |
-| Day list row              | done / kept, and "· n open" when open > 0            |
+| Day list row              | done / kept, and "· n open" when D is before today and open > 0 |
 | Days with nothing planned | placed = 0; skipped in the list, shown empty when stepped to |
+
+An open task on a day that has passed is on the pile, which is what the
+day list's open count warns about. Today's own open tasks are the
+working list and a future day's are a plan, so neither is counted there;
+the row says "today" instead.
+
+The list is newest day first, broken into four stretches by the Monday
+of the week today is in: **later** (after this week), **this week**,
+**last week**, and **earlier**. A stretch with no day in it is not
+drawn, which is why a list of one old day is one group.
 
 ## 7. Views of the backlog
 

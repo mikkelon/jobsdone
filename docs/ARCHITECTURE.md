@@ -176,7 +176,7 @@ adds it here first, the way a new dependency is added to section 2 first.
   `Surfaced`, `SearchResults`, `DayList`, `NotesView`. With them the small
   types those name: `Id`, `Place`, `FromPlace`, `Weekday`, `MonthDay`,
   `Write`, `Row`, `DueChip`, `DayCounts`, `PileDay`, `DayListRow`,
-  `ScheduleRow`, `NoteRow`, `Undone`.
+  `DayStretch`, `Stretch`, `ScheduleRow`, `NoteRow`, `Undone`.
 - `apply(&Model, Command, now: &Zoned, undo_cap: usize) -> Result<Change,
   Rejected>`: every user command. Pushes the undo entry as part of the
   change. The cap is the length the undo stack is held to; the domain
