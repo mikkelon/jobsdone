@@ -1,0 +1,146 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Wireframes: map & flows</title>
+<link rel="stylesheet" href="wf.css"><script src="themes.js"></script><script src="wf.js" defer></script></head>
+<body>
+<div class="stage">
+<div class="desktop" style="overflow:auto">
+<div class="doc" style="max-width:none">
+  <h1>Wireframes for the Omarchy task manager</h1>
+  <p>Structure only: which screens exist, what is on them, and whether the flows make sense. Grey by default; the theme selector at the top right swaps in a real Omarchy theme from <code>colors.toml</code> to check that the structure survives dynamic theming. Numbered dots on each screen match the notes column.</p>
+
+  <h2>Screen map</h2>
+  <div class="map">
+    <div class="step screen"><a href="01-review.html"><b>01 Review: the pile</b><small>full window, first open of the day</small><div class="keys"><kbd>d</kbd><kbd>t</kbd><kbd>b</kbd><kbd>m</kbd><kbd>x</kbd></div></a></div>
+    <div class="step screen"><a href="02-surfaced.html"><b>02 Review: surfaced</b><small>due, reminders, new copies</small><div class="keys"><kbd>t</kbd><kbd>k</kbd><kbd>d</kbd><kbd>w</kbd></div></a></div>
+    <div class="step screen"><a href="03-today.html"><b>03 Today + backlog</b><small>home; two panes</small><div class="keys"><kbd>space</kbd><kbd>f</kbd><kbd>t</kbd><kbd>b</kbd></div></a></div>
+    <div class="step screen"><a href="04-narrow.html"><b>04 Narrow tile</b><small>one pane, tabs</small><div class="keys"><kbd>h</kbd><kbd>l</kbd></div></a></div>
+    <div class="step"><a href="05-task-states.html"><b>05 Task states</b><small>add, edit, reorder, focus, move, delete</small></a></div>
+    <div class="step"><a href="06-dates.html"><b>06 Due, remind, waiting</b><small>date card, waiting flag</small></a></div>
+    <div class="step"><a href="07-repeat.html"><b>07 Repeat</b><small>schedule card, schedule list</small></a></div>
+    <div class="step screen"><a href="08-history.html"><b>08 History</b><small>past days, day list</small><div class="keys"><kbd>[</kbd><kbd>]</kbd><kbd>.</kbd><kbd>g</kbd></div></a></div>
+    <div class="step"><a href="09-search.html"><b>09 Search</b><small>open + closed, all history</small><div class="keys"><kbd>/</kbd></div></a></div>
+    <div class="step screen"><a href="10-scratchpad.html"><b>10 Scratchpad</b><small>notes drawer, note surface</small><div class="keys"><kbd>n</kbd><kbd>o</kbd></div></a></div>
+    <div class="step"><a href="11-palette-help.html"><b>11 Palette &amp; help</b><small>every action, every key</small><div class="keys"><kbd>:</kbd><kbd>?</kbd></div></a></div>
+    <div class="step"><a href="12-empty.html"><b>12 Empty states</b><small>what an empty list says</small></a></div>
+  </div>
+  <p style="font-size:11px;color:var(--muted)">Thick border = a place the window can be in. Thin border = an overlay or state on top of one of those places.</p>
+
+  <h2>User flows</h2>
+  <div class="flows">
+    <div class="flow-col"><h3>A · The morning</h3>
+      <div class="step end">Open the app<small>first time today</small></div>
+      <div class="arrow">↓</div>
+      <div class="step decision">Pile non-empty?<small>unfinished tasks on past days</small></div>
+      <div class="arrow"><small>yes</small>↓ <small style="margin-left:8px">no: skip</small></div>
+      <div class="step screen">01 Pile<small>each: done / today / backlog / move / delete; or esc</small></div>
+      <div class="arrow">↓</div>
+      <div class="step decision">Due, reminded, or new copies today?</div>
+      <div class="arrow"><small>yes</small>↓ <small style="margin-left:8px">no: skip</small></div>
+      <div class="step screen">02 Surfaced<small>pull to today, keep, re-date, waiting</small></div>
+      <div class="arrow">↓</div>
+      <div class="step screen">03 Today<small>plan the day</small></div>
+      <div class="note">Both "no": straight to 03. Escape from 01 or 02 lands on 03 with the pile intact and the alert count showing.</div>
+    </div>
+    <div class="flow-col"><h3>B · Plan today</h3>
+      <div class="step screen">03 Today<small>cursor to backlog pane with <kbd>l</kbd></small></div>
+      <div class="arrow">↓</div>
+      <div class="step"><kbd>t</kbd> on a task<small>appends to today's plan; repeat as needed</small></div>
+      <div class="arrow">↓</div>
+      <div class="step"><kbd>h</kbd> back, <kbd>a</kbd><small>type new tasks, Enter after each</small></div>
+      <div class="arrow">↓</div>
+      <div class="step"><kbd>J</kbd> <kbd>K</kbd><small>order the plan by hand</small></div>
+      <div class="arrow">↓</div>
+      <div class="step"><kbd>f</kbd> on one to three<small>they move up to Focus</small></div>
+      <div class="arrow">↓</div>
+      <div class="step end">Day is planned</div>
+    </div>
+    <div class="flow-col"><h3>C · Work through the day</h3>
+      <div class="step screen">03 Today</div>
+      <div class="arrow">↓</div>
+      <div class="step"><kbd>space</kbd><small>task drops to Done with the time</small></div>
+      <div class="arrow">↓</div>
+      <div class="step"><kbd>n</kbd><small>notes drawer opens beside the day</small></div>
+      <div class="arrow">↓</div>
+      <div class="step screen">10 Scratchpad<small><kbd>a</kbd> new note, type, <kbd>p</kbd> to sketch</small></div>
+      <div class="arrow">↓</div>
+      <div class="step"><kbd>o</kbd> optional<small>note floats over other windows</small></div>
+      <div class="arrow">↓</div>
+      <div class="step"><kbd>x</kbd> when used up<small>undo toast, no confirm</small></div>
+    </div>
+    <div class="flow-col"><h3>D · Park with a date</h3>
+      <div class="step screen">03 Backlog pane</div>
+      <div class="arrow">↓</div>
+      <div class="step"><kbd>d</kbd> due by, or <kbd>r</kbd> remind on</div>
+      <div class="arrow">↓</div>
+      <div class="step screen">06 Date card<small>type, quick pick, or calendar; Enter</small></div>
+      <div class="arrow">↓</div>
+      <div class="step">Chip on the row<small>task stays in the backlog</small></div>
+      <div class="arrow">↓ <small>mornings pass</small></div>
+      <div class="step screen">02 Surfaced<small>shows up on its date; <kbd>t</kbd> pulls, <kbd>k</kbd> keeps</small></div>
+    </div>
+    <div class="flow-col"><h3>D2 · Wait on someone</h3>
+      <div class="step screen">03 Backlog pane</div>
+      <div class="arrow">↓</div>
+      <div class="step"><kbd>w</kbd><small>row moves under Waiting</small></div>
+      <div class="arrow">↓</div>
+      <div class="step">Not nagged<small>never in the due group; a reminder still shows, dimmed</small></div>
+      <div class="arrow">↓</div>
+      <div class="step"><kbd>w</kbd> again<small>back to the ordinary backlog</small></div>
+    </div>
+    <div class="flow-col"><h3>E · Recurring task</h3>
+      <div class="step">Any task, <kbd>R</kbd></div>
+      <div class="arrow">↓</div>
+      <div class="step screen">07 Repeat card<small>pick a rule, preview next dates, Enter</small></div>
+      <div class="arrow">↓</div>
+      <div class="step">Each scheduled morning<small>fresh copy at the end of that day's plan</small></div>
+      <div class="arrow">↓</div>
+      <div class="step">Copy is ordinary<small>close, move, focus; <kbd>e</kbd> asks "this copy / future copies"</small></div>
+      <div class="arrow">↓</div>
+      <div class="step decision">Not closed that day?</div>
+      <div class="arrow"><small>yes</small>↓</div>
+      <div class="step screen">01 Pile<small>handled like any task</small></div>
+      <div class="note">Rule or title edits: future copies only. Stopping the rule: existing copies stay. All rules are listed at the bottom of the backlog pane.</div>
+    </div>
+    <div class="flow-col"><h3>F · Look back</h3>
+      <div class="step screen">03 Today</div>
+      <div class="arrow">↓</div>
+      <div class="step"><kbd>[</kbd> repeatedly, or <kbd>g</kbd><small>day pane steps back; backlog pane becomes a day list</small></div>
+      <div class="arrow">↓</div>
+      <div class="step screen">08 Past day<small>planned, closed with times, open ones marked "on the pile"</small></div>
+      <div class="arrow">↓</div>
+      <div class="step"><kbd>.</kbd><small>back to today</small></div>
+    </div>
+    <div class="flow-col"><h3>F2 · Find something closed</h3>
+      <div class="step">Anywhere, <kbd>/</kbd></div>
+      <div class="arrow">↓</div>
+      <div class="step screen">09 Search<small>type; open tasks first, then closed with their day</small></div>
+      <div class="arrow">↓</div>
+      <div class="step"><kbd>⏎</kbd> jump to that day (08)<small>or <kbd>t</kbd> re-add as a new task on today</small></div>
+    </div>
+    <div class="flow-col"><h3>G · Half-width tile</h3>
+      <div class="step">Window narrower than threshold</div>
+      <div class="arrow">↓</div>
+      <div class="step screen">04 Tabs<small>Today · Backlog · Notes</small></div>
+      <div class="arrow">↓</div>
+      <div class="step">Same keys<small><kbd>h</kbd>/<kbd>l</kbd> switch tabs instead of panes; <kbd>t</kbd> still pulls</small></div>
+      <div class="arrow">↓</div>
+      <div class="step">Widen the tile<small>panes come back, nothing else changes</small></div>
+    </div>
+  </div>
+
+  <h2>Legend</h2>
+  <table>
+    <tr><th>Mark</th><th>Meaning</th></tr>
+    <tr><td>☐ / ✓</td><td>open / closed task. Focus items have a heavier box and bold title.</td></tr>
+    <tr><td>▌ left bar + accent title</td><td>cursor row (keyboard). Only one in the window.</td></tr>
+    <tr><td>chip "due 12 Sep" / "due 3 Sep · 2 days over"</td><td>due by; overdue uses the theme's red</td></tr>
+    <tr><td>chip "◷ 1 Oct"</td><td>remind on; theme blue</td></tr>
+    <tr><td>chip "waiting"</td><td>waiting flag; theme magenta, row dimmed, dashed box</td></tr>
+    <tr><td>chip "↻ every Fri"</td><td>copy of a recurring task</td></tr>
+    <tr><td>hatched box</td><td>freehand ink (scratchpad), image placeholder</td></tr>
+    <tr><td>bottom bar</td><td>hint bar for the focused pane, always visible</td></tr>
+  </table>
+</div>
+</div>
+</div>
+</body></html>

@@ -1,0 +1,85 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>03 Today + backlog</title>
+<link rel="stylesheet" href="wf.css"><script src="themes.js"></script><script src="wf.js" defer></script></head>
+<body>
+<div class="stage">
+<div class="desktop">
+  <div class="bar"><span class="ws"><span class="on">1</span><span>2</span><span>3</span></span><span class="mid">Friday 08:41</span><span>bar stand-in</span></div>
+  <div class="tiles">
+    <main class="app">
+      <div class="strip">
+        <span class="nav">‹</span><span class="date">Today · Fri 5 Sep</span><span class="nav">›</span>
+        <span class="nav"><kbd>[</kbd> <kbd>]</kbd> day &nbsp; <kbd>g</kbd> go to date</span>
+        <span class="spacer"></span>
+        <span class="ind alert"><b>2</b> in review</span>
+        <span class="ind"><b>4</b> notes <kbd>n</kbd></span>
+        <span class="ind"><kbd>/</kbd> search</span>
+        <span class="ind"><kbd>:</kbd> commands</span>
+        <span class="ind"><kbd>?</kbd></span>
+        <i class="callout" style="right:220px;top:4px">1</i>
+      </div>
+      <div class="panes">
+        <section class="pane focus">
+          <header><span class="title">Today</span><span>Fri 5 Sep</span><span class="right">6 open · 2 done</span></header>
+          <div class="body">
+            <div class="group">Focus<i class="callout" style="left:70px;top:4px">2</i></div>
+            <div class="row focus-item"><i class="chk"></i><span class="t">Ship invoice export</span><span class="meta"><span class="chip rep">↻ every Fri</span></span></div>
+            <div class="row focus-item"><i class="chk"></i><span class="t">Reply to the tender questions</span></div>
+            <div class="group">Plan<i class="callout" style="left:60px;top:4px">3</i></div>
+            <div class="row cursor"><i class="chk"></i><span class="t">Fix the flaky migration test</span><span class="meta">←backlog</span></div>
+            <div class="row"><i class="chk"></i><span class="t">Book dentist</span><span class="meta"><span class="chip rem">◷ today</span></span></div>
+            <div class="row"><i class="chk"></i><span class="t">Write standup notes</span><span class="meta"><span class="chip rep">↻ work days</span></span></div>
+            <div class="row"><i class="chk"></i><span class="t">Review Anna's PR</span></div>
+            <div class="row add"><span class="plus">+</span><span class="t">add a task</span><kbd>a</kbd></div>
+            <div class="group">Done <span class="n">2</span><i class="callout" style="left:80px;top:4px">4</i></div>
+            <div class="row done"><i class="chk"></i><span class="t">Morning review</span><span class="meta">08:12</span></div>
+            <div class="row done"><i class="chk"></i><span class="t">Pay electricity bill</span><span class="meta">08:30</span></div>
+          </div>
+        </section>
+        <section class="pane">
+          <header><span class="title">Backlog</span><span class="right">12 · 3 waiting</span></header>
+          <div class="body">
+            <div class="row"><i class="chk"></i><span class="t">Migrate CI to the new runners</span><span class="meta"><span class="chip due">due 12 Sep</span></span></div>
+            <div class="row"><i class="chk"></i><span class="t">Write the Q4 planning doc</span><span class="meta"><span class="chip due">due 30 Sep</span></span></div>
+            <div class="row"><i class="chk"></i><span class="t">Clean out the garage</span></div>
+            <div class="row"><i class="chk"></i><span class="t">Renew passport</span><span class="meta"><span class="chip rem">◷ 1 Oct</span></span></div>
+            <div class="row"><i class="chk"></i><span class="t">Try the new keyboard layout</span></div>
+            <div class="row"><i class="chk"></i><span class="t">Read the Hyprland plugin docs</span></div>
+            <div class="row"><i class="chk"></i><span class="t">Cancel unused subscriptions</span></div>
+            <div class="row"><i class="chk"></i><span class="t">Sort photo backups</span></div>
+            <div class="row"><i class="chk"></i><span class="t">Update the household budget</span></div>
+            <div class="row add"><span class="plus">+</span><span class="t">add to backlog</span><kbd>a</kbd></div>
+            <div class="group">Waiting <span class="n">3</span><i class="callout" style="left:100px;top:4px">5</i></div>
+            <div class="row waiting"><i class="chk"></i><span class="t">Quote from the electrician</span><span class="meta"><span class="chip wait">waiting</span></span></div>
+            <div class="row waiting"><i class="chk"></i><span class="t">Feedback on the proposal</span><span class="meta"><span class="chip wait">waiting</span> <span class="chip rem">◷ 15 Sep</span></span></div>
+            <div class="row waiting"><i class="chk"></i><span class="t">Parcel from the supplier</span><span class="meta"><span class="chip wait">waiting</span></span></div>
+          </div>
+        </section>
+      </div>
+      <div class="hints">
+        <span class="ctx">Today</span>
+        <span><kbd>j</kbd><kbd>k</kbd>move</span><span><kbd>J</kbd><kbd>K</kbd>reorder</span><span><kbd>space</kbd>done</span>
+        <span><kbd>f</kbd>focus</span><span><kbd>a</kbd>add</span><span><kbd>e</kbd>edit</span><span><kbd>b</kbd>to backlog</span>
+        <span><kbd>m</kbd>move to day…</span><span><kbd>R</kbd>repeat</span><span><kbd>x</kbd>delete</span>
+        <span class="spacer"></span><span><kbd>tab</kbd><kbd>h</kbd><kbd>l</kbd>pane</span>
+        <i class="callout" style="right:10px;top:-22px">6</i>
+      </div>
+    </main>
+  </div>
+</div>
+<aside class="notes">
+  <h2>Today + backlog (main screen)</h2>
+  <ol>
+    <li>Top strip: which day is shown and how to move between days. Right side carries the only global indicators: the review pile count (alert when non-zero), the notes drawer, search, commands, help.</li>
+    <li>Focus: the few tasks that must get done today. Bold, listed first, always visible. <kbd>f</kbd> toggles a task in and out; the list is not capped but the design assumes one to three.</li>
+    <li>Plan: the ordered working list. Order is manual only (<kbd>J</kbd>/<kbd>K</kbd>); the app never re-sorts. Row metadata is sparse: where it came from, a reminder chip, a repeat chip.</li>
+    <li>Done: closed tasks drop to the bottom in the order they were closed, with the time. They stay on the day for history.</li>
+    <li>Backlog is one flat list; Waiting is the same list filtered under its own heading, so flagged tasks stay visible but out of the way. Due/remind chips are the only per-row extras.</li>
+    <li>Hint bar changes with the focused pane, lazygit-style. Every action is one key; the mouse works too (click row, drag to reorder) but is never required.</li>
+  </ol>
+  <div class="flow"><b>Moving between places</b>
+    <kbd>t</kbd> in backlog appends the task to today's plan. <kbd>b</kbd> in today sends it back. <kbd>m</kbd> opens a day picker. Same task, different place; nothing is copied.</div>
+  <p>Layout is two panes because the core loop is "look at backlog, pull into today". Both lists visible at once, cursor moves between them with <kbd>h</kbd>/<kbd>l</kbd>.</p>
+</aside>
+</div>
+</body></html>

@@ -1,0 +1,73 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>07 Repeat schedule</title>
+<link rel="stylesheet" href="wf.css"><script src="themes.js"></script><script src="wf.js" defer></script></head>
+<body>
+<div class="stage">
+<div class="desktop">
+  <div class="bar"><span class="ws"><span class="on">1</span><span>2</span><span>3</span></span><span class="mid">Friday 11:15</span><span>bar stand-in</span></div>
+  <div class="tiles">
+    <main class="app">
+      <div class="strip">
+        <span class="nav">‹</span><span class="date">Today · Fri 5 Sep</span><span class="nav">›</span>
+        <span class="spacer"></span><span class="ind"><b>4</b> notes</span><span class="ind"><kbd>/</kbd></span><span class="ind"><kbd>:</kbd></span><span class="ind"><kbd>?</kbd></span>
+      </div>
+      <div class="panes">
+        <section class="pane focus">
+          <header><span class="title">Today</span><span>Fri 5 Sep</span><span class="right">6 open · 2 done</span></header>
+          <div class="body">
+            <div class="group">Focus</div>
+            <div class="row focus-item cursor"><i class="chk"></i><span class="t">Ship invoice export</span><span class="meta"><span class="chip rep">↻ every Fri</span></span><i class="callout" style="right:-8px;top:4px">1</i></div>
+            <div class="row focus-item"><i class="chk"></i><span class="t">Reply to the tender questions</span></div>
+            <div class="group">Plan</div>
+            <div class="row"><i class="chk"></i><span class="t">Fix the flaky migration test</span></div>
+            <div class="row"><i class="chk"></i><span class="t">Write standup notes</span><span class="meta"><span class="chip rep">↻ work days</span></span></div>
+          </div>
+        </section>
+        <section class="pane">
+          <header><span class="title">Backlog</span><span class="right">12 · 3 waiting</span></header>
+          <div class="body">
+            <div class="row"><i class="chk"></i><span class="t">Migrate CI to the new runners</span><span class="meta"><span class="chip due">due 12 Sep</span></span></div>
+            <div class="row"><i class="chk"></i><span class="t">Write the Q4 planning doc</span><span class="meta"><span class="chip due">due 30 Sep</span></span></div>
+            <div class="row"><i class="chk"></i><span class="t">Clean out the garage</span></div>
+            <div class="group" style="margin-top:40px">Repeating <span class="n">4</span> <span style="text-transform:none;letter-spacing:0">· <kbd>R</kbd> from the backlog header, or <kbd>:</kbd> repeating</span><i class="callout" style="left:104px;top:4px">4</i></div>
+            <div class="row"><span class="glyph">↻</span><span class="t">Write standup notes</span><span class="meta">every work day</span></div>
+            <div class="row"><span class="glyph">↻</span><span class="t">Ship invoice export</span><span class="meta">every Friday</span></div>
+            <div class="row"><span class="glyph">↻</span><span class="t">Pay rent</span><span class="meta">1st of the month</span></div>
+            <div class="row"><span class="glyph">↻</span><span class="t">Water the plants</span><span class="meta">every Mon, Thu</span></div>
+            <div class="row add" style="padding-left:40px"><span class="meta">Schedules, not tasks. Editing here changes future copies only; removing stops new copies and leaves existing ones.</span></div>
+          </div>
+        </section>
+      </div>
+      <div class="scrim left"><div class="card">
+        <div class="head"><b>Repeat</b> Ship invoice export<i class="callout" style="right:-8px;top:4px">2</i></div>
+        <div class="list">
+          <div class="item"><kbd>1</kbd><span class="t">Every work day</span><span class="meta">Mon–Fri</span></div>
+          <div class="item"><kbd>2</kbd><span class="t">Every day</span></div>
+          <div class="item sel"><kbd>3</kbd><span class="t">Every week on</span><span class="meta">Mo Tu We Th <b style="color:var(--accent)">[Fr]</b> Sa Su</span></div>
+          <div class="item"><kbd>4</kbd><span class="t">Every month on the</span><span class="meta">[ 1st ] · or "last"</span></div>
+          <div class="item"><kbd>5</kbd><span class="t">Every</span><span class="meta">[ 2 ] weeks from Fri 5 Sep</span></div>
+          <div class="item"><kbd>0</kbd><span class="t">Stop repeating</span><span class="meta">existing copies stay</span></div>
+        </div>
+        <div class="body" style="padding-top:0;font-size:11px;color:var(--muted)">Next copies: Fri 12 Sep · Fri 19 Sep · Fri 26 Sep<i class="callout" style="right:8px;top:2px">3</i></div>
+        <div class="foot"><span><kbd>⏎</kbd> save</span><span><kbd>esc</kbd> cancel</span><span><kbd>h</kbd><kbd>l</kbd> adjust</span></div>
+      </div></div>
+      <div class="hints">
+        <span class="ctx">Today</span>
+        <span><kbd>j</kbd><kbd>k</kbd>move</span><span><kbd>space</kbd>done</span><span><kbd>f</kbd>focus</span><span><kbd>a</kbd>add</span><span><kbd>e</kbd>edit</span><span><kbd>b</kbd>to backlog</span><span><kbd>m</kbd>move…</span><span><kbd>R</kbd>repeat</span><span><kbd>x</kbd>delete</span>
+      </div>
+    </main>
+  </div>
+</div>
+<aside class="notes">
+  <h2>Recurring tasks</h2>
+  <ol>
+    <li>A copy on a day is an ordinary task with a repeat chip. Close, move, reorder, focus: all as usual, none of it touches the schedule.</li>
+    <li><kbd>R</kbd> on any task (copy or not) opens the schedule card. On a copy it edits the schedule behind that copy; the current copy stays as it is.</li>
+    <li>The card previews the next dates so "1st of the month" and "every 2 weeks" are unambiguous before saving.</li>
+    <li>Schedules are listed at the bottom of the backlog pane, collapsed by default, so there is somewhere to see and edit all of them without inventing a fourth "place" for tasks.</li>
+  </ol>
+  <div class="flow"><b>What a schedule does each morning</b>Before the review runs, a fresh copy is placed at the end of that day's plan (not focus). Copies missed while the machine was off are created for those past days, so they land on the pile like any other unfinished task.</div>
+  <div class="flow"><b>Editing a copy's title</b><kbd>e</kbd> on a copy asks: this copy only, or this and future copies. Past copies never change.</div>
+</aside>
+</div>
+</body></html>

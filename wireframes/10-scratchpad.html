@@ -1,0 +1,71 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>10 Scratchpad</title>
+<link rel="stylesheet" href="wf.css"><script src="themes.js"></script><script src="wf.js" defer></script></head>
+<body>
+<div class="stage">
+<div class="desktop">
+  <div class="bar"><span class="ws"><span class="on">1</span><span>2</span><span>3</span></span><span class="mid">Friday 15:02</span><span>bar stand-in</span></div>
+  <div class="tiles">
+    <main class="app">
+      <div class="strip">
+        <span class="nav">‹</span><span class="date">Today · Fri 5 Sep</span><span class="nav">›</span>
+        <span class="spacer"></span><span class="ind"><b>4</b> notes <kbd>n</kbd></span><span class="ind"><kbd>/</kbd></span><span class="ind"><kbd>:</kbd></span><span class="ind"><kbd>?</kbd></span>
+      </div>
+      <div class="panes">
+        <section class="pane" style="flex:0 0 34%">
+          <header><span class="title">Today</span><span>Fri 5 Sep</span><span class="right">6 open</span></header>
+          <div class="body">
+            <div class="group">Focus</div>
+            <div class="row focus-item"><i class="chk"></i><span class="t">Ship invoice export</span></div>
+            <div class="row focus-item"><i class="chk"></i><span class="t">Reply to the tender questions</span></div>
+            <div class="group">Plan</div>
+            <div class="row"><i class="chk"></i><span class="t">Fix the flaky migration test</span></div>
+            <div class="row"><i class="chk"></i><span class="t">Book dentist</span></div>
+            <div class="row"><i class="chk"></i><span class="t">Write standup notes</span></div>
+          </div>
+        </section>
+        <section class="pane notes-pane" style="flex:0 0 30%">
+          <header><span class="title">Notes</span><span class="right">4 · <kbd>a</kbd> new</span><i class="callout" style="right:-8px;top:4px">1</i></header>
+          <div class="cards">
+            <div class="ncard cursor"><span class="x">×</span><div class="txt">Mention to Anna:<br>- CI runner budget<br>- Friday demo slot</div><div class="draw" style="flex:0 0 30px"></div></div>
+            <div class="ncard"><span class="x">×</span><div class="txt">Draft reply to tender Q3…</div></div>
+            <div class="ncard"><span class="x">×</span><div class="txt"></div><div class="draw"></div></div>
+            <div class="ncard"><span class="x">×</span><div class="txt">nordic ltd PO 4471<br>due 30 days</div></div>
+            <div class="ncard new">+ new note</div>
+          </div>
+          <div class="hints" style="border-top:1px solid var(--line-25)"><span><kbd>⏎</kbd>open</span><span><kbd>a</kbd>new</span><span><kbd>x</kbd>delete</span><span><kbd>o</kbd>pop out</span><i class="callout" style="right:8px;top:-22px">2</i></div>
+        </section>
+        <section class="pane focus">
+          <header><span class="title">Note</span><span>Thu 4 Sep 16:40</span><span class="right"><kbd>x</kbd> delete · <kbd>o</kbd> pop out · <kbd>esc</kbd></span><i class="callout" style="right:-8px;top:4px">3</i></header>
+          <div class="note-editor">
+            <div class="tools"><span class="on">i text</span><span>p pen</span><span>e erase</span><span>c clear ink</span><span style="margin-left:auto">one canvas, tools are modes</span><i class="callout" style="right:8px;top:4px">4</i></div>
+            <div class="surface">
+              <div>Mention to Anna:<br>- CI runner budget<br>- Friday demo slot<br>- ask about the retro format<span class="caret" style="display:inline-block;width:1px;height:14px;background:var(--foreground);vertical-align:-2px"></span></div>
+              <div class="ink" style="left:46%;top:24%;width:46%;height:34%"></div>
+              <div class="ink" style="left:6%;top:62%;width:28%;height:16%"></div>
+            </div>
+          </div>
+        </section>
+      </div>
+      <div class="hints">
+        <span class="ctx">Note</span>
+        <span><kbd>i</kbd>text</span><span><kbd>p</kbd>pen</span><span><kbd>e</kbd>erase</span><span><kbd>x</kbd>delete note</span><span><kbd>o</kbd>pop out as floating window</span>
+        <span class="spacer"></span><span><kbd>esc</kbd>back to notes</span><span><kbd>n</kbd>close drawer</span>
+      </div>
+    </main>
+  </div>
+</div>
+<aside class="notes">
+  <h2>Scratchpad</h2>
+  <p>A post-it block beside the lists, not a notes app. <kbd>n</kbd> opens the drawer as a third pane; the backlog gives way to make room, and the day list narrows.</p>
+  <ol>
+    <li>Notes are cards, newest first, showing their first lines and a thumbnail of any ink. No titles, no folders, no search. Independent of tasks by design.</li>
+    <li>Create, open, throw away. Delete has no confirmation, only the undo toast. Nothing expires on its own.</li>
+    <li>An open note takes the right pane. The header shows when it was made so a stale note is easy to spot and bin.</li>
+    <li>Text and freehand ink share the surface. Text flows from the top; ink goes anywhere on top of it. Tools are modes, switched by key, never a toolbar to click through. Pen works with mouse or stylus.</li>
+  </ol>
+  <div class="flow"><b>Pop out</b><kbd>o</kbd> detaches a note into its own small floating window (Omarchy's "pop" window rule: rounded, on top). Useful for a message draft while the main window is tiled behind an editor. Closing the float returns it to the drawer.</div>
+  <div class="flow"><b>Narrow layout</b>Notes is a tab (screen 04); a note opens full width in that tab.</div>
+</aside>
+</div>
+</body></html>

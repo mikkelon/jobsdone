@@ -1,0 +1,74 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>12 Empty states</title>
+<link rel="stylesheet" href="wf.css"><script src="themes.js"></script><script src="wf.js" defer></script></head>
+<body>
+<div class="stage">
+<div class="desktop">
+  <div class="sheet" style="grid-template-columns:1fr 1fr 1fr">
+    <div class="panel">
+      <div class="lbl">A · Empty day (today)</div>
+      <section class="pane focus">
+        <header><span class="title">Today</span><span>Sat 6 Sep</span><span class="right">nothing planned</span></header>
+        <div class="body" style="display:flex;flex-direction:column;justify-content:center;align-items:center;color:var(--muted);text-align:center;gap:6px">
+          <div>Nothing planned.</div>
+          <div><kbd>a</kbd> add a task · <kbd>l</kbd> then <kbd>t</kbd> pull from the backlog</div>
+        </div>
+      </section>
+    </div>
+    <div class="panel">
+      <div class="lbl">B · Empty backlog</div>
+      <section class="pane">
+        <header><span class="title">Backlog</span><span class="right">0</span></header>
+        <div class="body" style="display:flex;flex-direction:column;justify-content:center;align-items:center;color:var(--muted);text-align:center;gap:6px">
+          <div>Backlog is empty.</div>
+          <div><kbd>a</kbd> add · <kbd>b</kbd> on a day task sends it here</div>
+        </div>
+      </section>
+    </div>
+    <div class="panel">
+      <div class="lbl">C · Nothing to review — the review is skipped, not shown</div>
+      <section class="pane focus">
+        <div class="strip" style="border-bottom:1px solid var(--line-25)"><span class="date">Today · Fri 5 Sep</span><span class="spacer"></span><span class="ind"><b>0</b> in review</span></div>
+        <div class="body" style="color:var(--muted);padding:12px">Opens straight to Today. The "in review" indicator reads 0 and is not an alert. No "all clear" ceremony.</div>
+      </section>
+    </div>
+    <div class="panel">
+      <div class="lbl">D · Past day with nothing planned</div>
+      <section class="pane focus">
+        <header><span class="title">Sun 31 Aug</span><span>past day</span><span class="right">nothing was planned</span></header>
+        <div class="body" style="display:flex;flex-direction:column;justify-content:center;align-items:center;color:var(--muted);text-align:center;gap:6px">
+          <div>Nothing was planned on this day.</div>
+          <div><kbd>[</kbd> keeps stepping back · <kbd>g</kbd> pick a date</div>
+        </div>
+      </section>
+    </div>
+    <div class="panel">
+      <div class="lbl">E · Search with no match</div>
+      <section class="pane" style="position:relative;min-height:220px">
+        <div class="scrim" style="padding-top:20px"><div class="card" style="width:90%">
+          <div class="search"><span class="glyph">/</span><div class="input"><span>tax return</span><span class="caret"></span></div><span style="font-size:11px;color:var(--muted)">0 matches</span></div>
+          <div class="body" style="color:var(--muted);font-size:11px">Nothing matches, open or closed.</div>
+          <div class="foot"><span><kbd>a</kbd> add "tax return" to today</span><span><kbd>esc</kbd> close</span></div>
+        </div></div>
+      </section>
+    </div>
+    <div class="panel">
+      <div class="lbl">F · No notes</div>
+      <section class="pane notes-pane">
+        <header><span class="title">Notes</span><span class="right">0</span></header>
+        <div class="cards"><div class="ncard new">+ new note <kbd style="margin-left:6px">a</kbd></div></div>
+      </section>
+    </div>
+  </div>
+</div>
+<aside class="notes">
+  <h2>Empty states</h2>
+  <p>Empty states say what the list is for and name the one or two keys that fill it. No illustrations, no encouragement.</p>
+  <p><b>A, B</b> The two lists point at each other: an empty day suggests the backlog, an empty backlog reminds that days can send tasks back.</p>
+  <p><b>C</b> The review only ever appears with content. Its absence is the good news.</p>
+  <p><b>D</b> Past days with nothing planned still exist in the day stepper so the calendar stays continuous, but the day list on screen 08 skips them.</p>
+  <p><b>E</b> The most likely reason for a miss is that the task does not exist yet, so the empty search offers to add it.</p>
+  <p><b>F</b> The new-note card is the whole empty state.</p>
+</aside>
+</div>
+</body></html>

@@ -1,0 +1,105 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>05 Task states</title>
+<link rel="stylesheet" href="wf.css"><script src="themes.js"></script><script src="wf.js" defer></script></head>
+<body>
+<div class="stage">
+<div class="desktop">
+  <div class="sheet">
+    <div class="panel">
+      <div class="lbl">A · Quick add (<kbd>a</kbd> from any list)</div>
+      <section class="pane focus">
+        <div class="body">
+          <div class="group">Plan</div>
+          <div class="row"><i class="chk"></i><span class="t">Review Anna's PR</span></div>
+          <div class="row editing"><span class="plus" style="width:13px;text-align:center;color:var(--muted)">+</span><div class="input"><span>Call the landlord about the leak</span><span class="caret"></span></div></div>
+          <div class="row add" style="padding-left:40px"><span class="meta"><kbd>⏎</kbd> add &amp; keep typing · <kbd>esc</kbd> stop · text is the whole task</span></div>
+        </div>
+      </section>
+    </div>
+    <div class="panel">
+      <div class="lbl">B · Edit title in place (<kbd>e</kbd>)</div>
+      <section class="pane focus">
+        <div class="body">
+          <div class="group">Plan</div>
+          <div class="row editing"><i class="chk"></i><div class="input"><span>Fix the flaky migration test (CI only)</span><span class="caret"></span></div></div>
+          <div class="row"><i class="chk"></i><span class="t">Book dentist</span></div>
+          <div class="row add" style="padding-left:40px"><span class="meta">Editing a recurring copy asks: <kbd>1</kbd> this copy · <kbd>2</kbd> this and future copies</span></div>
+        </div>
+      </section>
+    </div>
+    <div class="panel">
+      <div class="lbl">C · Reorder (<kbd>J</kbd>/<kbd>K</kbd> or drag)</div>
+      <section class="pane focus">
+        <div class="body">
+          <div class="group">Plan</div>
+          <div class="row"><i class="chk"></i><span class="t">Fix the flaky migration test</span></div>
+          <div class="row cursor lifted"><i class="chk"></i><span class="t">Review Anna's PR</span><span class="meta">moving ▲▼</span></div>
+          <div class="row"><i class="chk"></i><span class="t">Book dentist</span></div>
+          <div class="row"><i class="chk"></i><span class="t">Write standup notes</span></div>
+          <div class="row add" style="padding-left:40px"><span class="meta">Order is remembered per day. Focus items reorder within the focus group.</span></div>
+        </div>
+      </section>
+    </div>
+    <div class="panel">
+      <div class="lbl">D · Focus toggle (<kbd>f</kbd>) and close (<kbd>space</kbd>)</div>
+      <section class="pane focus">
+        <div class="body">
+          <div class="group">Focus</div>
+          <div class="row focus-item"><i class="chk"></i><span class="t">Ship invoice export</span></div>
+          <div class="row focus-item cursor"><i class="chk"></i><span class="t">Book dentist</span><span class="meta">just marked</span></div>
+          <div class="group">Plan</div>
+          <div class="row"><i class="chk"></i><span class="t">Fix the flaky migration test</span></div>
+          <div class="group">Done <span class="n">1</span></div>
+          <div class="row done"><i class="chk"></i><span class="t">Review Anna's PR</span><span class="meta">10:41</span></div>
+          <div class="row add" style="padding-left:40px"><span class="meta"><kbd>space</kbd> on a done task reopens it at the end of the plan.</span></div>
+        </div>
+      </section>
+    </div>
+    <div class="panel">
+      <div class="lbl">E · Move to a day… (<kbd>m</kbd>) — the only popup on this sheet</div>
+      <section class="pane focus" style="position:relative;min-height:230px">
+        <div class="body">
+          <div class="row cursor"><i class="chk"></i><span class="t">Clean out the garage</span></div>
+        </div>
+        <div class="scrim center"><div class="card" style="width:360px">
+          <div class="head"><b>Move</b> Clean out the garage</div>
+          <div class="list">
+            <div class="item sel"><kbd>t</kbd><span class="t">Today</span><span class="meta">Fri 5 Sep</span></div>
+            <div class="item"><kbd>1</kbd><span class="t">Tomorrow</span><span class="meta">Sat 6 Sep</span></div>
+            <div class="item"><kbd>2</kbd><span class="t">Next work day</span><span class="meta">Mon 8 Sep</span></div>
+            <div class="item"><kbd>3</kbd><span class="t">Next Monday</span><span class="meta">Mon 8 Sep</span></div>
+            <div class="item"><kbd>g</kbd><span class="t">Pick a date…</span><span class="meta">calendar</span></div>
+            <div class="item"><kbd>b</kbd><span class="t">Backlog</span><span class="meta">no day</span></div>
+          </div>
+          <div class="foot"><span>type a date: <kbd>12 sep</kbd> <kbd>mon</kbd> <kbd>+3</kbd></span></div>
+        </div></div>
+      </section>
+    </div>
+    <div class="panel">
+      <div class="lbl">F · Delete (<kbd>x</kbd>) — no confirm, undo toast</div>
+      <section class="pane focus" style="position:relative;min-height:230px">
+        <div class="body">
+          <div class="group">Plan</div>
+          <div class="row"><i class="chk"></i><span class="t">Fix the flaky migration test</span></div>
+          <div class="row cursor"><i class="chk"></i><span class="t">Write standup notes</span></div>
+          <div class="row"><i class="chk"></i><span class="t">Review Anna's PR</span></div>
+        </div>
+        <div class="toast">Deleted "Book dentist" <kbd>u</kbd> undo</div>
+      </section>
+    </div>
+  </div>
+</div>
+<aside class="notes">
+  <h2>Task states</h2>
+  <p>A task is a title, a done flag and a place. Every edit is in place; the only popup is the day picker.</p>
+  <ol>
+  </ol>
+  <p><b>A</b> Adding appends to the current list (plan or backlog). Enter adds and stays in the input so several can be typed in a row.</p>
+  <p><b>B</b> Editing never opens a form. For a recurring copy the app asks whether the new title applies forward, because PRODUCT.md says title edits change future copies only.</p>
+  <p><b>C</b> Reordering is explicit and manual. There is no sort, no "smart" ordering, no drag between focus and plan (use <kbd>f</kbd> for that).</p>
+  <p><b>D</b> Closing moves a task to Done at the bottom with the time. Focus and Done are states shown by position, not by a coloured badge.</p>
+  <p><b>E</b> The day picker covers "move onto today", "move to a day", and "back to backlog" in one card, with typed dates for speed.</p>
+  <p><b>F</b> Destructive actions are undoable rather than confirmed. Applies to delete, close, move, and review decisions.</p>
+</aside>
+</div>
+</body></html>

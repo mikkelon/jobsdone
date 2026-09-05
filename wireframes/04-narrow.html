@@ -1,0 +1,57 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>04 Narrow tile</title>
+<link rel="stylesheet" href="wf.css"><script src="themes.js"></script><script src="wf.js" defer></script></head>
+<body>
+<div class="stage">
+<div class="desktop">
+  <div class="bar"><span class="ws"><span class="on">1</span><span>2</span><span>3</span></span><span class="mid">Friday 10:20</span><span>bar stand-in</span></div>
+  <div class="tiles">
+    <div class="tile other">another window (editor, terminal…)</div>
+    <main class="app w-narrow">
+      <div class="strip">
+        <span class="nav">‹</span><span class="date">Today · Fri 5 Sep</span><span class="nav">›</span>
+        <span class="spacer"></span>
+        <span class="ind alert"><b>2</b></span><span class="ind"><kbd>/</kbd></span><span class="ind"><kbd>:</kbd></span><span class="ind"><kbd>?</kbd></span>
+      </div>
+      <div class="tabs"><span class="on">Today <b>6</b></span><span>Backlog <b>12</b></span><span>Notes <b>4</b></span><span class="spacer"></span><i class="callout" style="right:8px;top:4px">1</i></div>
+      <div class="panes">
+        <section class="pane focus">
+          <div class="body">
+            <div class="group">Focus</div>
+            <div class="row focus-item"><i class="chk"></i><span class="t">Ship invoice export</span><span class="meta"><span class="chip rep">↻</span></span></div>
+            <div class="row focus-item"><i class="chk"></i><span class="t">Reply to the tender questions</span></div>
+            <div class="group">Plan</div>
+            <div class="row"><i class="chk"></i><span class="t">Fix the flaky migration test</span></div>
+            <div class="row cursor"><i class="chk"></i><span class="t">Book dentist</span><span class="meta"><span class="chip rem">◷</span></span></div>
+            <div class="row"><i class="chk"></i><span class="t">Write standup notes</span><span class="meta"><span class="chip rep">↻</span></span></div>
+            <div class="row"><i class="chk"></i><span class="t">Review Anna's PR</span></div>
+            <div class="row add"><span class="plus">+</span><span class="t">add a task</span><kbd>a</kbd></div>
+            <div class="group">Done <span class="n">2</span></div>
+            <div class="row done"><i class="chk"></i><span class="t">Morning review</span></div>
+            <div class="row done"><i class="chk"></i><span class="t">Pay electricity bill</span></div>
+            <i class="callout" style="right:8px;top:100px">2</i>
+          </div>
+        </section>
+      </div>
+      <div class="hints">
+        <span class="ctx">Today</span>
+        <span><kbd>space</kbd>done</span><span><kbd>f</kbd>focus</span><span><kbd>a</kbd>add</span><span><kbd>b</kbd>backlog</span><span><kbd>x</kbd>del</span>
+        <span class="spacer"></span><span><kbd>?</kbd>more</span>
+        <i class="callout" style="right:8px;top:-22px">3</i>
+      </div>
+    </main>
+  </div>
+</div>
+<aside class="notes">
+  <h2>Narrow tile (half screen or less)</h2>
+  <p>Omarchy tiles windows; the app will often live in a half-width column beside an editor. Below a width threshold the two panes collapse to one, switched by a tab strip.</p>
+  <ol>
+    <li>Tabs replace panes. Same keys: <kbd>h</kbd>/<kbd>l</kbd> or <kbd>tab</kbd> switch tabs instead of panes. Counts keep the other tabs informative. The notes drawer becomes a tab.</li>
+    <li>Rows drop their text metadata first ("←backlog", dates in chips become glyph-only) and keep the glyphs. Titles get the width.</li>
+    <li>Hint bar shows the top five keys and defers to <kbd>?</kbd> for the rest.</li>
+  </ol>
+  <div class="flow"><b>Pull from backlog when narrow</b><kbd>l</kbd> to the Backlog tab → <kbd>t</kbd> on a task → it moves to Today; the row disappears from Backlog and the Today tab count increments. No confirmation.</div>
+  <p>The review takes the whole window in both layouts; in narrow mode the action list becomes a popup card on <kbd>⏎</kbd> instead of a side column.</p>
+</aside>
+</div>
+</body></html>
