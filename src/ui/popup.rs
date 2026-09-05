@@ -244,16 +244,12 @@ enum Line<'a> {
     Nothing,
 }
 
-/// What a result says about itself on the right: where an open task is,
-/// and when a closed one was closed.
+/// What a result says about itself on the right: the day it is on, which
+/// is the day Enter goes to (DOMAIN.md section 14), and for an open task
+/// the flags it carries there.
 fn beside(found: &Row, closed: bool, today: jiff::civil::Date) -> String {
-    let mut parts = Vec::new();
-    if closed {
-        if let Some(at) = &found.closed_at {
-            parts.push(day_label(at.date()));
-        }
-    } else {
-        parts.push(place_label(found.place, today));
+    let mut parts = vec![place_label(found.place, today)];
+    if !closed {
         if found.focus {
             parts.push("focus".to_owned());
         }

@@ -267,8 +267,10 @@ fn history_model() -> Model {
         Some(on("2025-09-05")),
         0,
     ));
+    // Moved to the Wednesday and closed two days later, so the day it is
+    // on and the day it was closed are not the same.
     put(Task {
-        closed_at: Some(at("2025-09-03T14:00:00+02:00[Europe/Copenhagen]")),
+        closed_at: Some(at("2025-09-05T14:00:00+02:00[Europe/Copenhagen]")),
         ..task(7, "Book the venue", Some(on("2025-09-03")), 0)
     });
     put(task(8, "Order new office chair", None, 0));
@@ -742,6 +744,25 @@ fn search_says_when_nothing_matches_and_offers_to_add_it() {
     assert!(text.contains("0 matches"));
     assert!(text.contains("Nothing matches, open or closed."));
     assert!(text.contains("add \"tax return\" to today"));
+}
+
+#[test]
+fn a_closed_result_names_the_day_enter_would_go_to() {
+    let mut app = history();
+    app.update(Action::Search);
+    for typed in "venue".chars() {
+        app.update(Action::Insert(typed));
+    }
+    let drawn = look(&app, 120, 36);
+    let found = drawn
+        .iter()
+        .find(|row| row.contains("[x] Book the venue"))
+        .expect("the result");
+
+    assert!(
+        found.contains("Wed 3 Sep") && !found.contains("Fri 5 Sep"),
+        "the day it is on, not the Friday it was closed on: {found:?}"
+    );
 }
 
 #[test]
