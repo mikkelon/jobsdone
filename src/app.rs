@@ -1062,12 +1062,59 @@ impl App {
             return;
         }
         self.take_the_last_decision_back(&undone.change);
+        if let Some(task) = undone.task {
+            self.follow_the_undo(task);
+        }
         match undone.dropped {
             Some(why) => self.say(
                 format!("{} could not be undone: {why}", undone.label),
                 false,
             ),
             None => self.say(format!("Undone: {}", undone.label), false),
+        }
+    }
+
+    /// Where the cursor is after `u`: on the task the undo brought back
+    /// or changed, when the list holding it is on screen (DESIGN.md
+    /// section 4). Closing steps the cursor on, so without this the key
+    /// that takes a close back leaves the cursor on the row after it.
+    fn follow_the_undo(&mut self, task: Id) {
+        let Some(place) = self.model.live_task(task).map(|task| task.place()) else {
+            return;
+        };
+        let list = match place {
+            Place::Day(day) if day == self.showing => List::Day,
+            Place::Day(_) => return,
+            Place::Backlog => List::Backlog,
+        };
+        if !self.on_screen(list) {
+            return;
+        }
+        self.set_cursor(list, RowId::Task(task));
+        self.pane = match list {
+            List::Day => Pane::Day,
+            _ => Pane::Backlog,
+        };
+    }
+
+    /// Whether a list is drawn now. The review takes the whole window, a
+    /// narrow one draws only the pane the keyboard is on, and the backlog
+    /// is only ever beside today (DESIGN.md sections 5 and 6).
+    fn on_screen(&self, list: List) -> bool {
+        if self.review.is_some() {
+            return list == List::Review;
+        }
+        if self.layout.narrow {
+            return list == self.focused();
+        }
+        match self.page {
+            Page::Home => match list {
+                List::Day => true,
+                List::Backlog => !self.browsing(),
+                List::Days => self.browsing(),
+                List::Notes | List::Review => false,
+            },
+            Page::Notes => list == List::Notes,
         }
     }
 

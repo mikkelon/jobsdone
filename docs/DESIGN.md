@@ -125,6 +125,11 @@ Conventions, so the map is guessable:
   row of the group it left, so a list is worked down without moving the
   cursor by hand. Everything else leaves the cursor on the task it acted
   on, which is how a reordered row is followed up or down the list.
+- After `u` the cursor goes to the task the undo brought back or changed,
+  when it is on a list that is on screen; otherwise it stays. The keyboard
+  goes with it, so `space` `u` `space` closes one task twice rather than
+  two different ones: the close steps the cursor on and the undo brings it
+  back.
 - A pane with more rows than the window has lines scrolls to keep the
   cursor row on screen and keeps no scroll position of its own. The wheel
   moves the cursor, so the view always follows it and there is never a

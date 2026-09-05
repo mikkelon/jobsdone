@@ -126,12 +126,15 @@ pub enum Command {
 }
 
 /// What `undo` did: the change to commit either way, the label of the
-/// entry it popped, and, when the inverse no longer applied, why it was
-/// dropped instead (DOMAIN.md section 11).
+/// entry it popped, the task it was about, and, when the inverse no
+/// longer applied, why it was dropped instead (DOMAIN.md section 11).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Undone {
     pub change: Change,
     pub label: String,
+    /// The task the inverse brought back or changed, where it was about
+    /// one, so that the cursor can go to it (DESIGN.md section 4).
+    pub task: Option<Id>,
     pub dropped: Option<Rejected>,
 }
 
@@ -179,16 +182,51 @@ pub fn undo(model: &Model, now: &Zoned) -> Result<Undone, Rejected> {
             Ok(Undone {
                 change: Change { writes },
                 label: entry.label.clone(),
+                task: task_of(&entry.inverse),
                 dropped: None,
             })
         }
+        // A dropped entry changed nothing, so there is no task to go to.
         Err(rejected) => Ok(Undone {
             change: Change {
                 writes: vec![Write::PopUndo(entry.id)],
             },
             label: entry.label.clone(),
+            task: None,
             dropped: Some(rejected),
         }),
+    }
+}
+
+/// The task a command is about, where it is about one. A command that
+/// names a schedule or a note names no task, and `AddTask` makes the id
+/// it is about rather than carrying it.
+fn task_of(command: &Command) -> Option<Id> {
+    match command {
+        Command::EditTitle { task, .. }
+        | Command::EditTitleAndFuture { task, .. }
+        | Command::Close { task }
+        | Command::Reopen { task }
+        | Command::SetFocus { task, .. }
+        | Command::Move { task, .. }
+        | Command::Reorder { task, .. }
+        | Command::SetWaiting { task, .. }
+        | Command::SetDue { task, .. }
+        | Command::SetRemind { task, .. }
+        | Command::DeleteTask { task }
+        | Command::CreateSchedule { task, .. }
+        | Command::MoveBack { task, .. }
+        | Command::CloseAt { task, .. }
+        | Command::RestoreTask { task, .. }
+        | Command::UncreateSchedule { task, .. } => Some(*task),
+        Command::AddTask { .. }
+        | Command::SetRule { .. }
+        | Command::StopSchedule { .. }
+        | Command::CreateNote
+        | Command::EditNote { .. }
+        | Command::DeleteNote { .. }
+        | Command::ResumeSchedule { .. }
+        | Command::RestoreNote { .. } => None,
     }
 }
 

@@ -1646,6 +1646,79 @@ fn undo_walks_back_through_the_day() {
     assert_eq!(hint(&app), "There is nothing to undo.");
 }
 
+/// Closing steps the cursor on, so `space` `u` `space` closed two
+/// different tasks until the undo brought the cursor back with the task
+/// (DESIGN.md section 4).
+#[test]
+fn undo_puts_the_cursor_on_the_task_it_brought_back() {
+    let mut app = started();
+    let invoice = add(&mut app, "Ship invoice export");
+    let dentist = add(&mut app, "Book dentist");
+    app.update(Action::Up);
+    assert_eq!(cursor(&app, List::Day), Some(invoice));
+
+    app.update(Action::Close);
+    assert_eq!(
+        cursor(&app, List::Day),
+        Some(dentist),
+        "the close steps the cursor on"
+    );
+
+    app.update(Action::Undo);
+    assert_eq!(cursor(&app, List::Day), Some(invoice));
+
+    app.update(Action::Close);
+    assert!(
+        app.model().task(dentist).is_some_and(Task::is_open),
+        "and the second space closes the same task, not the next one"
+    );
+}
+
+#[test]
+fn undo_puts_the_cursor_on_the_task_it_restored() {
+    let mut app = started();
+    let invoice = add(&mut app, "Ship invoice export");
+    add(&mut app, "Book dentist");
+    app.update(Action::Up);
+
+    app.update(Action::Delete);
+    assert_ne!(cursor(&app, List::Day), Some(invoice));
+
+    app.update(Action::Undo);
+    assert_eq!(cursor(&app, List::Day), Some(invoice));
+}
+
+#[test]
+fn undo_of_a_move_takes_the_keyboard_to_the_pane_the_task_went_back_to() {
+    let mut app = started();
+    let invoice = add(&mut app, "Ship invoice export");
+    add(&mut app, "Book dentist");
+    app.update(Action::Up);
+    app.update(Action::ToBacklog);
+    app.update(Action::PaneRight);
+    assert_eq!(app.focused(), List::Backlog);
+
+    app.update(Action::Undo);
+    assert_eq!(app.focused(), List::Day);
+    assert_eq!(cursor(&app, List::Day), Some(invoice));
+}
+
+/// "On a list that is on screen" is the whole of it: the notes page has
+/// neither pane, so the cursor is left where the close put it.
+#[test]
+fn undo_from_another_page_leaves_the_cursor_where_it_was() {
+    let mut app = started();
+    add(&mut app, "Ship invoice export");
+    let dentist = add(&mut app, "Book dentist");
+    app.update(Action::Up);
+    app.update(Action::Close);
+    app.update(Action::NotesPage);
+
+    app.update(Action::Undo);
+    assert_eq!(app.page(), Page::Notes);
+    assert_eq!(cursor(&app, List::Day), Some(dentist));
+}
+
 // ---- stepping through the days ---------------------------------------
 
 /// The day before the one the tests stand on, which is the day `[` steps

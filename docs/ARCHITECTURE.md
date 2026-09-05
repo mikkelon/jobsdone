@@ -183,10 +183,12 @@ adds it here first, the way a new dependency is added to section 2 first.
   does not choose the number, so the application passes it in.
 - `undo(&Model, now) -> Result<Undone, Rejected>`: pops the top entry and
   returns its inverse's change with nothing pushed. `Undone` carries the
-  change, the entry's label, and, when the inverse no longer applied, the
-  `Rejected` saying why the entry was dropped instead: DOMAIN.md section
-  11 wants both a write and a sentence, which a `Result` cannot hold.
-  `Err` is only "there is nothing to undo".
+  change, the entry's label, the task the inverse was about where it was
+  about one, because the cursor goes to it (DESIGN.md section 4), and,
+  when the inverse no longer applied, the `Rejected` saying why the entry
+  was dropped instead: DOMAIN.md section 11 wants both a write and a
+  sentence, which a `Result` cannot hold. `Err` is only "there is nothing
+  to undo".
 - `generate_copies(&Model, now: &Zoned) -> Change` and
   `start_review(&Model, today) -> Option<Change>`: the two system
   operations. Neither touches the undo stack. Generation takes an instant
