@@ -2097,3 +2097,145 @@ fn a_long_result_stops_before_its_location_and_the_border() {
         );
     }
 }
+
+/// `café` with the accent as a combining mark of its own, and a family
+/// emoji made of four people and three joiners. One is a cluster of two
+/// characters a cell wide, the other a cluster of seven two cells wide,
+/// and neither is anything at all a character at a time (F6).
+const CLUSTERS: &str = "cafe\u{301} \u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}";
+
+/// The one row of the screen a caret is on.
+fn typing(app: &App) -> String {
+    glyphs(app, 120, 36)
+        .into_iter()
+        .find(|row| row.contains('▏'))
+        .expect("the line being typed")
+}
+
+/// Every field was edited a character at a time, so the accent of a
+/// decomposed `é` was dropped on the way to the screen and the caret
+/// could land inside a family emoji and take it apart (F6).
+#[test]
+fn a_title_of_clusters_keeps_its_marks_and_steps_over_them_whole() {
+    let mut app = empty();
+    app.update(Action::Add);
+    for typed in CLUSTERS.chars() {
+        app.update(Action::Insert(typed));
+    }
+    assert!(
+        typing(&app).contains(&format!("{CLUSTERS}▏")),
+        "what was typed, with its caret after it: {:?}",
+        typing(&app)
+    );
+
+    // One step left is the whole family, not one of the four people in
+    // it; one more is the space.
+    app.update(Action::Left);
+    assert!(
+        typing(&app)
+            .contains("cafe\u{301} ▏\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}"),
+        "the caret in front of the family: {:?}",
+        typing(&app)
+    );
+    app.update(Action::Left);
+    app.update(Action::Insert('X'));
+    assert!(
+        typing(&app).contains("cafe\u{301}X▏ \u{1F468}\u{200D}"),
+        "a letter beside the accent, which keeps it: {:?}",
+        typing(&app)
+    );
+
+    app.update(Action::Confirm);
+    let title = app
+        .model()
+        .tasks
+        .values()
+        .map(|task| task.title.clone())
+        .next()
+        .expect("the task");
+    assert_eq!(
+        title, "cafe\u{301}X \u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}",
+        "every code point, in the order they were typed"
+    );
+}
+
+/// The same in the search box, over a task whose stored title has the
+/// same clusters in it.
+#[test]
+fn a_query_of_clusters_finds_the_row_it_is_stored_in() {
+    let mut model = Model::empty();
+    model
+        .tasks
+        .insert(1, task(1, CLUSTERS, Some(on("2025-09-05")), 0));
+    let mut app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+    app.update(Action::Search);
+    for typed in CLUSTERS.chars() {
+        app.update(Action::Insert(typed));
+    }
+
+    let found = glyphs(&app, 120, 36)
+        .into_iter()
+        .find(|row| row.contains("[ ] cafe\u{301}"))
+        .expect("the result");
+    assert!(
+        found.contains(&format!("[ ] {CLUSTERS}")),
+        "the stored title, drawn whole: {found:?}"
+    );
+    assert!(
+        typing(&app).contains(&format!("{CLUSTERS}▏")),
+        "and the query it was found by: {:?}",
+        typing(&app)
+    );
+
+    app.update(Action::Left);
+    app.update(Action::Insert('X'));
+    assert!(
+        typing(&app).contains("cafe\u{301} X▏\u{1F468}\u{200D}"),
+        "a letter typed in front of the family: {:?}",
+        typing(&app)
+    );
+    assert_eq!(
+        app.model().task(1).map(|task| task.title.clone()),
+        Some(CLUSTERS.to_owned()),
+        "and the stored title is untouched"
+    );
+}
+
+/// And in an open note, whose body wraps by cluster as well.
+#[test]
+fn a_note_of_clusters_wraps_and_saves_them_whole() {
+    let mut app = empty();
+    app.update(Action::NotesPage);
+    app.update(Action::Add);
+    for typed in CLUSTERS.chars() {
+        app.update(Action::Insert(typed));
+    }
+    assert!(
+        typing(&app).contains(&format!("{CLUSTERS}▏")),
+        "the body being typed: {:?}",
+        typing(&app)
+    );
+
+    app.update(Action::Left);
+    app.update(Action::Left);
+    app.update(Action::Insert('X'));
+    assert!(
+        typing(&app).contains("cafe\u{301}X▏ \u{1F468}\u{200D}"),
+        "a letter beside the accent: {:?}",
+        typing(&app)
+    );
+
+    // A note is written on the first tick after it changes.
+    app.update(Action::Tick);
+    let body = app
+        .model()
+        .notes
+        .values()
+        .map(|note| note.body.clone())
+        .next()
+        .expect("the note");
+    assert_eq!(
+        body,
+        "cafe\u{301}X \u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}"
+    );
+}

@@ -46,8 +46,8 @@ means none. Names are separated by commas.
 | `domain`   | none                  | jiff, serde, serde_json        |
 | `storage`  | domain                | rusqlite, jiff, serde_json     |
 | `input`    | none                  | crossterm                      |
-| `app`      | domain, input         | jiff, tracing                  |
-| `ui`       | domain, app, input    | ratatui, jiff, unicode_width   |
+| `app`      | domain, input         | jiff, tracing, unicode_segmentation |
+| `ui`       | domain, app, input    | ratatui, jiff, unicode_width, unicode_segmentation |
 | `terminal` | app, ui, input        | crossterm, ratatui, tracing    |
 | `main.rs`  | storage, app, terminal| jiff, tracing, tracing_subscriber, xdg |
 

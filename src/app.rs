@@ -4,6 +4,7 @@
 use jiff::civil::Date;
 use jiff::{Span, Zoned};
 use tracing::warn;
+use unicode_segmentation::UnicodeSegmentation;
 
 use crate::domain::{
     self, BacklogView, Change, Command, DayList, DayView, Id, Model, MonthDay, NotesView, Pile,
@@ -300,7 +301,9 @@ pub struct Draft {
     /// it into another one.
     pub note: Id,
     pub text: String,
-    /// Where the caret is, in characters from the start of the body.
+    /// Where the caret is, in grapheme clusters from the start of the
+    /// body: what a person calls a character, and what a terminal draws
+    /// in one cell (or two).
     pub caret: usize,
 }
 
@@ -309,7 +312,7 @@ pub struct Draft {
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Popup {
     pub kind: PopupKind,
-    /// What has been typed into it, and where the caret is, in characters.
+    /// What has been typed into it, and where the caret is, in clusters.
     pub text: String,
     pub caret: usize,
     /// Which row of its list is selected. A popup lists commands, results
@@ -1969,7 +1972,7 @@ impl App {
         };
         self.draft = Some(Draft {
             note,
-            caret: body.chars().count(),
+            caret: glyphs(&body),
             text: body,
         });
         self.notes_pane = NotesPane::Note;
@@ -2060,7 +2063,7 @@ impl App {
             field: Field::Renaming,
             list: self.focused(),
             task: Some(id),
-            caret: text.chars().count(),
+            caret: glyphs(&text),
             text,
         });
     }
@@ -2730,7 +2733,7 @@ impl App {
         let column = draft.caret - starts[at];
         let end = starts
             .get(next + 1)
-            .map_or(draft.text.chars().count(), |after| after - 1);
+            .map_or(glyphs(&draft.text), |after| after - 1);
         draft.caret = (start + column).min(end);
     }
 
@@ -2746,7 +2749,7 @@ impl App {
         draft.caret = if end {
             starts
                 .get(at + 1)
-                .map_or(draft.text.chars().count(), |after| after - 1)
+                .map_or(glyphs(&draft.text), |after| after - 1)
         } else {
             starts[at]
         };
@@ -2771,40 +2774,48 @@ impl App {
         }
     }
 
+    /// A character typed goes in at the caret. Where the caret lands
+    /// afterwards is counted from the text again rather than stepped on,
+    /// because a combining mark joins the cluster in front of it and adds
+    /// no cluster of its own: the accent of a decomposed `é` is typed
+    /// after the `e` and the caret stays where it was.
     fn type_in(&mut self, typed: char) {
         if let Some((text, caret)) = self.field() {
             let at = byte_at(text, *caret);
             text.insert(at, typed);
-            *caret += 1;
+            *caret = glyphs(&text[..at + typed.len_utf8()]);
         }
         self.after_typing();
     }
 
+    /// Backspace takes the whole cluster before the caret, so a family
+    /// emoji leaves in one press rather than coming apart.
     fn rub_out(&mut self) {
         if let Some((text, caret)) = self.field() {
             if *caret == 0 {
                 return;
             }
-            let at = byte_at(text, *caret - 1);
-            text.remove(at);
+            let from = byte_at(text, *caret - 1);
+            let to = byte_at(text, *caret);
+            text.replace_range(from..to, "");
             *caret -= 1;
         }
         self.after_typing();
     }
 
+    /// Delete takes the whole cluster at the caret, for the same reason.
     fn rub_forward(&mut self) {
         if let Some((text, caret)) = self.field() {
-            let at = byte_at(text, *caret);
-            if at < text.len() {
-                text.remove(at);
-            }
+            let from = byte_at(text, *caret);
+            let to = byte_at(text, *caret + 1);
+            text.replace_range(from..to, "");
         }
         self.after_typing();
     }
 
     fn move_caret(&mut self, forward: bool) {
         if let Some((text, caret)) = self.field() {
-            let last = text.chars().count();
+            let last = glyphs(text);
             *caret = if forward {
                 (*caret + 1).min(last)
             } else {
@@ -2815,7 +2826,7 @@ impl App {
 
     fn set_caret(&mut self, at: usize) {
         if let Some((text, caret)) = self.field() {
-            *caret = at.min(text.chars().count());
+            *caret = at.min(glyphs(text));
         }
     }
 }
@@ -2861,12 +2872,12 @@ fn shape_of(rule: &Rule) -> Option<usize> {
     repeat_shapes().iter().position(|other| *other == shape)
 }
 
-/// Where every line of a body starts, in characters. A body has at least
+/// Where every line of a body starts, in clusters. A body has at least
 /// one line, and a trailing newline opens another.
 fn line_starts(text: &str) -> Vec<usize> {
     let mut starts = vec![0];
-    for (at, glyph) in text.chars().enumerate() {
-        if glyph == '\n' {
+    for (at, glyph) in text.graphemes(true).enumerate() {
+        if glyph == "\n" {
             starts.push(at + 1);
         }
     }
@@ -2881,10 +2892,17 @@ fn line_at(starts: &[usize], caret: usize) -> usize {
         .unwrap_or_default()
 }
 
-/// The byte offset of a character offset, so that a caret counted in
-/// characters can index a `String`.
+/// How many grapheme clusters a string is, which is the unit a caret
+/// counts in: `café` written as an `e` and a combining accent is four,
+/// not five, and a family emoji is one.
+fn glyphs(text: &str) -> usize {
+    text.graphemes(true).count()
+}
+
+/// The byte offset of a cluster offset, so that a caret counted in
+/// clusters can index a `String`.
 fn byte_at(text: &str, caret: usize) -> usize {
-    text.char_indices()
+    text.grapheme_indices(true)
         .nth(caret)
         .map_or(text.len(), |(at, _)| at)
 }
