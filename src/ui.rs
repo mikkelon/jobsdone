@@ -186,18 +186,6 @@ fn place_label(place: Place, today: Date) -> String {
     }
 }
 
-/// The weekdays in the order a calendar and the repeat card lay them
-/// out, Monday first.
-pub(super) const WEEKDAYS: [Weekday; 7] = [
-    Weekday::Mon,
-    Weekday::Tue,
-    Weekday::Wed,
-    Weekday::Thu,
-    Weekday::Fri,
-    Weekday::Sat,
-    Weekday::Sun,
-];
-
 /// `Mo`, the two letters a calendar column has room for.
 fn short_weekday(day: Weekday) -> &'static str {
     &weekday_name(day)[..2]

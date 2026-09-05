@@ -197,8 +197,9 @@ adds it here first, the way a new dependency is added to section 2 first.
   `pile`, `surfaced`, `search`, `day_list`, `notes`, `next_dates`,
   `working_day`, and `previous_review`, the lower bound of the reminder
   window.
-- `Weekday::of(date)`, so a card can open on the weekday of the day it
-  is about without a second mapping of jiff's weekdays.
+- `Weekday::of(date)` and `Weekday::ALL`, so a card can open on the
+  weekday of a day and lay the seven of them out without a second
+  mapping of jiff's weekdays or a second idea of where a week starts.
 - `parse_date(text, today) -> Option<Date>`: the date a typed line means
   (DOMAIN.md section 2). It takes no model: the date card previews what
   is typed on every keystroke, and what a shape means is a rule whether

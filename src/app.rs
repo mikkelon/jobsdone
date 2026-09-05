@@ -20,18 +20,6 @@ const WEEKS_APART: usize = 52;
 /// How many of the next dates the repeat card previews.
 const PREVIEW: usize = 3;
 
-/// The weekdays in the order the repeat card lays them out, Monday
-/// first, which is also the order the weekly rule stores them in.
-const WEEKDAYS: [Weekday; 7] = [
-    Weekday::Mon,
-    Weekday::Tue,
-    Weekday::Wed,
-    Weekday::Thu,
-    Weekday::Fri,
-    Weekday::Sat,
-    Weekday::Sun,
-];
-
 /// The length the undo stack is held to. The domain does not choose the
 /// number (DOMAIN.md section 11); a hundred is more than a day's work and
 /// small enough to load with everything else.
@@ -1355,7 +1343,7 @@ impl App {
         let Draft::Repeat(draft) = &mut popup.draft else {
             return;
         };
-        let day = WEEKDAYS[draft.weekday.min(6)];
+        let day = Weekday::ALL[draft.weekday.min(6)];
         match draft.weekdays.iter().position(|other| *other == day) {
             Some(at) => {
                 draft.weekdays.remove(at);

@@ -1,5 +1,6 @@
 //! The popups drawn over a page: the command palette, search, the help
-//! overlay, the move card and the question a recurring copy asks.
+//! overlay, the move, date and repeat cards, and the question a recurring
+//! copy asks.
 //!
 //! They are lazygit-shaped: a centred box with an accent border, drawn
 //! over the panes with nothing behind it dimmed (DESIGN.md section 2).
@@ -7,14 +8,12 @@
 //! dispatcher does not have.
 
 use jiff::Span;
-use jiff::civil::{Date, Weekday};
+use jiff::civil::{Date, Weekday as Civil};
 use ratatui::style::{Color, Modifier, Style};
 
-use super::{
-    Canvas, Rows, WEEKDAYS, accent, bold, count, cursor, day_label, dim, place_label, plain,
-};
+use super::{Canvas, Rows, accent, bold, count, cursor, day_label, dim, place_label, plain};
 use crate::app::{App, DateDraft, DateKind, MoveTarget, Popup, RepeatDraft, RowId};
-use crate::domain::Row;
+use crate::domain::{Row, Weekday};
 use crate::input::{self, Action, Binding, KeyContext, NotesPane, Pane, PopupKind, ReviewStep};
 
 pub(super) fn draw(canvas: &mut Canvas, app: &App, rows: &Rows) {
@@ -461,7 +460,7 @@ fn no_date(kind: DateKind) -> &'static str {
 fn weeks_of(on: Date) -> Vec<Vec<Date>> {
     let first = on.first_of_month();
     let mut day = first
-        .nth_weekday_of_month(1, Weekday::Monday)
+        .nth_weekday_of_month(1, Civil::Monday)
         .unwrap_or(first);
     if day > first {
         day = day.saturating_sub(Span::new().days(7));
@@ -604,7 +603,7 @@ fn shape_of(
             // Seven cells of four: the days in the set are bracketed and
             // the one the keys are on is marked.
             let left = right.saturating_sub(4 * 7 - 1);
-            for (at, day) in WEEKDAYS.iter().enumerate() {
+            for (at, day) in Weekday::ALL.iter().enumerate() {
                 let on = draft.weekdays.contains(day);
                 let text = if on {
                     format!("[{}]", super::short_weekday(*day))
