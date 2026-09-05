@@ -545,3 +545,20 @@ fn ctrl_c_quits_from_every_context() {
         );
     }
 }
+
+/// A pile task leaves the pile only by being closed, moved or deleted
+/// (PRODUCT.md), and the panel there lists exactly those. `k` marked a
+/// pile row kept and stepped on, which the panel never offered.
+#[test]
+fn keep_is_the_surfaced_steps_word_and_not_the_piles() {
+    let pile = KeyContext::Review {
+        step: ReviewStep::Pile,
+        text_field: false,
+    };
+    let surfaced = KeyContext::Review {
+        step: ReviewStep::Surfaced,
+        text_field: false,
+    };
+    assert_eq!(action_for(&typing('k'), pile), None);
+    assert_eq!(action_for(&typing('k'), surfaced), Some(Action::Keep));
+}

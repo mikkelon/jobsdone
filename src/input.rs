@@ -905,13 +905,6 @@ const REVIEW_PILE: &[Binding] = &[
         narrow: Bar::Off,
     },
     Binding {
-        keys: &[("k", Action::Keep)],
-        shown: "k",
-        label: "keep",
-        bar: Bar::Off,
-        narrow: Bar::Off,
-    },
-    Binding {
         keys: &[("enter", Action::Confirm)],
         shown: "⏎",
         label: "next step",

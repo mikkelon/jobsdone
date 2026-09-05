@@ -147,7 +147,10 @@ The main screen is today's plan beside the backlog, because the core loop is
 
 The review takes the whole window in two steps: the pile (unfinished tasks
 from past days) and surfaced tasks (due, reminded, and new recurring
-copies). An empty step is skipped; when both are empty the app opens
+copies). Keep is the surfaced step's word, for a dated backlog task that
+is to stay where it is; a pile task leaves the pile only by being closed,
+moved or deleted (PRODUCT.md), so `k` does nothing on the pile and the
+panel there lists what it does. An empty step is skipped; when both are empty the app opens
 straight to Today. The review is never an empty ceremony, and it is never
 shown twice in a day.
 
