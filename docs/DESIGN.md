@@ -183,6 +183,9 @@ The app never reorders, carries over, expires, or tidies.
 - Recurring schedules are the one thing that creates tasks by themselves.
   On launch the app creates the copies for every scheduled date since the
   last launch, and the surfaced step lists today's, once, for information.
+  A window left open past 05:00 has reached a new day without a launch, so
+  it does the same then; a day is never short of its copies because a
+  window happened to be open.
 - Notes stay until deleted.
 
 ## 8. Undo instead of confirm

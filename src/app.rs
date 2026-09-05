@@ -238,8 +238,9 @@ pub struct App {
 }
 
 impl App {
-    /// Loads the model and runs the launch sequence. Phase 8 adds the
-    /// generation of recurring copies to it and phase 9 the review gate.
+    /// Loads the model and runs the launch sequence: the recurring copies
+    /// for every scheduled date since the last launch, and then, in phase
+    /// 9, the review gate.
     pub fn new(store: Box<dyn Store>, now: &Zoned) -> Result<App, StoreError> {
         let model = store.load()?;
         let version = store.version()?;
@@ -263,9 +264,36 @@ impl App {
             #[cfg(test)]
             clock: now.clone(),
         };
+        app.generate(now);
         app.refresh();
         app.rest_the_cursors();
         Ok(app)
+    }
+
+    /// The copies for every scheduled date since the last launch.
+    ///
+    /// Recurring schedules are the one thing in the program that creates
+    /// tasks on their own (DESIGN.md section 7). Generation is not a user
+    /// action: it pushes nothing on the undo stack, and a second window
+    /// making the same copy at the same moment loses the race, which is
+    /// the failure DOMAIN.md section 10 says to ignore.
+    fn generate(&mut self, now: &Zoned) {
+        let change = domain::generate_copies(&self.model, now);
+        if change.writes.is_empty() {
+            return;
+        }
+        match self.store.commit(&change) {
+            Ok(()) => self.model.apply(&change),
+            Err(StoreError::Conflict) => {
+                self.reload_if_stale();
+            }
+            Err(StoreError::Other(why)) => {
+                warn!(%why, "the recurring copies could not be made");
+            }
+        }
+        if let Ok(version) = self.store.version() {
+            self.version = version;
+        }
     }
 
     /// The single entry point for every event, ticks included.
@@ -282,9 +310,15 @@ impl App {
             Action::Tick | Action::FocusGained => {
                 // The clock is read here and nowhere else, so the date
                 // rolling over while the window is open is just a tick.
-                let today = domain::working_day(&self.now());
+                let now = self.now();
+                let today = domain::working_day(&now);
                 let rolled = today != self.today;
                 self.today = today;
+                // A window left open past 05:00 has reached a new day
+                // without a launch, and today's copies are owed to it.
+                if rolled {
+                    self.generate(&now);
+                }
                 if self.reload_if_stale() || rolled {
                     self.refresh();
                 }

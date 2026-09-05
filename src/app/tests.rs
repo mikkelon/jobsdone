@@ -135,6 +135,24 @@ fn with_a_recurring_copy() -> (App, Id) {
     (app_at(MemStore::holding(model), NOW), 1)
 }
 
+/// A store holding one schedule and nothing else, generated through the
+/// date given, which is what being away since then looks like.
+fn a_schedule_through(through: &str) -> MemStore {
+    let mut model = Model::empty();
+    model.schedules.insert(
+        1,
+        Schedule {
+            id: 1,
+            title: "Write standup notes".to_owned(),
+            rule: Rule::Workdays,
+            generated_through: on(through),
+            stopped_on: None,
+            created_at: at(NOW),
+        },
+    );
+    MemStore::holding(model)
+}
+
 // ---- the launch ------------------------------------------------------
 
 #[test]
@@ -152,6 +170,61 @@ fn launching_loads_the_model_and_the_working_day() {
         Some("2025-09-04")
     );
     assert_eq!(app.today().to_string(), "2025-09-04");
+}
+
+#[test]
+fn launching_makes_a_copy_for_every_scheduled_date_since_the_last_one() {
+    // Away since Tuesday: Wednesday and Thursday land on the pile and
+    // Friday on today's plan. There is no cap, and the pile is where the
+    // cost of being away is meant to be seen (DOMAIN.md section 10).
+    let app = app_at(a_schedule_through("2025-09-02"), NOW);
+
+    assert_eq!(titles(&app, List::Day), ["Write standup notes"]);
+    assert_eq!(app.review_count(), 2);
+    assert_eq!(
+        app.model()
+            .schedule(1)
+            .map(|schedule| schedule.generated_through.to_string()),
+        Some("2025-09-05".to_owned())
+    );
+}
+
+#[test]
+fn generation_is_not_a_user_action_and_cannot_be_undone() {
+    let mut app = app_at(a_schedule_through("2025-09-04"), NOW);
+    assert_eq!(titles(&app, List::Day), ["Write standup notes"]);
+
+    app.update(Action::Undo);
+
+    assert_eq!(hint(&app), "There is nothing to undo.");
+    assert_eq!(titles(&app, List::Day), ["Write standup notes"]);
+}
+
+#[test]
+fn a_window_left_open_over_the_night_is_owed_todays_copies() {
+    let mut app = app_at(a_schedule_through("2025-09-04"), NOW);
+    assert_eq!(titles(&app, List::Day), ["Write standup notes"]);
+
+    app.clock = at("2025-09-08T09:00:00+02:00[Europe/Copenhagen]");
+    app.update(Action::Tick);
+
+    assert_eq!(app.today().to_string(), "2025-09-08");
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Write standup notes"],
+        "Monday's copy, made without a launch"
+    );
+    assert_eq!(app.review_count(), 1, "Friday's is on the pile");
+}
+
+#[test]
+fn a_second_window_generating_at_the_same_moment_makes_no_second_copy() {
+    let store = a_schedule_through("2025-09-04");
+    let first = app_at(store.clone(), NOW);
+    let second = app_at(store, NOW);
+
+    assert_eq!(titles(&first, List::Day), ["Write standup notes"]);
+    assert_eq!(titles(&second, List::Day), ["Write standup notes"]);
 }
 
 #[test]
