@@ -139,6 +139,18 @@ copies). An empty step is skipped; when both are empty the app opens
 straight to Today. The review is never an empty ceremony, and it is never
 shown twice in a day.
 
+"step 1 of 2" counts the steps that have something in them, so a morning
+with nothing surfaced says "step 1 of 1" and Enter starts the day. A
+decision on the pile can unearth a second step: a task sent back to the
+backlog with a date already passed surfaces, and the count says so.
+
+Beside the list is a panel: the outcomes with their keys, how many rows
+have been answered, and the one thing to press. Under 100 columns the
+panel goes and the list has the window; the hint bar already names every
+key the panel named, and the status line carries the progress. A row
+that has been answered stays where it was, checked and dim, saying what
+was done to it, so the list never moves under the hand working it down.
+
 ## 6. Two pages, and popups over them
 
 The window shows one of two pages. The home page is today (or another day)

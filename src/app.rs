@@ -6,10 +6,12 @@ use jiff::{Span, Zoned};
 use tracing::warn;
 
 use crate::domain::{
-    self, BacklogView, Change, Command, DayView, Id, Model, MonthDay, NotesView, Place, Rule,
-    SearchResults, Store, StoreError, Weekday, Write,
+    self, BacklogView, Change, Command, DayView, Id, Model, MonthDay, NotesView, Pile, Place, Rule,
+    SearchResults, Store, StoreError, Surfaced, Weekday, Write,
 };
-use crate::input::{self, Action, Binding, Field, KeyContext, NotesPane, Pane, PopupKind};
+use crate::input::{
+    self, Action, Binding, Field, KeyContext, NotesPane, Pane, PopupKind, ReviewStep,
+};
 
 #[cfg(test)]
 mod tests;
@@ -46,6 +48,9 @@ pub enum List {
     Day,
     Backlog,
     Notes,
+    /// The rows of whichever step of the review is on screen. The review
+    /// takes the whole window, so it is never a list beside another one.
+    Review,
 }
 
 /// Which row of a list the cursor is on.
@@ -104,6 +109,10 @@ pub enum Group {
     /// (DOMAIN.md section 7). A row here is a schedule, not a task.
     Schedules,
     Notes,
+    /// A row of the review. Its steps are grouped by day and by what
+    /// surfaced the task, and neither changes what a key on the row
+    /// means, so one group is the whole of it.
+    Review,
 }
 
 impl Group {
@@ -115,6 +124,129 @@ impl Group {
             self,
             Group::Focus | Group::Plan | Group::Ordinary | Group::Waiting
         )
+    }
+}
+
+/// What the review did to a row, which is what the row says it did.
+///
+/// It is the session's own memory rather than something read back from
+/// the model: `k keep` changes nothing at all, and a task another window
+/// has moved since is still one this review has not answered (DOMAIN.md
+/// sections 13 and 16).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Decided {
+    Done,
+    Moved(Place),
+    Deleted,
+    Kept,
+    Dated,
+    Waiting,
+}
+
+/// The morning review while it is on screen: the rows each step opened
+/// with, and the decision made for each.
+///
+/// It is held in memory for the length of the review and stored nowhere.
+/// Closing the window mid-review forgets it and the pile itself is the
+/// record (DOMAIN.md section 13).
+pub struct Review {
+    step: ReviewStep,
+    /// The steps this review shows, in order. An empty step is skipped,
+    /// so there is one of them or both.
+    steps: Vec<ReviewStep>,
+    /// The pile as the review opened it, drawn again on every change.
+    pile: Option<Pile>,
+    /// The surfaced set as the second step opened it, which is later
+    /// than the review itself: a task sent back to the backlog on the
+    /// first step surfaces on the second (DOMAIN.md section 8).
+    surfaced: Option<Surfaced>,
+    /// The decisions, newest last, so that `u` takes back the last one.
+    decided: Vec<(Id, Decided)>,
+}
+
+impl Review {
+    pub fn step(&self) -> ReviewStep {
+        self.step
+    }
+
+    /// Which step is on screen and how many there are: "step 1 of 2".
+    pub fn steps(&self) -> (usize, usize) {
+        let at = self
+            .steps
+            .iter()
+            .position(|step| *step == self.step)
+            .unwrap_or_default();
+        (at + 1, self.steps.len())
+    }
+
+    pub fn pile(&self) -> Option<&Pile> {
+        self.pile.as_ref()
+    }
+
+    pub fn surfaced(&self) -> Option<&Surfaced> {
+        self.surfaced.as_ref()
+    }
+
+    /// What the review did to a row, if it has done anything yet.
+    pub fn decision(&self, task: Id) -> Option<Decided> {
+        self.decided
+            .iter()
+            .find(|(other, _)| *other == task)
+            .map(|(_, how)| *how)
+    }
+
+    /// How many rows the step asks a decision about, and how many of
+    /// them have had one.
+    pub fn progress(&self) -> (usize, usize) {
+        let asked = self.asked();
+        let handled = asked
+            .iter()
+            .filter(|task| self.decision(**task).is_some())
+            .count();
+        (handled, asked.len())
+    }
+
+    /// The rows of the step on screen, in the order they are drawn.
+    fn rows(&self) -> Vec<Id> {
+        match self.step {
+            ReviewStep::Pile => self
+                .pile
+                .iter()
+                .flat_map(|pile| pile.days.iter())
+                .flat_map(|day| day.rows.iter())
+                .map(|row| row.task)
+                .collect(),
+            ReviewStep::Surfaced => self
+                .surfaced
+                .iter()
+                .flat_map(|surfaced| {
+                    surfaced
+                        .due
+                        .iter()
+                        .chain(&surfaced.reminders)
+                        .chain(&surfaced.also_starting_today)
+                })
+                .map(|row| row.task)
+                .collect(),
+        }
+    }
+
+    /// The rows the step asks a decision about, which on the second step
+    /// leaves out the copies it lists for information.
+    fn asked(&self) -> Vec<Id> {
+        match self.step {
+            ReviewStep::Pile => self.rows(),
+            ReviewStep::Surfaced => self
+                .surfaced
+                .iter()
+                .flat_map(|surfaced| surfaced.due.iter().chain(&surfaced.reminders))
+                .map(|row| row.task)
+                .collect(),
+        }
+    }
+
+    fn forget(&mut self, task: Id) {
+        self.decided.retain(|(other, _)| *other != task);
     }
 }
 
@@ -343,6 +475,7 @@ struct Cursors {
     day: Option<RowId>,
     backlog: Option<RowId>,
     notes: Option<RowId>,
+    review: Option<RowId>,
 }
 
 /// The views the screen is drawn from, recomputed whenever the model or
@@ -369,6 +502,9 @@ pub struct App {
     notes_pane: NotesPane,
     popup: Option<Popup>,
     editor: Option<Editor>,
+    /// The review, while it is on screen. It is a mode over the page
+    /// rather than a page of its own (DESIGN.md section 5).
+    review: Option<Review>,
     /// The open note, while the keyboard is in it.
     draft: Option<Draft>,
     message: Option<Message>,
@@ -391,8 +527,8 @@ pub struct App {
 
 impl App {
     /// Loads the model and runs the launch sequence: the recurring copies
-    /// for every scheduled date since the last launch, and then, in phase
-    /// 9, the review gate.
+    /// for every scheduled date since the last launch, and then the
+    /// review gate.
     pub fn new(store: Box<dyn Store>, now: &Zoned) -> Result<App, StoreError> {
         let model = store.load()?;
         let version = store.version()?;
@@ -408,6 +544,7 @@ impl App {
             notes_pane: NotesPane::List,
             popup: None,
             editor: None,
+            review: None,
             draft: None,
             message: None,
             cursors: Cursors::default(),
@@ -420,6 +557,7 @@ impl App {
         app.generate(now);
         app.refresh();
         app.rest_the_cursors();
+        app.open_the_review(true);
         Ok(app)
     }
 
@@ -551,7 +689,7 @@ impl App {
             | Action::EveryFewWeeks
             | Action::StopRepeat => self.choose_the_shape(action),
             Action::Pick => self.pick_a_weekday(),
-            Action::Keep => {}
+            Action::Keep => self.keep(),
 
             Action::Insert(typed) => self.type_in(typed),
             Action::Backspace => self.rub_out(),
@@ -597,6 +735,184 @@ impl App {
             notes: domain::notes(&self.model),
             pile: domain::pile(&self.model, self.today).total,
         };
+        // The review keeps the rows it opened with and draws them as the
+        // tasks are now, so it is refreshed with everything else.
+        if let Some(mut review) = self.review.take() {
+            review.pile = review
+                .pile
+                .as_ref()
+                .map(|opened| domain::pile_again(&self.model, self.today, opened));
+            review.surfaced = review
+                .surfaced
+                .as_ref()
+                .map(|opened| domain::surfaced_again(&self.model, self.today, opened));
+            review.steps = self.steps_of(&review);
+            self.review = Some(review);
+        }
+    }
+
+    // ---- the morning review ------------------------------------------
+
+    /// Opens the review, on the launch of a day that has something to
+    /// review or whenever it is asked for, and says whether it opened.
+    ///
+    /// `gated` is the once-a-day rule: a launch takes it, and asking for
+    /// the review again does not. A review with nothing in it is not an
+    /// empty ceremony, so neither opens one (DESIGN.md section 5).
+    fn open_the_review(&mut self, gated: bool) -> bool {
+        let pile = domain::pile(&self.model, self.today);
+        let surfaced = domain::surfaced(&self.model, self.today);
+        if pile.total == 0 && surfaced.is_empty() {
+            return false;
+        }
+        // StartReview changes nothing on a day it has already run on,
+        // which is what makes the second window of a morning skip it.
+        let gate = domain::start_review(&self.model, self.today);
+        if gated && gate.is_none() {
+            return false;
+        }
+        if let Some(gate) = gate {
+            self.commit(&gate);
+        }
+
+        // The review opens on the first step with something in it.
+        let (step, pile, surfaced) = if pile.total > 0 {
+            (ReviewStep::Pile, Some(pile), None)
+        } else {
+            (ReviewStep::Surfaced, None, Some(surfaced))
+        };
+        self.review = Some(Review {
+            step,
+            steps: Vec::new(),
+            pile,
+            surfaced,
+            decided: Vec::new(),
+        });
+        self.editor = None;
+        self.popup = None;
+        self.refresh();
+        self.rest_the_review_cursor();
+        true
+    }
+
+    /// The steps a review shows. The pile is the one it opened with; the
+    /// surfaced step is whatever has surfaced by the time it is reached,
+    /// so a date unearthed on the first step makes a second one.
+    fn steps_of(&self, review: &Review) -> Vec<ReviewStep> {
+        let mut steps = Vec::new();
+        if review.pile.is_some() {
+            steps.push(ReviewStep::Pile);
+        }
+        if review.surfaced.is_some() || !domain::surfaced(&self.model, self.today).is_empty() {
+            steps.push(ReviewStep::Surfaced);
+        }
+        steps
+    }
+
+    /// Enter: on to the next step that has something in it, and off the
+    /// review altogether when there is none.
+    fn next_step(&mut self) {
+        let Some(review) = &self.review else {
+            return;
+        };
+        let next = review
+            .steps
+            .iter()
+            .skip_while(|step| **step != review.step)
+            .nth(1)
+            .copied();
+        if next != Some(ReviewStep::Surfaced) {
+            self.review = None;
+            return;
+        }
+        // The step is drawn from what has surfaced by now, which is what
+        // DOMAIN.md section 13 means by computing it when it is shown.
+        let surfaced = domain::surfaced(&self.model, self.today);
+        if let Some(review) = &mut self.review {
+            review.surfaced = Some(surfaced);
+            review.step = ReviewStep::Surfaced;
+        }
+        self.refresh();
+        self.rest_the_review_cursor();
+    }
+
+    /// One row answered: the review remembers what was done to it, and
+    /// the cursor moves on to the next row that has not been.
+    fn note_the_decision(&mut self, task: Id, how: Decided) {
+        let Some(review) = &mut self.review else {
+            return;
+        };
+        review.forget(task);
+        review.decided.push((task, how));
+
+        let review = &*review;
+        let rows = review.rows();
+        let at = rows.iter().position(|row| *row == task).unwrap_or_default();
+        let waiting = |row: &&Id| review.decision(**row).is_none();
+        // From here on, then from the top; when every row has been
+        // answered the cursor stays where it is and Enter is what is left.
+        let next = rows[at + 1..]
+            .iter()
+            .find(waiting)
+            .or_else(|| rows[..at].iter().find(waiting))
+            .copied();
+        if let Some(next) = next {
+            self.set_cursor(List::Review, RowId::Task(next));
+        }
+    }
+
+    /// A key that puts a row back the way it was takes its decision back
+    /// with it, so the review counts the row as still to be dealt with.
+    fn take_the_decision_back(&mut self, task: Id) {
+        if let Some(review) = &mut self.review {
+            review.forget(task);
+        }
+    }
+
+    /// `u` in the review takes back the last decision as well as the
+    /// change it made. Only the last one, and only if the undo is of the
+    /// same task: a decision further down was made by an earlier key,
+    /// which an earlier `u` is what takes back.
+    fn take_the_last_decision_back(&mut self, change: &Change) {
+        let Some(review) = &mut self.review else {
+            return;
+        };
+        let Some((task, _)) = review.decided.last().copied() else {
+            return;
+        };
+        let undone = change
+            .writes
+            .iter()
+            .any(|write| matches!(write, Write::PutTask(row) if row.id == task));
+        if undone {
+            review.decided.pop();
+        }
+    }
+
+    /// `k`: the row is answered by leaving it exactly as it is, which is
+    /// the one decision the model keeps no record of (DOMAIN.md section
+    /// 12).
+    fn keep(&mut self) {
+        if self.review.is_none() {
+            return;
+        }
+        let Some(id) = self.task_at_cursor() else {
+            return;
+        };
+        self.note_the_decision(id, Decided::Kept);
+    }
+
+    /// Where the cursor goes after a key on a row: on to the next row of
+    /// the review still to be dealt with, and otherwise to the next row
+    /// of the group the row left (DESIGN.md section 4).
+    fn step_on(&mut self, list: List, next: Option<RowId>, task: Id, how: Decided) {
+        if self.review.is_some() {
+            self.note_the_decision(task, how);
+            return;
+        }
+        if let Some(next) = next {
+            self.set_cursor(list, next);
+        }
     }
 
     /// Picks up what another window has done, and says whether it did.
@@ -691,6 +1007,7 @@ impl App {
         if self.commit(&undone.change).is_none() {
             return;
         }
+        self.take_the_last_decision_back(&undone.change);
         match undone.dropped {
             Some(why) => self.say(
                 format!("{} could not be undone: {why}", undone.label),
@@ -754,6 +1071,12 @@ impl App {
                 .rows
                 .iter()
                 .map(|row| (RowId::Note(row.note), Group::Notes))
+                .collect(),
+            List::Review => self
+                .review
+                .iter()
+                .flat_map(|review| review.rows())
+                .map(|task| (RowId::Task(task), Group::Review))
                 .collect(),
         }
     }
@@ -828,10 +1151,13 @@ impl App {
         } else {
             Command::Close { task: id }
         };
-        if self.run(command).is_some()
-            && let Some(next) = next
-        {
-            self.set_cursor(list, next);
+        if self.run(command).is_none() {
+            return;
+        }
+        if closed {
+            self.take_the_decision_back(id);
+        } else {
+            self.step_on(list, next, id, Decided::Done);
         }
     }
 
@@ -867,10 +1193,14 @@ impl App {
 
         if self
             .run(Command::SetWaiting { task: id, waiting })
-            .is_some()
-            && let Some(next) = next
+            .is_none()
         {
-            self.set_cursor(list, next);
+            return;
+        }
+        if waiting {
+            self.step_on(list, next, id, Decided::Waiting);
+        } else {
+            self.take_the_decision_back(id);
         }
     }
 
@@ -885,10 +1215,8 @@ impl App {
         };
         let list = self.focused();
         let next = self.neighbour_of(list, RowId::Task(id));
-        if self.run(Command::DeleteTask { task: id }).is_some()
-            && let Some(next) = next
-        {
-            self.set_cursor(list, next);
+        if self.run(Command::DeleteTask { task: id }).is_some() {
+            self.step_on(list, next, id, Decided::Deleted);
         }
     }
 
@@ -965,10 +1293,8 @@ impl App {
     fn move_task(&mut self, id: Id, place: Place) {
         let list = self.focused();
         let next = self.neighbour_of(list, RowId::Task(id));
-        if self.run(Command::Move { task: id, place }).is_some()
-            && let Some(next) = next
-        {
-            self.set_cursor(list, next);
+        if self.run(Command::Move { task: id, place }).is_some() {
+            self.step_on(list, next, id, Decided::Moved(place));
         }
     }
 
@@ -1186,12 +1512,17 @@ impl App {
             return;
         }
         self.popup = None;
+        let list = self.focused();
         match draft.kind {
             DateKind::Due => {
-                self.run(Command::SetDue { task, date });
+                if self.run(Command::SetDue { task, date }).is_some() {
+                    self.step_on(list, None, task, Decided::Dated);
+                }
             }
             DateKind::Remind => {
-                self.run(Command::SetRemind { task, date });
+                if self.run(Command::SetRemind { task, date }).is_some() {
+                    self.step_on(list, None, task, Decided::Dated);
+                }
             }
             DateKind::Move => {
                 if let Some(day) = date {
@@ -1662,7 +1993,7 @@ impl App {
     fn place_of(&self, list: List) -> Place {
         match list {
             List::Backlog => Place::Backlog,
-            List::Day | List::Notes => Place::Day(self.today),
+            List::Day | List::Notes | List::Review => Place::Day(self.today),
         }
     }
 
@@ -1688,6 +2019,14 @@ impl App {
     /// The context of the page itself, which is what the palette lists the
     /// commands of even while it is over it.
     pub fn page_context(&self) -> KeyContext {
+        // The review is a mode over the page rather than a page of its
+        // own, and it is what the keyboard is on while it is up.
+        if let Some(review) = &self.review {
+            return KeyContext::Review {
+                step: review.step,
+                text_field: self.editor.is_some(),
+            };
+        }
         match self.page {
             Page::Home => KeyContext::Home {
                 pane: self.pane,
@@ -1704,6 +2043,9 @@ impl App {
 
     /// The list the cursor is in.
     pub fn focused(&self) -> List {
+        if self.review.is_some() {
+            return List::Review;
+        }
         match (self.page, self.pane) {
             (Page::Home, Pane::Day) => List::Day,
             (Page::Home, Pane::Backlog) => List::Backlog,
@@ -1756,6 +2098,11 @@ impl App {
         self.popup.as_ref()
     }
 
+    /// The review, while it is on screen.
+    pub fn review(&self) -> Option<&Review> {
+        self.review.as_ref()
+    }
+
     pub fn editor(&self) -> Option<&Editor> {
         self.editor.as_ref()
     }
@@ -1783,6 +2130,7 @@ impl App {
             List::Day => self.cursors.day,
             List::Backlog => self.cursors.backlog,
             List::Notes => self.cursors.notes,
+            List::Review => self.cursors.review,
         };
         match wanted {
             Some(id) if rows.iter().any(|(row, _)| *row == id) => Some(id),
@@ -1831,7 +2179,13 @@ impl App {
             day: self.rows_of(List::Day).first().map(|(id, _)| *id),
             backlog: self.rows_of(List::Backlog).first().map(|(id, _)| *id),
             notes: self.rows_of(List::Notes).first().map(|(id, _)| *id),
+            review: None,
         };
+    }
+
+    /// The review opens on its first row, whichever step it opens on.
+    fn rest_the_review_cursor(&mut self) {
+        self.cursors.review = self.rows_of(List::Review).first().map(|(id, _)| *id);
     }
 
     fn set_cursor(&mut self, list: List, id: RowId) {
@@ -1839,6 +2193,7 @@ impl App {
             List::Day => &mut self.cursors.day,
             List::Backlog => &mut self.cursors.backlog,
             List::Notes => &mut self.cursors.notes,
+            List::Review => &mut self.cursors.review,
         };
         *slot = Some(id);
     }
@@ -1989,6 +2344,9 @@ impl App {
                 self.page = Page::Notes;
                 self.notes_pane = NotesPane::List;
             }
+            // The review is the whole window, so there is no other pane
+            // for a click to move the keyboard to.
+            List::Review => {}
         }
     }
 
@@ -2015,6 +2373,11 @@ impl App {
         if self.editor.take().is_some() {
             return;
         }
+        // Escape leaves the review with the pile intact; the home screen
+        // counts what is left of it in red (DESIGN.md section 5).
+        if self.review.take().is_some() {
+            return;
+        }
         if self.page == Page::Notes {
             // The note first, then the page: one level at a time.
             if self.draft.is_some() {
@@ -2028,10 +2391,12 @@ impl App {
     /// Enter: the popup if one is open, and the field under it otherwise.
     fn confirm(&mut self) -> Flow {
         let Some(kind) = self.popup.as_ref().map(|popup| popup.kind) else {
-            if self.page == Page::Notes {
-                self.open_the_note();
-            } else {
+            if self.editor.is_some() {
                 self.commit_the_title();
+            } else if self.review.is_some() {
+                self.next_step();
+            } else if self.page == Page::Notes {
+                self.open_the_note();
             }
             return Flow::Continue;
         };

@@ -32,7 +32,7 @@ pub(super) fn draw(canvas: &mut Canvas, app: &App, rows: &Rows) {
 }
 
 /// A box of `width` by `height` at the top left given, cleared and framed.
-fn frame(canvas: &mut Canvas, x: u16, y: u16, width: u16, height: u16) {
+pub(super) fn frame(canvas: &mut Canvas, x: u16, y: u16, width: u16, height: u16) {
     let inner = width.saturating_sub(2) as usize;
     canvas.put(x, y, &format!("┌{}┐", "─".repeat(inner)), accent());
     for row in y + 1..y + height - 1 {

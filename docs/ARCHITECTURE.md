@@ -284,9 +284,15 @@ adds it here first, the way a new dependency is added to section 2 first.
 - Read access to the model and the application state for `ui`:
   `today`, `model`, the views `day`, `backlog`, `notes` and
   `review_count`, `page`, `pane`, `notes_pane`, `focused`, `popup`,
-  `editor`, `message`, `cursor`, `palette_rows`, `search_results`,
-  `move_choices`, `date_choices`, `repeat_preview`, `draft` and `layout`.
-  `Page` is `Home` or `Notes`; `List` is `Day`, `Backlog` or `Notes`, one
+  `review`, `editor`, `message`, `cursor`, `palette_rows`,
+  `search_results`, `move_choices`, `date_choices`, `repeat_preview`,
+  `draft` and `layout`.
+  `Page` is `Home` or `Notes`, and the review is neither: it is a mode
+  over the page, `Review`, which the window draws instead of the panes
+  while it is there. It holds the step on screen, the `Pile` and
+  `Surfaced` each step opened with, and the `Decided` made for each row,
+  and it answers `step`, `steps`, `pile`, `surfaced`, `decision` and
+  `progress`. `List` is `Day`, `Backlog`, `Notes` or `Review`, one
   cursor each, held by id; `Popup` carries the kind, the text typed into
   it, the caret, the selected row, the row it is about, and the `Card` it
   is building before Enter turns it into a command, which for the date

@@ -327,7 +327,7 @@ def p01():
     group(g, lx, lw, y, 'Fri 22 Aug · 2 weeks ago', 1); y += 1
     task(g, lx, lw, y, 'Order new office chair'); y += 2
     group(g, lx, lw, y, 'Tue 12 Aug · 3 weeks ago', 1); y += 1
-    task(g, lx, lw, y, 'Book the team dinner', meta='6 days on the pile'); y += 1
+    task(g, lx, lw, y, 'Book the team dinner'); y += 1
     y = 4
     for k, lbl, d in [('d', 'Done', 'was finished'), ('t', 'Move to today', 'end of plan'), ('b', 'Back to backlog', ''),
                       ('m', 'Move to a day…', ''), ('x', 'Delete', 'undo: u')]:
@@ -336,7 +336,7 @@ def p01():
     y += 1
     g.put(sx + 2, y, '2 of 7 handled', 'd'); g.callout(sx + sw - 1, y, 5); y += 1
     progress(g, sx + 2, y, sw - 4, 2 / 7); y += 1
-    g.put(sx + 2, y, 'j/k any order · u undo last', 'd')
+    g.put(sx + 2, y, 'j ↑/↓ any order · u undo last', 'd')
     y = g.h - 5
     g.box(sx + 1, y, sw - 2, 3, 'd'); g.put(sx + 3, y + 1, 'Continue, 5 left on the pile ⏎'); g.callout(sx + sw - 1, y - 1, 6)
     hints(g, g.h - 1, 'Review', [('d', 'done'), ('t', 'today'), ('b', 'backlog'), ('m', 'move…'), ('x', 'delete'), ('u', 'undo'), ('e', 'edit')],
@@ -346,10 +346,10 @@ def p01():
 <p>Shown once per day, on the first open of a work day, when the pile is non-empty. Full window: the review is a ritual, not a sidebar. Later opens that day go straight to Today. An empty pile skips the step.</p>
 <ol>
 <li>The status line becomes a step indicator. Escape (or closing the window) leaves the pile intact; the home screen then shows the red count until it is dealt with.</li>
-<li>Grouped by the day the task was planned for, newest first, with relative age on old groups. Nothing is carried over automatically.</li>
+<li>Grouped by the day the task was planned for, newest first, with relative age on old groups; the age is on the group, not repeated on every row. Nothing is carried over automatically.</li>
 <li>Cursor row. Handled rows stay in place, checked and dimmed, showing what happened, so the list never jumps.</li>
 <li>The outcomes from PRODUCT.md plus "move to a day". Same keys as everywhere else.</li>
-<li>Progress and undo. Deletes never confirm.</li>
+<li>Progress and undo. <kbd>k</kbd> is "keep" in the review, so the cursor moves with <kbd>j</kbd> and the arrows (DESIGN.md section 4). Deletes never confirm.</li>
 <li>Leaving with items still on the pile is allowed.</li>
 </ol>
 <div class="flow"><b>Recurring copies on the pile</b>"Write standup notes" is an unfinished copy from Monday. It is handled like any other task; the schedule keeps producing new copies regardless.</div>''')
@@ -364,7 +364,7 @@ def p02():
     task(g, lx, lw, y, 'Submit the expense report', chips=[('due', 'due today')]); y += 2
     group(g, lx, lw, y, 'Reminders', 2); g.callout(lx + 15, y, 2); y += 1
     task(g, lx, lw, y, 'Book dentist', chips=[('rem', '◷ today')]); y += 1
-    task(g, lx, lw, y, 'Feedback on the proposal', state='waiting', chips=[('wait', 'waiting'), ('rem', '◷ today')]); g.callout(lx + 32, y, 3); y += 3
+    task(g, lx, lw, y, 'Feedback on the proposal', state='waiting', chips=[('wait', 'waiting'), ('rem', '◷ today')]); g.callout(lx + 32, y, 3); y += 2
     group(g, lx, lw, y, 'Also starting today', 2); g.callout(lx + 25, y, 4); y += 1
     task(g, lx, lw, y, 'Ship invoice export', chips=[('rep', '↻ every Fri')], meta='on today\'s plan'); y += 1
     task(g, lx, lw, y, 'Write standup notes', chips=[('rep', '↻ work days')], meta='on today\'s plan'); y += 1

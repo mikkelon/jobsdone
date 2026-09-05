@@ -13,12 +13,12 @@
  MON 1 SEP 2 ───────────────────────────────────────────────────────────────── │
  [ ] Call the accountant about VAT                                             │  2 of 7 handled
  [ ] Write standup notes                                         [↻ work days] │  ██████████░░░░░░░░░░░░░░░░░░░░░░░░░░
-                                                                               │  j/k any order · u undo last
+                                                                               │  j ↑/↓ any order · u undo last
  FRI 22 AUG · 2 WEEKS AGO 1 ────────────────────────────────────────────────── │
  [ ] Order new office chair                                                    │
                                                                                │
  TUE 12 AUG · 3 WEEKS AGO 1 ────────────────────────────────────────────────── │
- [ ] Book the team dinner                                   6 days on the pile │
+ [ ] Book the team dinner                                                      │
                                                                                │
                                                                                │
                                                                                │

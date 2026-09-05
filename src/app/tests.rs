@@ -25,6 +25,7 @@ impl Store for Broken {
 
 /// The wireframes' own day, which is a Friday.
 const NOW: &str = "2025-09-05T09:00:00+02:00[Europe/Copenhagen]";
+const NOW_DAY: &str = "2025-09-05";
 
 fn at(text: &str) -> Zoned {
     text.parse().expect("a zoned timestamp")
@@ -32,6 +33,16 @@ fn at(text: &str) -> Zoned {
 
 fn on(text: &str) -> Date {
     text.parse().expect("a civil date")
+}
+
+/// A model whose review has already run today, so that a launch lands on
+/// the home page rather than in the review.
+fn reviewed(mut model: Model) -> Model {
+    model.meta.insert(
+        "review_on".to_owned(),
+        domain::working_day(&at(NOW)).to_string(),
+    );
+    model
 }
 
 fn set_meta(key: &str, value: &str) -> Change {
@@ -142,7 +153,7 @@ fn with_a_recurring_copy() -> (App, Id) {
             from_place: domain::FromPlace::New,
         },
     );
-    (app_at(MemStore::holding(model), NOW), 1)
+    (app_at(MemStore::holding(reviewed(model)), NOW), 1)
 }
 
 /// A store holding one schedule and nothing else, generated through the
@@ -160,7 +171,7 @@ fn a_schedule_through(through: &str) -> MemStore {
             created_at: at(NOW),
         },
     );
-    MemStore::holding(model)
+    MemStore::holding(reviewed(model))
 }
 
 // ---- the launch ------------------------------------------------------
@@ -298,8 +309,331 @@ fn the_review_count_is_the_size_of_the_pile() {
     );
 
     assert_eq!(app.review_count(), 1);
+    // The launch opens the review over the pile; past it, today is empty
+    // and there is nothing here for `space` to close.
+    app.update(Action::Cancel);
     app.update(Action::Close);
     assert_eq!(app.review_count(), 1, "the pile is what is on past days");
+}
+
+// ---- the morning review ----------------------------------------------
+
+/// A store holding the tasks given, each on the day given, and nothing
+/// else: the pile a review opens on.
+fn left_behind(tasks: &[(&str, &str)]) -> MemStore {
+    let mut model = Model::empty();
+    for (nth, (title, day)) in tasks.iter().enumerate() {
+        model.tasks.insert(
+            nth as Id + 1,
+            Task {
+                id: nth as Id + 1,
+                title: (*title).to_owned(),
+                day: Some(on(day)),
+                position: 0,
+                focus: false,
+                waiting: false,
+                closed_at: None,
+                due_on: None,
+                remind_on: None,
+                schedule_id: None,
+                scheduled_on: None,
+                created_at: at(NOW),
+                deleted_at: None,
+            },
+        );
+    }
+    MemStore::holding(model)
+}
+
+/// A backlog task whose due date has arrived, which is the whole of the
+/// second step.
+fn something_surfaced() -> MemStore {
+    let mut model = Model::empty();
+    model.tasks.insert(
+        1,
+        Task {
+            id: 1,
+            title: "Migrate CI to the new runners".to_owned(),
+            day: None,
+            position: 0,
+            focus: false,
+            waiting: false,
+            closed_at: None,
+            due_on: Some(on("2025-09-03")),
+            remind_on: None,
+            schedule_id: None,
+            scheduled_on: None,
+            created_at: at(NOW),
+            deleted_at: None,
+        },
+    );
+    MemStore::holding(model)
+}
+
+fn step(app: &App) -> Option<ReviewStep> {
+    app.review().map(Review::step)
+}
+
+#[test]
+fn the_launch_opens_the_review_over_the_pile_and_writes_the_gate() {
+    let app = app_at(
+        left_behind(&[("Order new office chair", "2025-09-01")]),
+        NOW,
+    );
+
+    assert_eq!(step(&app), Some(ReviewStep::Pile));
+    assert_eq!(app.focused(), List::Review);
+    assert_eq!(
+        app.key_context(),
+        KeyContext::Review {
+            step: ReviewStep::Pile,
+            text_field: false
+        }
+    );
+    assert_eq!(
+        app.model().meta.get("review_on").map(String::as_str),
+        Some("2025-09-05")
+    );
+}
+
+#[test]
+fn the_review_is_not_shown_twice_in_one_day() {
+    let store = left_behind(&[("Order new office chair", "2025-09-01")]);
+    let first = app_at(store.clone(), NOW);
+    assert!(first.review().is_some());
+
+    // A second window the same morning goes straight to today, and the
+    // pile is still counted in red.
+    let second = app_at(store, NOW);
+
+    assert!(second.review().is_none());
+    assert_eq!(second.review_count(), 1);
+}
+
+#[test]
+fn a_review_with_nothing_in_it_is_not_shown_at_all() {
+    let app = started();
+
+    assert!(app.review().is_none());
+    // The gate is not written either, so tomorrow's review is the first.
+    assert_eq!(app.model().meta.get("review_on"), None);
+}
+
+#[test]
+fn an_empty_step_is_skipped() {
+    // Nothing on the pile, so the review opens on its second step and
+    // says so.
+    let app = app_at(something_surfaced(), NOW);
+
+    assert_eq!(step(&app), Some(ReviewStep::Surfaced));
+    assert_eq!(app.review().map(Review::steps), Some((1, 1)));
+}
+
+#[test]
+fn enter_walks_the_steps_and_then_starts_the_day() {
+    let mut app = app_at(
+        left_behind(&[("Order new office chair", "2025-09-01")]),
+        NOW,
+    );
+    assert_eq!(app.review().map(Review::steps), Some((1, 1)));
+
+    // Sending the pile task back to the backlog with an old due date on
+    // it makes a second step: the date prompts again (DOMAIN.md 8).
+    app.update(Action::ToBacklog);
+    assert_eq!(app.review().map(Review::steps), Some((1, 1)));
+
+    app.update(Action::Confirm);
+    assert!(app.review().is_none(), "one step, so Enter starts the day");
+}
+
+#[test]
+fn a_date_unearthed_on_the_pile_makes_the_second_step() {
+    let mut store = left_behind(&[("Order new office chair", "2025-09-01")]);
+    let mut model = store.load().expect("the store");
+    model.tasks.entry(1).and_modify(|task| {
+        task.due_on = Some(on("2025-09-02"));
+    });
+    store = MemStore::holding(model);
+    let mut app = app_at(store, NOW);
+
+    // On a day it is not surfaced from, since only a backlog task does.
+    assert_eq!(app.review().map(Review::steps), Some((1, 1)));
+    app.update(Action::ToBacklog);
+    assert_eq!(app.review().map(Review::steps), Some((1, 2)));
+
+    app.update(Action::Confirm);
+    assert_eq!(step(&app), Some(ReviewStep::Surfaced));
+    assert_eq!(app.review().map(Review::steps), Some((2, 2)));
+    app.update(Action::Confirm);
+    assert!(app.review().is_none());
+}
+
+#[test]
+fn escape_leaves_the_review_with_the_pile_intact() {
+    let mut app = app_at(
+        left_behind(&[
+            ("Order new office chair", "2025-09-01"),
+            ("Book the team dinner", "2025-08-12"),
+        ]),
+        NOW,
+    );
+
+    app.update(Action::Cancel);
+
+    assert!(app.review().is_none());
+    assert_eq!(app.focused(), List::Day);
+    assert_eq!(app.review_count(), 2, "the pile is untouched");
+}
+
+#[test]
+fn a_row_the_review_has_answered_stays_where_it_was() {
+    let mut app = app_at(
+        left_behind(&[
+            ("Send the invoice", "2025-09-04"),
+            ("Prepare slides", "2025-09-04"),
+        ]),
+        NOW,
+    );
+    assert_eq!(
+        titles(&app, List::Review),
+        ["Send the invoice", "Prepare slides"]
+    );
+
+    app.update(Action::Close);
+
+    // Off the pile, still on the screen, and the cursor has stepped on.
+    assert_eq!(app.review_count(), 1);
+    assert_eq!(
+        titles(&app, List::Review),
+        ["Send the invoice", "Prepare slides"]
+    );
+    assert_eq!(cursor(&app, List::Review), Some(2));
+    let review = app.review().expect("the review");
+    assert_eq!(review.decision(1), Some(Decided::Done));
+    assert_eq!(review.progress(), (1, 2));
+}
+
+#[test]
+fn every_decision_the_pile_offers_answers_a_row() {
+    let mut app = app_at(
+        left_behind(&[
+            ("One", "2025-09-04"),
+            ("Two", "2025-09-04"),
+            ("Three", "2025-09-04"),
+            ("Four", "2025-09-04"),
+        ]),
+        NOW,
+    );
+
+    app.update(Action::Close);
+    app.update(Action::ToToday);
+    app.update(Action::ToBacklog);
+    app.update(Action::Delete);
+
+    let review = app.review().expect("the review");
+    assert_eq!(review.decision(1), Some(Decided::Done));
+    assert_eq!(
+        review.decision(2),
+        Some(Decided::Moved(Place::Day(on(NOW_DAY))))
+    );
+    assert_eq!(review.decision(3), Some(Decided::Moved(Place::Backlog)));
+    assert_eq!(review.decision(4), Some(Decided::Deleted));
+    assert_eq!(review.progress(), (4, 4));
+    assert_eq!(app.review_count(), 0);
+}
+
+#[test]
+fn the_cursor_walks_on_to_the_next_row_still_to_be_dealt_with() {
+    let mut app = app_at(
+        left_behind(&[
+            ("One", "2025-09-04"),
+            ("Two", "2025-09-04"),
+            ("Three", "2025-09-04"),
+        ]),
+        NOW,
+    );
+
+    // Out of order, and the cursor finds what is left either way.
+    app.update(Action::Down);
+    app.update(Action::Close);
+    assert_eq!(cursor(&app, List::Review), Some(3));
+    app.update(Action::Close);
+    assert_eq!(cursor(&app, List::Review), Some(1), "round to the first");
+    app.update(Action::Close);
+    assert_eq!(cursor(&app, List::Review), Some(1), "nothing left to find");
+}
+
+#[test]
+fn keeping_a_surfaced_task_decides_it_and_changes_nothing() {
+    let mut app = app_at(something_surfaced(), NOW);
+    assert_eq!(step(&app), Some(ReviewStep::Surfaced));
+
+    app.update(Action::Keep);
+
+    let review = app.review().expect("the review");
+    assert_eq!(review.decision(1), Some(Decided::Kept));
+    assert_eq!(review.progress(), (1, 1));
+    assert_eq!(app.model().task(1).and_then(|task| task.day), None);
+    assert!(app.model().undo.is_empty(), "keeping pushes nothing");
+}
+
+#[test]
+fn undo_takes_the_last_decision_back_with_the_change() {
+    let mut app = app_at(left_behind(&[("Send the invoice", "2025-09-04")]), NOW);
+    app.update(Action::Close);
+    assert_eq!(
+        app.review().and_then(|review| review.decision(1)),
+        Some(Decided::Done)
+    );
+
+    app.update(Action::Undo);
+
+    assert_eq!(app.review().map(Review::progress), Some((0, 1)));
+    assert_eq!(app.review_count(), 1);
+}
+
+#[test]
+fn a_copy_starting_today_is_shown_but_not_asked_about() {
+    let (app, copy) = with_a_recurring_copy();
+    let mut model = app.model().clone();
+    // The review has not run yet on the morning the copy was made.
+    model.meta.remove("review_on");
+    let mut app = app_at(MemStore::holding(model), NOW);
+    assert_eq!(step(&app), Some(ReviewStep::Surfaced));
+
+    // It is a row of the step and the cursor reaches it, but the step
+    // asks nothing about it (DOMAIN.md section 13).
+    assert_eq!(titles(&app, List::Review), ["Write standup notes"]);
+    assert_eq!(app.review().map(Review::progress), Some((0, 0)));
+    app.update(Action::Keep);
+    assert_eq!(app.review().map(Review::progress), Some((0, 0)));
+    assert!(app.model().task(copy).is_some());
+}
+
+#[test]
+fn a_title_is_edited_in_place_in_the_review() {
+    let mut app = app_at(left_behind(&[("Send the invocie", "2025-09-04")]), NOW);
+
+    app.update(Action::Edit);
+    assert_eq!(
+        app.page_context(),
+        KeyContext::Review {
+            step: ReviewStep::Pile,
+            text_field: true
+        }
+    );
+    for _ in 0..7 {
+        app.update(Action::Backspace);
+    }
+    type_in(&mut app, "invoice");
+    app.update(Action::Confirm);
+
+    assert_eq!(titles(&app, List::Review), ["Send the invoice"]);
+    assert!(
+        app.review().is_some(),
+        "Enter saved the title, not the step"
+    );
+    assert_eq!(app.review().map(Review::progress), Some((0, 1)));
 }
 
 // ---- adding and renaming ---------------------------------------------

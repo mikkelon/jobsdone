@@ -141,7 +141,11 @@ fn wireframe_model() -> Model {
     });
 
     // Two tasks left behind on past days: the review count, and nothing
-    // else on this screen.
+    // else on this screen. The review has run today, so the home page is
+    // what the window opens on (DOMAIN.md section 13).
+    model
+        .meta
+        .insert("review_on".to_owned(), "2025-09-05".to_owned());
     put(task(201, "Ring the accountant", Some(on("2025-09-03")), 0));
     put(task(
         202,
@@ -296,6 +300,137 @@ fn same(drawn: &[String], wanted: &[String], what: &str) {
         wrong.is_empty() && drawn.len() == wanted.len(),
         "{what} does not match its wireframe:\n{}",
         wrong.join("\n")
+    );
+}
+
+/// The model wireframes 01 and 02 are a picture of: seven unfinished
+/// tasks on four past days, and the four dated backlog tasks and two
+/// copies that surface on the morning of Friday 5 September.
+fn review_model() -> Model {
+    let today = on("2025-09-05");
+    let mut model = Model::empty();
+    let mut put = |task: Task| {
+        model.tasks.insert(task.id, task);
+    };
+
+    // The pile, newest day first, in position order within each day.
+    put(task(
+        1,
+        "Send the invoice to Nordic Ltd",
+        Some(on("2025-09-04")),
+        0,
+    ));
+    put(task(
+        2,
+        "Prepare slides for Monday",
+        Some(on("2025-09-04")),
+        1,
+    ));
+    put(Task {
+        focus: true,
+        ..task(3, "Fix the flaky migration test", Some(on("2025-09-04")), 2)
+    });
+    put(task(
+        4,
+        "Call the accountant about VAT",
+        Some(on("2025-09-01")),
+        0,
+    ));
+    put(Task {
+        schedule_id: Some(2),
+        scheduled_on: Some(on("2025-09-01")),
+        ..task(5, "Write standup notes", Some(on("2025-09-01")), 1)
+    });
+    put(task(6, "Order new office chair", Some(on("2025-08-22")), 0));
+    put(task(7, "Book the team dinner", Some(on("2025-08-12")), 0));
+
+    // What surfaces today: two due, two reminders, and the two copies
+    // the schedules made this morning.
+    put(Task {
+        due_on: Some(on("2025-09-03")),
+        ..task(11, "Migrate CI to the new runners", None, 0)
+    });
+    put(Task {
+        due_on: Some(today),
+        ..task(12, "Submit the expense report", None, 1)
+    });
+    put(Task {
+        remind_on: Some(today),
+        ..task(13, "Book dentist", None, 2)
+    });
+    put(Task {
+        waiting: true,
+        remind_on: Some(today),
+        ..task(14, "Feedback on the proposal", None, 3)
+    });
+    put(Task {
+        schedule_id: Some(1),
+        scheduled_on: Some(today),
+        ..task(15, "Ship invoice export", Some(today), 0)
+    });
+    put(Task {
+        schedule_id: Some(2),
+        scheduled_on: Some(today),
+        ..task(16, "Write standup notes", Some(today), 1)
+    });
+
+    for (id, title, rule) in [
+        (
+            1,
+            "Ship invoice export",
+            Rule::Weekly {
+                weekdays: vec![Weekday::Fri],
+            },
+        ),
+        (2, "Write standup notes", Rule::Workdays),
+    ] {
+        model.schedules.insert(
+            id,
+            Schedule {
+                id,
+                title: title.to_owned(),
+                // Generated through today, so the launch owes no copies.
+                rule,
+                generated_through: today,
+                stopped_on: None,
+                created_at: at(NOW),
+            },
+        );
+    }
+    model
+}
+
+/// The review as wireframe 01 draws it: opened by the launch, with the
+/// first row closed and the second moved onto today.
+fn reviewing() -> App {
+    let mut app = App::new(Box::new(MemStore::holding(review_model())), &at(NOW)).expect("an app");
+    app.update(Action::Close);
+    app.update(Action::ToToday);
+    // What just happened stands in the hint bar until the next key, and
+    // the wireframe is drawn a key later.
+    app.update(Action::Up);
+    app.update(Action::Down);
+    app
+}
+
+#[test]
+fn the_pile_matches_the_wireframe() {
+    let app = reviewing();
+    same(
+        &look(&app, 120, 36),
+        &wireframe("01-review", 0, 36),
+        "the review's first step at 120x36",
+    );
+}
+
+#[test]
+fn the_surfaced_step_matches_the_wireframe() {
+    let mut app = reviewing();
+    app.update(Action::Confirm);
+    same(
+        &look(&app, 120, 36),
+        &wireframe("02-surfaced", 0, 36),
+        "the review's second step at 120x36",
     );
 }
 
@@ -888,6 +1023,27 @@ fn no_size_the_window_can_take_makes_the_drawing_panic() {
             }
         }
         app.update(Action::Cancel);
+    }
+}
+
+#[test]
+fn no_size_the_review_can_take_makes_the_drawing_panic() {
+    let mut app = reviewing();
+    for action in [Action::Tick, Action::MoveToDay, Action::Edit] {
+        app.update(action);
+        for width in [1, 2, 23, 24, 25, 40, 99, 100, 101, 120, 200] {
+            for height in [1, 2, 8, 9, 10, 12, 36, 48, 90] {
+                look(&app, width, height);
+            }
+        }
+        app.update(Action::Cancel);
+    }
+    // And the second step, which has three groups and no panel hint.
+    app.update(Action::Confirm);
+    for width in [24, 60, 99, 100, 120] {
+        for height in [9, 12, 36, 48] {
+            look(&app, width, height);
+        }
     }
 }
 
