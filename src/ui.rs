@@ -722,11 +722,12 @@ fn day_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
             add: None,
         });
     }
-    // The add line belongs to the plan, so the group is drawn whenever
-    // the day has anything on it at all.
+    // The add line is the pane's rather than the group's, so it is drawn
+    // whenever the day has anything on it at all, and the label goes when
+    // there is nothing under it but the add line (DESIGN.md section 6).
     if counts.planned > 0 || adding {
         sections.push(Section {
-            label: "Plan",
+            label: if view.plan.is_empty() { "" } else { "Plan" },
             count: None,
             content: Content::Tasks(&view.plan, Kind::Open),
             add: Some(match shown {

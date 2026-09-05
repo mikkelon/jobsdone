@@ -195,6 +195,11 @@ groups in the same order, Focus, Plan, Done, Moved, and a group with
 nothing in it is not drawn at all. That is why today rarely shows a Moved
 group and a finished past day rarely shows a Focus one.
 
+The `+ add` line is the pane's own rather than a row of Plan, so a day
+whose tasks are all done or moved keeps the line and loses the label: the
+key that fills the pane is still worth saying, and an empty group is not
+drawn even to carry it.
+
 A future day is the same again, and holds only what has actually been put
 there: tasks moved onto it, and whatever is added to it. The recurring
 copies a schedule will make are not drawn ahead of time, because the app

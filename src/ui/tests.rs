@@ -1133,11 +1133,12 @@ fn the_add_line_becomes_the_field_that_is_typed_into() {
     }
     let drawn = look(&app, 120, 36);
 
-    assert!(drawn[5].starts_with(" PLAN ────"));
+    // Nothing is planned yet, so no group label stands over the field:
+    // the add line is the pane's own (DESIGN.md section 6).
     assert!(
-        drawn[6].contains("+  Call the landlord about the leak▏"),
+        drawn[5].contains("+  Call the landlord about the leak▏"),
         "the field is where the add line was: {:?}",
-        drawn[6]
+        drawn[5]
     );
     assert!(
         drawn[34].contains("⏎ add & keep typing"),
@@ -1883,4 +1884,35 @@ fn a_field_longer_than_its_line_scrolls_to_keep_the_caret_on_it() {
         .find(|row| row.contains('▏'))
         .expect("the add field");
     assert!(field.contains("▏The quick brown fox"), "{field:?}");
+}
+
+/// An empty group is not drawn, and the add line is not a row of Plan:
+/// a day whose tasks were all done still had a PLAN label over nothing
+/// but the add line (F9).
+#[test]
+fn a_day_with_nothing_left_open_keeps_the_add_line_and_loses_the_label() {
+    let mut app = empty();
+    app.update(Action::Add);
+    for typed in "Task".chars() {
+        app.update(Action::Insert(typed));
+    }
+    app.update(Action::Confirm);
+    app.update(Action::Cancel);
+    app.update(Action::Close);
+
+    let drawn = look(&app, 120, 36);
+    let text: String = drawn
+        .iter()
+        .map(|row| row.chars().take(59).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        text.contains(" +  add a task"),
+        "the key that fills it: {text}"
+    );
+    assert!(!text.contains("PLAN"), "and no group over nothing: {text}");
+    assert!(
+        text.contains("DONE 1"),
+        "the group that has something: {text}"
+    );
 }
