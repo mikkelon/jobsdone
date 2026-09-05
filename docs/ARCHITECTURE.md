@@ -254,6 +254,12 @@ adds it here first, the way a new dependency is added to section 2 first.
   - `bar` and `narrow`: where the hint bar puts the row when the window
     has two panes and when it has collapsed to tabs, as a `Bar` of `Off`,
     `Left`, `Right`, or `Short(Side, name)` where the bar is tight.
+- `Decision` and `decisions(ReviewStep) -> &[Decision]`: the rows of the
+  panel beside the review, each a key, the action it means, the name the
+  panel gives it and the few words on what it does to the task. The
+  panel says more than the hint bar has room for, so the names are its
+  own; the keys are rows of the step's table and a test holds the two
+  together.
 - `name(KeyContext) -> &str`: what the hint bar calls the context, the
   `TODAY` or `BACKLOG` that opens the bar.
 

@@ -803,6 +803,14 @@ const REVIEW_SURFACED: &[Binding] = &[
         bar: Bar::Left,
         narrow: Bar::Left,
     },
+    // Six keys fill the bar, and every one of them can be taken back.
+    Binding {
+        keys: &[("u", Action::Undo)],
+        shown: "u",
+        label: "undo",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
     Binding {
         keys: &[("enter", Action::Confirm)],
         shown: "⏎",
@@ -836,6 +844,104 @@ const REVIEW_SURFACED: &[Binding] = &[
         narrow: Bar::Off,
     },
 ];
+
+/// One row of the panel beside the review: the key that decides the row
+/// the cursor is on, what the panel calls it, and what it does to the
+/// task.
+///
+/// The panel says more than the hint bar has room for, so the names are
+/// its own; the keys are rows of the step's own table, and a test holds
+/// the two together, so the panel cannot offer a key the dispatcher does
+/// not have.
+#[derive(Clone, Copy, Debug)]
+pub struct Decision {
+    pub key: &'static str,
+    pub action: Action,
+    /// What the panel calls it: "Move to today" where the bar says
+    /// "today".
+    pub label: &'static str,
+    /// What it does to the task, in the few words at the right of the
+    /// row. Empty where the name says it all.
+    pub note: &'static str,
+}
+
+/// The outcomes PRODUCT.md gives a task on the pile, plus "move to a
+/// day".
+const PILE_DECISIONS: &[Decision] = &[
+    Decision {
+        key: "d",
+        action: Action::Close,
+        label: "Done",
+        note: "was finished",
+    },
+    Decision {
+        key: "t",
+        action: Action::ToToday,
+        label: "Move to today",
+        note: "end of plan",
+    },
+    Decision {
+        key: "b",
+        action: Action::ToBacklog,
+        label: "Back to backlog",
+        note: "",
+    },
+    Decision {
+        key: "m",
+        action: Action::MoveToDay,
+        label: "Move to a day…",
+        note: "",
+    },
+    Decision {
+        key: "x",
+        action: Action::Delete,
+        label: "Delete",
+        note: "undo: u",
+    },
+];
+
+/// What a surfaced task is answered with. A date is changed with `d` and
+/// `r`; the panel names the one the step is mostly about.
+const SURFACED_DECISIONS: &[Decision] = &[
+    Decision {
+        key: "t",
+        action: Action::ToToday,
+        label: "Pull onto today",
+        note: "to plan",
+    },
+    Decision {
+        key: "k",
+        action: Action::Keep,
+        label: "Keep in backlog",
+        note: "tomorrow",
+    },
+    Decision {
+        key: "d",
+        action: Action::DueBy,
+        label: "Change due date…",
+        note: "",
+    },
+    Decision {
+        key: "w",
+        action: Action::Waiting,
+        label: "Mark waiting",
+        note: "no nag",
+    },
+    Decision {
+        key: "space",
+        action: Action::Close,
+        label: "Done",
+        note: "",
+    },
+];
+
+/// The rows of the panel beside a step of the review.
+pub fn decisions(step: ReviewStep) -> &'static [Decision] {
+    match step {
+        ReviewStep::Pile => PILE_DECISIONS,
+        ReviewStep::Surfaced => SURFACED_DECISIONS,
+    }
+}
 
 /// The in-place field on a task row. Adding keeps the field open after
 /// Enter so that a list is typed in one go; renaming closes it.
@@ -1273,6 +1379,12 @@ pub fn bindings(context: KeyContext) -> &'static [Binding] {
             pane: NotesPane::Note,
             ..
         } => NOTES_NOTE,
+        // `e` on a review row opens the same field a task row opens
+        // anywhere else, so Enter saves the title rather than moving the
+        // review on to its next step.
+        KeyContext::Review {
+            text_field: true, ..
+        } => HOME_RENAMING,
         KeyContext::Review {
             step: ReviewStep::Pile,
             ..

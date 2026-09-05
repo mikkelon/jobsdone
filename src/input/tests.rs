@@ -48,6 +48,10 @@ fn every_context() -> Vec<KeyContext> {
             step: ReviewStep::Surfaced,
             text_field: false,
         },
+        KeyContext::Review {
+            step: ReviewStep::Pile,
+            text_field: true,
+        },
         writing(Field::Adding),
         writing(Field::Renaming),
         field(PopupKind::Palette),
@@ -118,6 +122,49 @@ fn no_context_binds_a_key_twice() {
             }
         }
     }
+}
+
+#[test]
+fn every_key_the_review_panel_offers_is_a_key_of_that_step() {
+    for step in [ReviewStep::Pile, ReviewStep::Surfaced] {
+        let context = KeyContext::Review {
+            step,
+            text_field: false,
+        };
+        for decision in decisions(step) {
+            assert!(
+                bindings(context)
+                    .iter()
+                    .flat_map(|binding| binding.keys)
+                    .any(|key| *key == (decision.key, decision.action)),
+                "the {step:?} panel offers {:?}, which the step does not bind",
+                decision.key
+            );
+        }
+    }
+}
+
+#[test]
+fn a_title_typed_on_a_review_row_saves_with_enter() {
+    let context = KeyContext::Review {
+        step: ReviewStep::Pile,
+        text_field: true,
+    };
+
+    assert!(context.text_field());
+    assert_eq!(
+        action_for(&press(KeyCode::Enter), context),
+        Some(Action::Confirm)
+    );
+    assert_eq!(action_for(&typing('x'), context), Some(Action::Insert('x')));
+    // The step's own Enter would have moved the review on instead.
+    assert_eq!(
+        bindings(context)
+            .iter()
+            .find(|binding| binding.shown == "⏎")
+            .map(|binding| binding.label),
+        Some("save")
+    );
 }
 
 #[test]
