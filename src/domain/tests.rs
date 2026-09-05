@@ -181,6 +181,14 @@ impl World {
     fn surfaced(&self) -> Surfaced {
         surfaced(&self.model, self.today())
     }
+
+    fn pile_again(&self, opened: &Pile) -> Pile {
+        pile_again(&self.model, self.today(), opened)
+    }
+
+    fn surfaced_again(&self, opened: &Surfaced) -> Surfaced {
+        surfaced_again(&self.model, self.today(), opened)
+    }
 }
 
 fn titles(rows: &[Row]) -> Vec<&str> {
@@ -1619,6 +1627,74 @@ fn a_review_with_nothing_in_it_is_empty_on_both_steps() {
 
     assert_eq!(world.pile().total, 0);
     assert!(world.surfaced().is_empty());
+}
+
+#[test]
+fn the_review_keeps_the_pile_it_opened_with() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.add("Send the invoice", day("2026-09-04"));
+    let slides = world.add("Prepare slides", day("2026-09-04"));
+    let chair = world.add("Order new office chair", day("2026-09-01"));
+    let opened = world.pile();
+    assert_eq!(opened.total, 3);
+
+    // Closed on its old day, moved to today, and deleted: three ways off
+    // the pile, and all three rows stay where the review found them.
+    world.must(Command::Close { task: slides });
+    world.must(Command::Move {
+        task: chair,
+        place: day("2026-09-07"),
+    });
+    world.must(Command::DeleteTask {
+        task: world.id("Send the invoice"),
+    });
+    assert_eq!(world.pile().total, 0);
+
+    let again = world.pile_again(&opened);
+    assert_eq!(again.total, 3);
+    assert_eq!(
+        titles(&again.days[0].rows),
+        ["Send the invoice", "Prepare slides"]
+    );
+    assert_eq!(titles(&again.days[1].rows), ["Order new office chair"]);
+    // Every row says what became of the task.
+    assert!(again.days[0].rows[1].closed_at.is_some());
+    assert_eq!(again.days[1].rows[0].place, day("2026-09-07"));
+}
+
+#[test]
+fn the_pile_ages_again_when_the_day_rolls_over_under_the_review() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.add("Order new office chair", day("2026-09-04"));
+    let opened = world.pile();
+    assert_eq!(opened.days[0].age, 3);
+
+    world.clock("2026-09-08T09:00:00");
+
+    assert_eq!(world.pile_again(&opened).days[0].age, 4);
+}
+
+#[test]
+fn the_surfaced_step_keeps_the_rows_it_opened_with() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let ci = world.add("Migrate CI", Place::Backlog);
+    world.must(Command::SetDue {
+        task: ci,
+        date: Some(on("2026-09-05")),
+    });
+    let opened = world.surfaced();
+    assert_eq!(opened.total, 1);
+
+    world.must(Command::Move {
+        task: ci,
+        place: day("2026-09-07"),
+    });
+    assert!(world.surfaced().due.is_empty());
+
+    let again = world.surfaced_again(&opened);
+    assert_eq!(titles(&again.due), ["Migrate CI"]);
+    assert_eq!(again.due[0].place, day("2026-09-07"));
+    assert_eq!(again.total, 1);
 }
 
 // ---- search ----------------------------------------------------------

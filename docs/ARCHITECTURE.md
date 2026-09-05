@@ -197,6 +197,12 @@ adds it here first, the way a new dependency is added to section 2 first.
   `pile`, `surfaced`, `search`, `day_list`, `notes`, `next_dates`,
   `working_day`, and `previous_review`, the lower bound of the reminder
   window.
+- `pile_again(&Model, today, &Pile) -> Pile` and
+  `surfaced_again(&Model, today, &Surfaced) -> Surfaced`: the same two
+  views again, from the value a review opened with rather than from the
+  model. A review keeps the rows it opened with while the tasks in them
+  change under its decisions (DOMAIN.md section 13), so the days and the
+  ids come from the old value and everything else from the model.
 - `Weekday::of(date)` and `Weekday::ALL`, so a card can open on the
   weekday of a day and lay the seven of them out without a second
   mapping of jiff's weekdays or a second idea of where a week starts.

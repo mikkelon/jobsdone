@@ -476,6 +476,12 @@ task ids the review opened with and the decision made for each. It is
 not stored; closing the window mid-review forgets it, and the pile
 itself is the record.
 
+A row the review has decided about has left the pile or the surfaced
+set, and it stays on screen in the day the review found it, drawn as the
+task is now, so the list never moves under the person's hand. That is
+the one place a deleted task is still drawn: the review has to be able
+to say what it did to it, and `u` is on the same line.
+
 ## 14. Search
 
     matches(text) = live tasks whose title contains text, case-insensitive
