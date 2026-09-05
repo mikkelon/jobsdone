@@ -2666,3 +2666,22 @@ fn an_undo_that_no_longer_applies_is_dropped_and_says_so() {
         "the entry that could not be undone is dropped off the stack"
     );
 }
+
+#[test]
+fn j_and_k_reorder_the_backlog_too() {
+    let mut app = started();
+    app.update(Action::PaneRight);
+    add(&mut app, "One");
+    add(&mut app, "Two");
+    let three = add(&mut app, "Three");
+
+    app.update(Action::MoveUp);
+    assert_eq!(titles(&app, List::Backlog), ["One", "Three", "Two"]);
+    assert_eq!(
+        cursor(&app, List::Backlog),
+        Some(three),
+        "the cursor goes with it"
+    );
+    app.update(Action::MoveDown);
+    assert_eq!(titles(&app, List::Backlog), ["One", "Two", "Three"]);
+}

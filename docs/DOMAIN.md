@@ -4,7 +4,7 @@ The model behind PRODUCT.md and DESIGN.md: the entities, their states,
 the commands that change them, the invariants that must hold, and the
 storage schema. The words used here are the words used in the code.
 
-Everything a screen shows is a view of this model. Section 13 walks
+Everything a screen shows is a view of this model. Section 18 walks
 through every wireframe and names the view it is drawn from.
 
 ## 1. Vocabulary
@@ -248,7 +248,7 @@ is sent back to the backlog the date prompts again.
 | remind | `day` none, open, `remind_on` in (previous review date, today]. Once.            |
 
 "Previous review date" is the date of the last review started on a day
-before today (section 11 keeps it). A reminder set for a Saturday is
+before today (section 13 keeps it). A reminder set for a Saturday is
 seen at Monday's review. A reminder set for today, after today's review
 has already started, is not seen at a review at all; its chip in the
 backlog is what shows it. The first review ever has no lower bound.
@@ -458,7 +458,7 @@ Three groups, each computed at the moment the step is shown:
 |---------------------|-----------------------------------------------------------------|
 | Due                 | section 8, due; overdue first, then by `due_on`                 |
 | Reminders           | section 8, remind; waiting ones dimmed                          |
-| Also starting today | live copies with `scheduled_on` = today, shown for information  |
+| Also starting today | live copies on today with `scheduled_on` = today, shown for information |
 
 ### Gate and session
 

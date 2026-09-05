@@ -110,6 +110,11 @@ Conventions, so the map is guessable:
   one uppercase key that is not about the cursor row, which is what makes
   it hard to press by accident.
 - `Enter` confirms, `Escape` backs out one level, `u` undoes.
+- `ctrl-c` quits from wherever the keyboard is, a card or an open field
+  included, and puts the terminal back the way `q` does. It is the one key
+  that is not a row of any table: a terminal program that ignores it reads
+  as hung, and since every change is already written, leaving costs at
+  most the line being typed.
 - After a task is closed, moved or deleted the cursor steps to the next
   row of the group it left, so a list is worked down without moving the
   cursor by hand. Everything else leaves the cursor on the task it acted
@@ -127,10 +132,13 @@ Conventions, so the map is guessable:
 - One collision, and its resolution: in the review `k` is "keep", so the
   cursor moves there with `j` and the arrow keys and `k` does not move it.
   Everywhere else `j` and `k` move.
-- The command palette lists every action with its direct key beside it.
-  Inside the palette you filter and press Enter; the key shown is for next
-  time, outside the palette, so it teaches the map and then stops being
-  needed. Help is the whole map on one overlay. There are no hidden keys.
+- The command palette lists every action with its direct key beside it,
+  in two sections: what the key would do to the row the cursor is on,
+  under that row's own title, and then what it does to the app. A pane
+  with no row under the cursor names the page instead. Inside the palette
+  you filter and press Enter; the key shown is for next time, outside the
+  palette, so it teaches the map and then stops being needed. Help is the
+  whole map on one overlay. There are no hidden keys.
 
 ## 5. The day is home; the review is a mode, not a place
 
@@ -139,7 +147,10 @@ The main screen is today's plan beside the backlog, because the core loop is
 
 The review takes the whole window in two steps: the pile (unfinished tasks
 from past days) and surfaced tasks (due, reminded, and new recurring
-copies). An empty step is skipped; when both are empty the app opens
+copies). Keep is the surfaced step's word, for a dated backlog task that
+is to stay where it is; a pile task leaves the pile only by being closed,
+moved or deleted (PRODUCT.md), so `k` does nothing on the pile and the
+panel there lists what it does. An empty step is skipped; when both are empty the app opens
 straight to Today. The review is never an empty ceremony, and it is never
 shown twice in a day.
 
@@ -149,7 +160,11 @@ decision on the pile can unearth a second step: a task sent back to the
 backlog with a date already passed surfaces, and the count says so.
 
 Beside the list is a panel: the outcomes with their keys, how many rows
-have been answered, and the one thing to press. Under 100 columns the
+have been answered, and the one thing to press. A step whose rows are all
+information, the copies a schedule started this morning, asks nothing, so
+it says what it is instead of counting none of it: "2 starting today,
+nothing to decide", and no progress bar, because there is nothing to be
+part-way through. Under 100 columns the
 panel goes and the list has the window; the hint bar already names every
 key the panel named, and the status line carries the progress. A row
 that has been answered stays where it was, checked and dim, saying what
@@ -171,8 +186,10 @@ back to today and `g` goes straight to a date.
 The header of a day that is not today is the date itself, with "past day"
 or "future day" beside it where today has the word "Today" before the
 date, and its counts are the whole record of the day rather than what is
-left of it: `8 planned · 3 done · 2 open · 3 moved`. The status line says
-how far off the day is and offers the one key home.
+left of it: `8 planned · 3 done · 2 open · 3 moved`. A count of nothing is
+left out, as today's are, and the counts keep two blank cells clear of
+the words on the left, so no header ever reads as one run-together word.
+The status line says how far off the day is and offers the one key home.
 
 A past day shows every task that was planned for it, in three states: closed
 (dim, with the time, in the Done group), still open (marked "on the pile",
@@ -187,6 +204,11 @@ A past day is drawn exactly as it was while it was today: the same four
 groups in the same order, Focus, Plan, Done, Moved, and a group with
 nothing in it is not drawn at all. That is why today rarely shows a Moved
 group and a finished past day rarely shows a Focus one.
+
+The `+ add` line is the pane's own rather than a row of Plan, so a day
+whose tasks are all done or moved keeps the line and loses the label: the
+key that fills the pane is still worth saying, and an empty group is not
+drawn even to carry it.
 
 A future day is the same again, and holds only what has actually been put
 there: tasks moved onto it, and whatever is added to it. The recurring
@@ -233,8 +255,11 @@ day walked to in the calendar, a repeat rule.
 A field on a row is a mode like any other, so its keys are in the hint
 bar rather than beside it: while a title is being typed the bar says what
 Enter does there, "add & keep typing" when adding and "save" when
-renaming. What just happened takes the same line over until the next key,
-which is where the offer of `u` is.
+renaming. A line longer than the field scrolls with the caret rather than
+clipping at its end, so what is being typed is always the part on screen. What just happened takes the same line over until the next key,
+which is where the offer of `u` is. The offer is left off while a field
+has the keyboard, because `u` types there: the bar never names a key the
+line would swallow.
 
 The one deliberate question: editing the title of a recurring copy asks
 whether the change is for this copy or this and future copies, because

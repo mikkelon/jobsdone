@@ -274,6 +274,38 @@ pub struct Binding {
     pub narrow: Bar,
 }
 
+impl Binding {
+    /// Whether the row does something to the row the cursor is on, rather
+    /// than to the page or the program. The command palette is in two
+    /// sections along this line, the row's and the app's (wireframe 11).
+    ///
+    /// `Add` is the app's: it puts a new row in the pane rather than
+    /// touching the one under the cursor. `Confirm` is the row's in every
+    /// page table, where it opens a note, follows a moved task or goes to
+    /// a day.
+    pub fn acts_on_the_row(&self) -> bool {
+        self.keys.first().is_some_and(|(_, action)| {
+            matches!(
+                action,
+                Action::Close
+                    | Action::Focus
+                    | Action::Edit
+                    | Action::Delete
+                    | Action::ToToday
+                    | Action::ToBacklog
+                    | Action::MoveToDay
+                    | Action::DueBy
+                    | Action::RemindOn
+                    | Action::Waiting
+                    | Action::Repeat
+                    | Action::MoveUp
+                    | Action::MoveDown
+                    | Action::Confirm
+            )
+        })
+    }
+}
+
 // ---- the key table ---------------------------------------------------
 //
 // One table per context. The order of the rows is the order of the hint
@@ -488,6 +520,16 @@ const HOME_BACKLOG: &[Binding] = home_table![
     steps: Bar::Off, Bar::Off;
     today: Bar::Off, Bar::Off;
     go_to: Bar::Off, Bar::Off;
+    // The backlog is ordered by hand, like a day, so it reorders by
+    // keyboard, like a day (DOMAIN.md section 4). Ten keys already fill
+    // the bar here, so the palette and the help overlay teach it.
+    Binding {
+        keys: &[("J", Action::MoveDown), ("K", Action::MoveUp)],
+        shown: "J/K",
+        label: "reorder",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
     Binding {
         keys: &[("space", Action::Close)],
         shown: "space",
@@ -860,13 +902,6 @@ const REVIEW_PILE: &[Binding] = &[
         shown: "e",
         label: "edit",
         bar: Bar::Left,
-        narrow: Bar::Off,
-    },
-    Binding {
-        keys: &[("k", Action::Keep)],
-        shown: "k",
-        label: "keep",
-        bar: Bar::Off,
         narrow: Bar::Off,
     },
     Binding {
@@ -1704,6 +1739,12 @@ pub fn action_for(event: &Event, context: KeyContext) -> Option<Action> {
 }
 
 fn key_action(key: &KeyEvent, context: KeyContext) -> Option<Action> {
+    // The one key that belongs to no context: it leaves from wherever the
+    // keyboard is, a card or a field included, and puts the terminal back
+    // (DESIGN.md section 4).
+    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
+        return Some(Action::Quit);
+    }
     if !context.text_field() {
         return bound(context, &key_name(key)?);
     }

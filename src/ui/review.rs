@@ -13,7 +13,7 @@ use super::{
     place_label, plain, row_area, scroll_to, task_row, title_field,
 };
 use crate::app::{App, Decided, Editor, Layout, List, ListArea, Rect as Cells, Review, RowId};
-use crate::domain::Row;
+use crate::domain::{Place, Row};
 use crate::input::{self, Field, ReviewStep};
 
 /// The columns the panel takes, as wireframes 01 and 02 draw it.
@@ -29,7 +29,12 @@ pub(super) fn status(canvas: &mut Canvas, review: &Review, y: u16, narrow: bool)
     // A narrow window has no panel to carry the progress, so the status
     // line does.
     let right = if narrow {
-        vec![(format!("{handled} of {total}"), dim())]
+        let progress = if total == 0 {
+            "nothing to decide".to_owned()
+        } else {
+            format!("{handled} of {total}")
+        };
+        vec![(progress, dim())]
     } else {
         vec![
             (count_of(review), dim()),
@@ -53,6 +58,14 @@ fn count_of(review: &Review) -> String {
     let (_, total) = review.progress();
     match review.step() {
         ReviewStep::Pile => format!("{total} unfinished from past days"),
+        // A step whose rows are all information asks nothing, so it says
+        // what it is rather than counting none of it (DESIGN.md section 5).
+        ReviewStep::Surfaced if total == 0 => {
+            let starting = review
+                .surfaced()
+                .map_or(0, |surfaced| surfaced.also_starting_today.len());
+            format!("{starting} starting today, nothing to decide")
+        }
         ReviewStep::Surfaced => format!("{total} surfaced today"),
     }
 }
@@ -190,8 +203,13 @@ fn note_of(answered: Option<Decided>, row: &Row, today: Date, starting: bool) ->
         None => {}
     }
     if starting {
-        // Nothing is asked of these: the app is saying what it did.
-        return "on today's plan".to_owned();
+        // Nothing is asked of these: the app is saying where the copy it
+        // made this morning is. It says it from the row rather than from
+        // the group, so it cannot claim a plan the task is not on.
+        return match row.place {
+            Place::Day(day) if day == today => "on today's plan".to_owned(),
+            place => format!("now in {}", place_label(place, today)),
+        };
     }
     // The day this task was a must-do for has passed.
     if row.focus {
@@ -298,8 +316,14 @@ fn panel(canvas: &mut Canvas, review: &Review, column: Column) {
         ReviewStep::Surfaced => "decided",
     };
     let y = top + outcomes.len() as u16 + 1;
-    canvas.put(x + 2, y, &format!("{handled} of {total} {said}"), dim());
-    bar(canvas, x + 2, y + 1, width - 4, handled, total);
+    if total == 0 {
+        // Nothing was asked, so there is nothing to be part-way through:
+        // a full bar over a total of none read as a step already done.
+        canvas.put(x + 2, y, "Nothing to decide here.", dim());
+    } else {
+        canvas.put(x + 2, y, &format!("{handled} of {total} {said}"), dim());
+        bar(canvas, x + 2, y + 1, width - 4, handled, total);
+    }
 
     if review.step() == ReviewStep::Pile {
         let moves = input::bindings(KEYS_OF_THE_PILE)
@@ -324,7 +348,7 @@ const KEYS_OF_THE_PILE: crate::input::KeyContext = crate::input::KeyContext::Rev
 /// How much of the step is answered, as a bar of `w` cells.
 fn bar(canvas: &mut Canvas, x: u16, y: u16, w: u16, handled: usize, total: usize) {
     let full = if total == 0 {
-        w
+        0
     } else {
         // Rounded, so that one row of seven is a tenth of the bar rather
         // than nothing at all.

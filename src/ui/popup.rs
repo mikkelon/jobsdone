@@ -56,13 +56,11 @@ fn divide(canvas: &mut Canvas, x: u16, y: u16, width: u16) {
 }
 
 /// `:  wa▏`, with the caret where the next character goes.
-fn input(canvas: &mut Canvas, x: u16, y: u16, prompt: &str, popup: &Popup) {
+fn input(canvas: &mut Canvas, x: u16, y: u16, width: u16, prompt: &str, popup: &Popup) {
     canvas.put(x + 2, y, prompt, bold());
-    let typed: String = popup.text.chars().take(popup.caret).collect();
-    let rest: String = popup.text.chars().skip(popup.caret).collect();
-    let at = canvas.put(x + 5, y, &typed, plain());
-    let at = canvas.put(at, y, "▏", bold());
-    canvas.put(at, y, &rest, plain());
+    // From under the prompt to the box's other side.
+    let room = width.saturating_sub(7);
+    super::caret_line(canvas, x + 5, y, room, &popup.text, popup.caret);
 }
 
 /// A footer of key-and-label pairs, in the accent so a key never looks
@@ -97,25 +95,55 @@ const PALETTE_WIDTH: u16 = 60;
 fn palette(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     let commands = app.palette_rows();
     let width = PALETTE_WIDTH.min(canvas.width().saturating_sub(4));
-    // Two borders, the input, its rule, the group label, the footer's
-    // rule, and the footer.
-    let around = 7;
+
+    // Two sections, as wireframe 11 draws them: what a key would do to the
+    // row the cursor is on, then what it does to the app. The rows come
+    // in that order, so the headings fall where the kind changes.
+    let mut lines: Vec<Command> = Vec::new();
+    let mut section = None;
+    for command in &commands {
+        let on_row = command.acts_on_the_row();
+        if section != Some(on_row) {
+            if section.is_some() {
+                lines.push(Command::Blank);
+            }
+            lines.push(Command::Heading(if on_row {
+                about_the_row(app)
+            } else {
+                "APP".to_owned()
+            }));
+            section = Some(on_row);
+        }
+        lines.push(Command::Row(command));
+    }
+
+    // Two borders, the input, its rule, the footer's rule, and the footer.
+    let around = 6;
     let room = (rows.bottom - rows.top + 1).saturating_sub(around) as usize;
-    let shown = commands.len().min(room);
+    let shown = lines.len().min(room);
     let height = shown as u16 + around;
     let (x, y) = place(canvas, rows, width, height);
 
     frame(canvas, x, y, width, height);
-    input(canvas, x, y + 1, ":", popup);
+    input(canvas, x, y + 1, width, ":", popup);
     divide(canvas, x, y + 2, width);
-    canvas.put(x + 2, y + 3, input::name(app.page_context()), dim());
 
-    for (at, command) in commands.iter().take(shown).enumerate() {
-        let row = y + 4 + at as u16;
-        canvas.put(x + 2, row, &sentence(command.label), plain());
-        canvas.rput(x + width - 2, row, command.shown, accent());
-        if at == popup.selected {
-            canvas.restyle(x + 1, row, width - 2, cursor());
+    let mut command_at = 0;
+    for (at, line) in lines.iter().take(shown).enumerate() {
+        let row = y + 3 + at as u16;
+        match line {
+            Command::Blank => {}
+            Command::Heading(text) => {
+                canvas.put(x + 2, row, super::clip(text, width - 4), dim());
+            }
+            Command::Row(command) => {
+                canvas.put(x + 2, row, &sentence(command.label), plain());
+                canvas.rput(x + width - 2, row, command.shown, accent());
+                if command_at == popup.selected {
+                    canvas.restyle(x + 1, row, width - 2, cursor());
+                }
+                command_at += 1;
+            }
         }
     }
 
@@ -131,6 +159,33 @@ fn palette(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
             ("esc", "close · the key on the right is for next time"),
         ],
     );
+}
+
+/// One drawn line of the palette.
+enum Command<'a> {
+    Heading(String),
+    Row(&'a Binding),
+    Blank,
+}
+
+/// What the palette's first section is about: the row the cursor is on,
+/// which is what a key in that section would act on. A pane with no row
+/// under the cursor falls back to the name the hint bar gives the page.
+fn about_the_row(app: &App) -> String {
+    let title = match app.cursor(app.focused()) {
+        Some(RowId::Task(id)) => app.model().task(id).map(|task| task.title.clone()),
+        Some(RowId::Schedule(id)) => app.model().schedule(id).map(|it| it.title.clone()),
+        Some(RowId::Note(id)) => app
+            .model()
+            .note(id)
+            .map(|note| note.body.lines().next().unwrap_or_default().to_owned()),
+        Some(RowId::Day(day)) => Some(day_label(day)),
+        None => None,
+    };
+    match title {
+        Some(title) => format!("FOR \"{}\"", title.to_uppercase()),
+        None => input::name(app.page_context()).to_owned(),
+    }
 }
 
 /// A label the hint bar writes in lower case reads as a command with a
@@ -175,11 +230,11 @@ fn search(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     let (x, y) = place(canvas, rows, width, height);
 
     frame(canvas, x, y, width, height);
-    input(canvas, x, y + 1, "/", popup);
+    input(canvas, x, y + 1, width, "/", popup);
     canvas.rput(
         x + width - 2,
         y + 1,
-        &format!("{} matches", results.total),
+        &super::counted(results.total, "match", "matches"),
         dim(),
     );
     divide(canvas, x, y + 2, width);
@@ -388,12 +443,10 @@ fn date_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     }
 
     // What has been typed, and the day it and the calendar agree on.
-    let typed: String = popup.text.chars().take(popup.caret).collect();
-    let rest: String = popup.text.chars().skip(popup.caret).collect();
-    let at = canvas.put(x + 3, y + 2, &typed, plain());
-    let at = canvas.put(at, y + 2, "▏", bold());
-    canvas.put(at, y + 2, &rest, plain());
-    canvas.rput(x + width - 2, y + 2, &day_label(draft.on), dim());
+    let day = day_label(draft.on);
+    let room = width.saturating_sub(6 + count(&day));
+    super::caret_line(canvas, x + 3, y + 2, room, &popup.text, popup.caret);
+    canvas.rput(x + width - 2, y + 2, &day, dim());
 
     for (at, choice) in choices.iter().enumerate() {
         let row = y + 4 + at as u16;
@@ -565,8 +618,13 @@ fn repeat_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
         .iter()
         .map(|date| day_label(*date))
         .collect();
-    let next = if preview.is_empty() {
-        "Next: nothing; a repeat with no day never comes round".to_owned()
+    let next = if shapes.get(popup.selected) == Some(&Action::StopRepeat) {
+        // The one row that ends a schedule rather than describing one, so
+        // it has no next date to preview and says what stopping does
+        // instead (DOMAIN.md section 10).
+        "No new copies; the ones already made stay.".to_owned()
+    } else if preview.is_empty() {
+        "Next: nothing; this rule falls on no day.".to_owned()
     } else {
         format!("Next: {}", preview.join(" · "))
     };
@@ -627,7 +685,8 @@ fn shape_of(
             canvas.rput(right.saturating_sub(10), y, &format!("[ {day} ]"), bold());
         }
         Action::EveryFewWeeks => {
-            let from = format!("weeks from {}", day_label(draft.from));
+            let unit = if draft.weeks == 1 { "week" } else { "weeks" };
+            let from = format!("{unit} from {}", day_label(draft.from));
             canvas.rput(right, y, &from, dim());
             canvas.rput(
                 right.saturating_sub(count(&from) + 1),

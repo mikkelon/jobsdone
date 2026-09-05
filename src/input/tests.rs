@@ -350,14 +350,14 @@ fn a_text_field_has_the_editing_keys_without_the_key_table() {
 fn a_control_key_is_not_a_key_this_program_has() {
     assert_eq!(
         action_for(
-            &press_with(KeyCode::Char('c'), KeyModifiers::CONTROL),
+            &press_with(KeyCode::Char('t'), KeyModifiers::CONTROL),
             home(Pane::Day)
         ),
         None
     );
     assert_eq!(
         action_for(
-            &press_with(KeyCode::Char('c'), KeyModifiers::CONTROL),
+            &press_with(KeyCode::Char('t'), KeyModifiers::CONTROL),
             field(PopupKind::Search)
         ),
         None,
@@ -514,4 +514,51 @@ fn the_copy_question_has_a_key_for_each_answer_and_no_default() {
         None,
         "there is no answer safe enough to be the one Enter picks"
     );
+}
+
+/// The backlog is ordered by hand, so the keys that reorder a day reorder
+/// it too: dragging a row was the only way (F2).
+#[test]
+fn the_backlog_reorders_by_keyboard_as_a_day_does() {
+    assert_eq!(
+        action_for(&typing('J'), home(Pane::Backlog)),
+        Some(Action::MoveDown)
+    );
+    assert_eq!(
+        action_for(&typing('K'), home(Pane::Backlog)),
+        Some(Action::MoveUp)
+    );
+}
+
+/// Ctrl-C belongs to no context: it left the program running everywhere,
+/// including on the home list where `q` quits (F4).
+#[test]
+fn ctrl_c_quits_from_every_context() {
+    for context in every_context() {
+        assert_eq!(
+            action_for(
+                &press_with(KeyCode::Char('c'), KeyModifiers::CONTROL),
+                context
+            ),
+            Some(Action::Quit),
+            "{context:?}"
+        );
+    }
+}
+
+/// A pile task leaves the pile only by being closed, moved or deleted
+/// (PRODUCT.md), and the panel there lists exactly those. `k` marked a
+/// pile row kept and stepped on, which the panel never offered.
+#[test]
+fn keep_is_the_surfaced_steps_word_and_not_the_piles() {
+    let pile = KeyContext::Review {
+        step: ReviewStep::Pile,
+        text_field: false,
+    };
+    let surfaced = KeyContext::Review {
+        step: ReviewStep::Surfaced,
+        text_field: false,
+    };
+    assert_eq!(action_for(&typing('k'), pile), None);
+    assert_eq!(action_for(&typing('k'), surfaced), Some(Action::Keep));
 }

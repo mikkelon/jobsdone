@@ -9,7 +9,7 @@ use ratatui::{Terminal, TerminalOptions, Viewport};
 
 use crate::app::App;
 use crate::domain::tests::MemStore;
-use crate::domain::{FromPlace, Model, Note, Placement, Schedule, Task, Weekday};
+use crate::domain::{DueChip, FromPlace, Model, Note, Placement, Schedule, Task, Weekday};
 use crate::input::Action;
 
 /// The wireframes are the source of truth for the layout, so the test is a
@@ -389,6 +389,123 @@ fn app() -> App {
     App::new(Box::new(MemStore::holding(wireframe_model())), &at(NOW)).expect("an app")
 }
 
+/// A window holding the rows that carry the most: a task that left today
+/// for the backlog while waiting, due, reminded and repeating, so its
+/// pointer in the Moved group and its backlog row both run out of line,
+/// and a closed task that was focus, so the Done group carries a word and
+/// a time as well.
+fn crowded_model() -> Model {
+    let today = on("2025-09-05");
+    let mut model = Model::empty();
+    model.schedules.insert(
+        1,
+        Schedule {
+            id: 1,
+            title: "Task".to_owned(),
+            rule: Rule::Workdays,
+            generated_through: today,
+            stopped_on: None,
+            created_at: at(NOW),
+        },
+    );
+    model.tasks.insert(
+        1,
+        Task {
+            waiting: true,
+            due_on: Some(on("2025-09-03")),
+            remind_on: Some(on("2025-09-06")),
+            schedule_id: Some(1),
+            scheduled_on: Some(today),
+            ..task(1, "Task", None, 0)
+        },
+    );
+    model.tasks.insert(
+        2,
+        Task {
+            focus: true,
+            closed_at: Some(at("2025-09-05T09:05:00+02:00[Europe/Copenhagen]")),
+            ..task(2, "Send the contract draft", Some(today), 0)
+        },
+    );
+    model.placements.insert(
+        (1, today),
+        Placement {
+            task_id: 1,
+            day: today,
+            placed_at: at(NOW),
+            from_place: FromPlace::New,
+        },
+    );
+    model.placements.insert(
+        (2, today),
+        Placement {
+            task_id: 2,
+            day: today,
+            placed_at: at(NOW),
+            from_place: FromPlace::Backlog,
+        },
+    );
+    model
+}
+
+fn crowded() -> App {
+    let mut app = App::new(Box::new(MemStore::holding(crowded_model())), &at(NOW)).expect("an app");
+    // The repeat starting today opens the review; the rows this window is
+    // for are the ones behind it.
+    app.update(Action::Cancel);
+    app
+}
+
+/// A row carrying every chip at once, more than any one task can really
+/// be: waiting and on a past day are exclusive, but the drawing may not
+/// depend on that.
+fn every_chip() -> domain::Row {
+    domain::Row {
+        task: 1,
+        title: "Write the Q4 planning doc".to_owned(),
+        place: Place::Backlog,
+        closed_at: Some(at("2025-09-05T09:05:00+02:00[Europe/Copenhagen]")),
+        focus: true,
+        waiting: true,
+        due: Some(DueChip {
+            on: on("2025-08-30"),
+            overdue: true,
+        }),
+        remind: Some(on("2025-09-12")),
+        repeat: Some(Rule::Weekly {
+            weekdays: vec![Weekday::Mon, Weekday::Thu],
+        }),
+        was_focus: true,
+        on_the_pile: true,
+        from_backlog: true,
+        closed_on_this_day: true,
+    }
+}
+
+/// Draws one row on a canvas of its own, which is how a width the panes
+/// never hand a row is still put to it.
+fn one_row(width: u16, row: &domain::Row, look: Look) -> String {
+    let area = Rect::new(0, 0, width, 1);
+    let mut buffer = Buffer::empty(area);
+    let mut canvas = Canvas {
+        buffer: &mut buffer,
+        area,
+    };
+    task_row(
+        &mut canvas,
+        Column {
+            x: 0,
+            width,
+            top: 0,
+            bottom: 0,
+        },
+        0,
+        row,
+        look,
+    );
+    lines(&buffer).remove(0)
+}
+
 /// Renders and answers the screen as lines, trailing blanks trimmed the
 /// way the wireframe files trim them, and the layout `draw` reported.
 fn screen(app: &App, width: u16, height: u16) -> (Vec<String>, Layout) {
@@ -403,6 +520,29 @@ fn screen(app: &App, width: u16, height: u16) -> (Vec<String>, Layout) {
 /// The same, for a test that only looks at what was drawn.
 fn look(app: &App, width: u16, height: u16) -> Vec<String> {
     screen(app, width, height).0
+}
+
+/// The screen with the cell a double-width character owns beside it
+/// folded back into the character, so a row reads as the text it is. A
+/// character drawn a cell narrower than it is loses its neighbour here.
+fn glyphs(app: &App, width: u16, height: u16) -> Vec<String> {
+    let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("a test terminal");
+    terminal
+        .draw(|frame| _ = draw(app, frame))
+        .expect("a frame");
+    let buffer = terminal.backend().buffer();
+    (0..height)
+        .map(|y| {
+            let mut row = String::new();
+            let mut x = 0;
+            while x < width {
+                let symbol = buffer[(x, y)].symbol();
+                row.push_str(symbol);
+                x += count(symbol).max(1);
+            }
+            row.trim_end().to_owned()
+        })
+        .collect()
 }
 
 fn lines(buffer: &Buffer) -> Vec<String> {
@@ -993,11 +1133,12 @@ fn the_add_line_becomes_the_field_that_is_typed_into() {
     }
     let drawn = look(&app, 120, 36);
 
-    assert!(drawn[5].starts_with(" PLAN ────"));
+    // Nothing is planned yet, so no group label stands over the field:
+    // the add line is the pane's own (DESIGN.md section 6).
     assert!(
-        drawn[6].contains("+  Call the landlord about the leak▏"),
+        drawn[5].contains("+  Call the landlord about the leak▏"),
         "the field is where the add line was: {:?}",
-        drawn[6]
+        drawn[5]
     );
     assert!(
         drawn[34].contains("⏎ add & keep typing"),
@@ -1304,25 +1445,105 @@ fn a_window_too_small_for_the_frame_draws_nothing_rather_than_panicking() {
 
 #[test]
 fn no_size_the_window_can_take_makes_the_drawing_panic() {
-    let mut app = app();
-    for action in [
-        Action::Tick,
-        Action::Commands,
-        Action::Help,
-        Action::Search,
-        Action::MoveToDay,
-        Action::DueBy,
-        Action::Repeat,
-        Action::Add,
+    for mut app in [app(), crowded()] {
+        for action in [
+            Action::Tick,
+            Action::Commands,
+            Action::Help,
+            Action::Search,
+            Action::MoveToDay,
+            Action::DueBy,
+            Action::Repeat,
+            Action::Add,
+        ] {
+            app.update(action);
+            for width in [1, 2, 23, 24, 25, 40, 99, 100, 101, 120, 200] {
+                for height in [1, 2, 8, 9, 10, 12, 36, 48, 90] {
+                    look(&app, width, height);
+                }
+            }
+            app.update(Action::Cancel);
+        }
+    }
+}
+
+/// Every width a row can be drawn at, with more on its right than any
+/// pane would ever hand it. The panes only ever ask for a few of these,
+/// and the one that panicked was among them (F1).
+#[test]
+fn no_width_a_crowded_row_can_take_makes_the_drawing_panic() {
+    let row = every_chip();
+    for kind in [
+        Kind::Open,
+        Kind::Done,
+        Kind::Waiting,
+        Kind::Moved,
+        Kind::Handled,
     ] {
-        app.update(action);
-        for width in [1, 2, 23, 24, 25, 40, 99, 100, 101, 120, 200] {
-            for height in [1, 2, 8, 9, 10, 12, 36, 48, 90] {
-                look(&app, width, height);
+        for narrow in [false, true] {
+            for note in [None, Some("→ backlog")] {
+                for width in 1..=200 {
+                    one_row(
+                        width,
+                        &row,
+                        Look {
+                            kind,
+                            today: on("2025-09-05"),
+                            narrow,
+                            moving: false,
+                            note,
+                        },
+                    );
+                }
             }
         }
-        app.update(Action::Cancel);
     }
+}
+
+/// The chips give way, not the row: whatever else it carries, a row keeps
+/// its box and the start of its title, because that is all there is to
+/// tell it from any other row (F1, F7).
+#[test]
+fn a_crowded_row_keeps_its_box_and_the_start_of_its_title() {
+    let row = every_chip();
+    for width in 14..=200 {
+        let drawn = one_row(
+            width,
+            &row,
+            Look {
+                kind: Kind::Moved,
+                today: on("2025-09-05"),
+                narrow: false,
+                moving: false,
+                note: None,
+            },
+        );
+        assert!(
+            drawn.starts_with(" [\u{2192}] Write"),
+            "at {width} columns: {drawn:?}"
+        );
+    }
+}
+
+/// The row the acceptance test crashed on: a task moved to the backlog
+/// while waiting, due and reminded, whose pointer in the Moved group had
+/// eaten its own title (F7).
+#[test]
+fn a_moved_row_keeps_its_pointer_its_title_and_its_margin() {
+    let drawn = look(&crowded(), 120, 36);
+    let moved = drawn
+        .iter()
+        .find(|row| row.contains("\u{2192}]"))
+        .expect("the moved row");
+
+    assert!(
+        moved.starts_with(" [\u{2192}] Task"),
+        "the margin, the pointer and the title: {moved:?}"
+    );
+    assert!(
+        moved.contains("[w]") && moved.contains("[due]") && moved.contains("[\u{25f7}]"),
+        "and every chip, as its mark: {moved:?}"
+    );
 }
 
 #[test]
@@ -1498,4 +1719,295 @@ fn a_pane_longer_than_the_window_follows_the_cursor() {
         bottom.iter().any(|line| line.ends_with("Task 13")),
         "the window has moved down by exactly what it had to"
     );
+}
+
+#[test]
+fn a_title_of_wide_characters_keeps_every_character_and_its_chips() {
+    let mut model = Model::empty();
+    model.tasks.insert(
+        1,
+        Task {
+            due_on: Some(on("2025-09-30")),
+            ..task(1, "日本語 🙂 の報告", None, 0)
+        },
+    );
+    let app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+
+    let row = glyphs(&app, 120, 36)
+        .into_iter()
+        .find(|row| row.contains("[due 30 Sep]"))
+        .expect("the backlog row");
+
+    assert!(row.contains("[ ] 日本語 🙂 の報告"), "{row:?}");
+    assert!(
+        row.ends_with("[due 30 Sep]"),
+        "and the chip is where it was: {row:?}"
+    );
+}
+
+#[test]
+fn a_note_of_wide_characters_wraps_and_puts_its_caret_by_cells() {
+    let mut model = Model::empty();
+    model.notes.insert(
+        1,
+        Note {
+            id: 1,
+            body: "日本語です".to_owned(),
+            created_at: at(NOW),
+            updated_at: at(NOW),
+            deleted_at: None,
+        },
+    );
+    let mut app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+    app.update(Action::NotesPage);
+    app.update(Action::Confirm);
+    // Into the body, and back two characters, which is four cells.
+    app.update(Action::LineEnd);
+    app.update(Action::Left);
+    app.update(Action::Left);
+
+    let row = glyphs(&app, 120, 36)
+        .into_iter()
+        .find(|row| row.contains("日本語"))
+        .expect("the body");
+
+    assert!(row.contains("日本語▏です"), "{row:?}");
+}
+
+#[test]
+fn a_field_of_wide_characters_puts_its_caret_where_the_cells_end() {
+    let mut app = empty();
+    app.update(Action::Add);
+    for glyph in "日本🙂語".chars() {
+        app.update(Action::Insert(glyph));
+    }
+    app.update(Action::Left);
+
+    let row = glyphs(&app, 120, 36)
+        .into_iter()
+        .find(|row| row.contains('▏'))
+        .expect("the field");
+
+    assert!(row.contains("日本🙂▏語"), "{row:?}");
+}
+
+#[test]
+fn a_day_header_keeps_its_counts_clear_of_its_label() {
+    let mut model = Model::empty();
+    let tomorrow = on("2025-09-06");
+    model.tasks.insert(1, task(1, "Task", Some(tomorrow), 0));
+    model.placements.insert(
+        (1, tomorrow),
+        Placement {
+            task_id: 1,
+            day: tomorrow,
+            placed_at: at(NOW),
+            from_place: FromPlace::New,
+        },
+    );
+    let mut app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+    app.update(Action::NextDay);
+
+    let header: Vec<char> = look(&app, 120, 36).remove(3).chars().collect();
+    let pane: String = header[..59].iter().collect();
+    assert_eq!(
+        pane.trim_end(),
+        " Sat 6 Sep future day                   1 planned · 1 open",
+        "the label, blank cells between, and only the counts there are"
+    );
+}
+
+/// The row that ends a schedule has no next date to preview, and said so
+/// with the sentence for a rule that falls on no day, clipped mid-word
+/// (F11).
+#[test]
+fn stopping_a_repeat_says_what_stopping_does() {
+    let mut app = app();
+    app.update(Action::Repeat);
+    app.update(Action::StopRepeat);
+
+    for width in [120, 80] {
+        let text = look(&app, width, 36).join("\n");
+        assert!(
+            text.contains("No new copies; the ones already made stay."),
+            "at {width} columns, in full:\n{text}"
+        );
+    }
+}
+
+/// One of anything is one, not one of several: the search count said
+/// `1 matches` (F12), and a repeat every one week said `every 1 weeks`.
+#[test]
+fn a_count_of_one_puts_its_noun_in_the_singular() {
+    let mut app = app();
+    app.update(Action::Search);
+    for typed in "Renew passport".chars() {
+        app.update(Action::Insert(typed));
+    }
+    let text = look(&app, 120, 36).join("\n");
+    assert!(text.contains("1 match"), "{text}");
+    assert!(!text.contains("1 matches"), "{text}");
+
+    app.update(Action::Cancel);
+    app.update(Action::Repeat);
+    app.update(Action::EveryFewWeeks);
+    app.update(Action::Left);
+    let text = look(&app, 120, 36).join("\n");
+    assert!(text.contains("[ 1 ] week from"), "{text}");
+
+    // And a count of none keeps the plural.
+    let empty = look(&empty(), 120, 36).join("\n");
+    assert!(empty.contains("0 notes"), "{empty}");
+}
+
+/// A title longer than the row showed its beginning while the caret was
+/// off the end of the line, so the person could not see what they typed.
+#[test]
+fn a_field_longer_than_its_line_scrolls_to_keep_the_caret_on_it() {
+    let mut app = empty();
+    app.update(Action::Add);
+    for typed in "The quick brown fox jumps over the lazy dog and keeps on going END".chars() {
+        app.update(Action::Insert(typed));
+    }
+
+    let field = look(&app, 120, 36)
+        .into_iter()
+        .find(|row| row.contains('▏'))
+        .expect("the add field");
+    assert!(field.contains("going END▏"), "the end of it: {field:?}");
+    assert!(!field.contains("The quick"), "and not the start: {field:?}");
+
+    // Back to the beginning, and the line comes with it.
+    app.update(Action::LineStart);
+    let field = look(&app, 120, 36)
+        .into_iter()
+        .find(|row| row.contains('▏'))
+        .expect("the add field");
+    assert!(field.contains("▏The quick brown fox"), "{field:?}");
+}
+
+/// An empty group is not drawn, and the add line is not a row of Plan:
+/// a day whose tasks were all done still had a PLAN label over nothing
+/// but the add line (F9).
+#[test]
+fn a_day_with_nothing_left_open_keeps_the_add_line_and_loses_the_label() {
+    let mut app = empty();
+    app.update(Action::Add);
+    for typed in "Task".chars() {
+        app.update(Action::Insert(typed));
+    }
+    app.update(Action::Confirm);
+    app.update(Action::Cancel);
+    app.update(Action::Close);
+
+    let drawn = look(&app, 120, 36);
+    let text: String = drawn
+        .iter()
+        .map(|row| row.chars().take(59).collect::<String>())
+        .collect::<Vec<_>>()
+        .join("\n");
+    assert!(
+        text.contains(" +  add a task"),
+        "the key that fills it: {text}"
+    );
+    assert!(!text.contains("PLAN"), "and no group over nothing: {text}");
+    assert!(
+        text.contains("DONE 1"),
+        "the group that has something: {text}"
+    );
+}
+
+/// Wireframe 11 groups the palette by what a key acts on, and the row's
+/// own title is what says which row that is: the program had one section
+/// under the page's name (F10).
+#[test]
+fn the_palette_names_the_row_it_is_about_and_the_app_apart() {
+    let mut app = app();
+    app.update(Action::Commands);
+    let drawn = look(&app, 120, 36);
+    let text = drawn.join("\n");
+
+    assert!(text.contains("FOR \"SHIP INVOICE EXPORT\""), "{text}");
+    assert!(text.contains("APP"), "{text}");
+    let for_the_row = drawn.iter().position(|row| row.contains("FOR \""));
+    let for_the_app = drawn.iter().position(|row| row.contains(" APP "));
+    assert!(for_the_row < for_the_app, "the row's section comes first");
+
+    // Filtering keeps the heading of whichever section still has a row.
+    for typed in "dele".chars() {
+        app.update(Action::Insert(typed));
+    }
+    let text = look(&app, 120, 36).join("\n");
+    assert!(text.contains("FOR \"SHIP INVOICE EXPORT\""), "{text}");
+    assert!(text.contains("Delete"), "{text}");
+    assert!(
+        !text.contains("APP"),
+        "and drops the one that has none: {text}"
+    );
+}
+
+/// A surfaced step whose only rows are today's copies asks nothing, and
+/// said `0 surfaced today` and `0 of 0 decided` under a full bar.
+#[test]
+fn a_step_with_nothing_to_decide_says_so_and_draws_no_bar() {
+    let today = on("2025-09-05");
+    let mut model = Model::empty();
+    model.schedules.insert(
+        1,
+        Schedule {
+            id: 1,
+            title: "Write standup notes".to_owned(),
+            rule: Rule::Workdays,
+            generated_through: today,
+            stopped_on: None,
+            created_at: at(NOW),
+        },
+    );
+    model.tasks.insert(
+        1,
+        Task {
+            schedule_id: Some(1),
+            scheduled_on: Some(today),
+            ..task(1, "Write standup notes", Some(today), 0)
+        },
+    );
+    let app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+
+    let text = look(&app, 120, 36).join("\n");
+    assert!(text.contains("ALSO STARTING TODAY 1"), "{text}");
+    assert!(
+        text.contains("1 starting today, nothing to decide"),
+        "{text}"
+    );
+    assert!(text.contains("Nothing to decide here."), "{text}");
+    assert!(!text.contains("of 0 decided"), "{text}");
+    assert!(
+        !text.contains('█'),
+        "and no bar over a total of none: {text}"
+    );
+}
+
+/// Adding leaves the field open after Enter, and the hint bar went on
+/// offering `u undo` for the task just added, where `u` types a letter.
+#[test]
+fn the_hint_bar_does_not_offer_a_key_the_open_field_would_type() {
+    let mut app = empty();
+    app.update(Action::Add);
+    for typed in "Task".chars() {
+        app.update(Action::Insert(typed));
+    }
+    app.update(Action::Confirm);
+
+    let bar = look(&app, 120, 36).remove(34);
+    assert!(
+        bar.contains("Added \"Task\""),
+        "what just happened: {bar:?}"
+    );
+    assert!(!bar.contains("undo"), "and no key the field types: {bar:?}");
+
+    // Out of the field, and the offer is there again.
+    app.update(Action::Cancel);
+    app.update(Action::Close);
+    let bar = look(&app, 120, 36).remove(34);
+    assert!(bar.contains("u  undo"), "{bar:?}");
 }

@@ -2322,3 +2322,29 @@ fn every_n_weeks_counts_from_a_start_that_may_be_ahead() {
     };
     assert_eq!(dates(&rare, "2026-09-07", 2), ["2027-09-03", "2028-09-01"]);
 }
+
+/// The day a schedule is created there is no copy yet: the task it was
+/// created from is where it always was, and the review saying "also
+/// starting today" of a backlog task said it was on the plan (F3).
+#[test]
+fn creating_a_schedule_starts_nothing_on_today_by_itself() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let backlog = world.add("Clean out the garage", Place::Backlog);
+    world.must(Command::CreateSchedule {
+        task: backlog,
+        rule: Rule::Daily,
+    });
+
+    assert!(
+        world.surfaced().also_starting_today.is_empty(),
+        "the task is in the backlog, and no copy has been made"
+    );
+
+    // The copy generation makes the next morning is the thing to say.
+    world.clock("2026-09-08T09:00:00");
+    world.generate();
+    assert_eq!(
+        titles(&world.surfaced().also_starting_today),
+        ["Clean out the garage"]
+    );
+}

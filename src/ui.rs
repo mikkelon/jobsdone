@@ -15,6 +15,7 @@ use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::app::{App, Editor, Layout, List, ListArea, Page, Rect as Cells, RowArea, RowId};
 use crate::domain::{
@@ -96,10 +97,18 @@ impl Canvas<'_> {
 
     /// Writes `text` at `x`, and answers where the text ended, whether or
     /// not the edge of the area cut it short.
+    ///
+    /// A character is as many cells wide as the terminal will give it, so
+    /// a double-width one takes the cell beside it too and a combining
+    /// mark takes none at all.
     fn put(&mut self, x: u16, y: u16, text: &str, style: Style) -> u16 {
         let mut at = x;
         for symbol in text.chars() {
-            if at >= self.width() || y >= self.height() {
+            let width = cells(symbol);
+            if width == 0 {
+                continue;
+            }
+            if y >= self.height() || at.saturating_add(width) > self.width() {
                 break;
             }
             let position = Position::new(self.area.x + at, self.area.y + y);
@@ -108,7 +117,16 @@ impl Canvas<'_> {
                 cell.set_char(symbol);
                 cell.set_style(style);
             }
-            at = at.saturating_add(1);
+            // The cells a wide character covers are cleared and never
+            // written to, which is what ratatui's diff reads as "the one
+            // beside it owns this".
+            for beside in at + 1..at + width {
+                let position = Position::new(self.area.x + beside, self.area.y + y);
+                if let Some(cell) = self.buffer.cell_mut(position) {
+                    cell.reset();
+                }
+            }
+            at = at.saturating_add(width);
         }
         x.saturating_add(count(text))
     }
@@ -158,10 +176,23 @@ impl Canvas<'_> {
     }
 }
 
-/// How many cells a string takes. Every glyph the app draws is one cell
-/// wide.
+/// A count and the noun it counts, in the number the count puts it in.
+/// The plural is written out, because English does not always make one by
+/// adding an s.
+fn counted(n: usize, one: &str, many: &str) -> String {
+    format!("{n} {}", if n == 1 { one } else { many })
+}
+
+/// How many cells a string takes, which is not how many characters it
+/// has: a CJK character or an emoji takes two, a combining mark none.
 fn count(text: &str) -> u16 {
-    text.chars().count() as u16
+    UnicodeWidthStr::width(text) as u16
+}
+
+/// The same for one character, which is how a string is walked a cell at
+/// a time.
+fn cells(glyph: char) -> u16 {
+    UnicodeWidthChar::width(glyph).unwrap_or(0) as u16
 }
 
 // ---- dates, rules and places, as words -------------------------------
@@ -241,7 +272,7 @@ fn rule_label(rule: &Rule) -> String {
             MonthDay::Day(day) => format!("{day}{} of the month", ordinal(*day)),
             MonthDay::Last => "last of the month".to_owned(),
         },
-        Rule::EveryNWeeks { n, .. } => format!("every {n} weeks"),
+        Rule::EveryNWeeks { n, .. } => format!("every {}", counted(*n as usize, "week", "weeks")),
     }
 }
 
@@ -253,7 +284,6 @@ fn schedule_label(rule: &Rule) -> String {
         Rule::Weekly { weekdays } if weekdays.len() == 1 => {
             format!("every {}", weekday_word(weekdays[0]))
         }
-        Rule::EveryNWeeks { n, .. } if *n == 1 => "every week".to_owned(),
         other => rule_label(other),
     }
 }
@@ -371,7 +401,7 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
         (format!("Today · {}", day_label(app.today())), bold())
     };
     let count = app.notes().count;
-    let notes = format!("{count} note{}", if count == 1 { "" } else { "s" });
+    let notes = counted(count, "note", "notes");
     // A day that is not today says how far off it is and how to come
     // back, which leaves the right end no room for its own words.
     let short = vec![
@@ -445,7 +475,10 @@ fn hint_bar(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
 
     if let Some(message) = app.message() {
         x = canvas.put(x, y, &message.text, plain()) + 2;
-        if message.undo {
+        // Not while a field has the keyboard: `u` types there, so the bar
+        // would be offering a key the line would swallow (DESIGN.md
+        // section 8).
+        if message.undo && !context.text_field() {
             x = canvas.put(x, y, "u", accent());
             canvas.put(x + 2, y, "undo", dim());
         }
@@ -692,11 +725,12 @@ fn day_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
             add: None,
         });
     }
-    // The add line belongs to the plan, so the group is drawn whenever
-    // the day has anything on it at all.
+    // The add line is the pane's rather than the group's, so it is drawn
+    // whenever the day has anything on it at all, and the label goes when
+    // there is nothing under it but the add line (DESIGN.md section 6).
     if counts.planned > 0 || adding {
         sections.push(Section {
-            label: "Plan",
+            label: if view.plan.is_empty() { "" } else { "Plan" },
             count: None,
             content: Content::Tasks(&view.plan, Kind::Open),
             add: Some(match shown {
@@ -738,10 +772,20 @@ fn day_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
             }
             parts.join(" · ")
         }
-        _ => format!(
-            "{} planned · {} done · {} open · {} moved",
-            counts.planned, counts.done, counts.open, counts.moved
-        ),
+        // The whole record of the day, which is what a day that is not
+        // today is. A count of nothing is left out, the way today's are,
+        // so the header still has room for its date beside them.
+        _ => [
+            (counts.planned, "planned"),
+            (counts.done, "done"),
+            (counts.open, "open"),
+            (counts.moved, "moved"),
+        ]
+        .iter()
+        .filter(|(n, _)| *n > 0)
+        .map(|(n, name)| format!("{n} {name}"))
+        .collect::<Vec<_>>()
+        .join(" · "),
     };
 
     let (title, sub) = match shown {
@@ -1109,15 +1153,24 @@ fn empty_state(canvas: &mut Canvas, column: Column, empty: [&str; 2]) {
     canvas.put(middle(empty[1]), column.top + 3, empty[1], dim());
 }
 
+/// The blank cells a header keeps between what it names on the left and
+/// what it counts on the right, so the two are never read as one word.
+const HEADER_GAP: u16 = 2;
+
 /// `Today Fri 5 Sep                    6 open · 2 done · 1 moved`
 fn header(canvas: &mut Canvas, x: u16, width: u16, y: u16, view: &PaneView, focused: bool) {
     let title = if focused { accent() } else { bold() };
-    canvas.put(x + 1, y, &view.title, title);
+    let mut left = canvas.put(x + 1, y, &view.title, title);
     if !view.sub.is_empty() {
-        canvas.put(x + 2 + count(&view.title), y, &view.sub, dim());
+        left = canvas.put(x + 2 + count(&view.title), y, &view.sub, dim());
     }
     if !view.right.is_empty() {
-        canvas.rput(x + width - 1, y, &view.right, dim());
+        // The right end takes what is left of the line after the words on
+        // the left and the gap, so a long date and a long count run out
+        // of room rather than into each other.
+        let edge = x + width.saturating_sub(1);
+        let room = edge.saturating_sub(left + HEADER_GAP);
+        canvas.rput(edge, y, clip(&view.right, room), dim());
     }
 }
 
@@ -1221,8 +1274,7 @@ fn how_late(due: domain::DueChip, today: Date) -> String {
         .on
         .until(today)
         .map_or(0, |span| i64::from(span.get_days()));
-    let day = if days == 1 { "day" } else { "days" };
-    format!(" · {days} {day} over")
+    format!(" · {} over", counted(days as usize, "day", "days"))
 }
 
 /// The right-hand words that are not a chip: that the row is being
@@ -1244,7 +1296,28 @@ fn meta_of(row: &domain::Row, kind: Kind, today: Date, moving: bool) -> String {
     String::new()
 }
 
+/// The most of its title a row keeps, however full its right-hand side.
+/// A row whose title has gone cannot be told from any other row, so the
+/// words on the right give way first (DESIGN.md section 2).
+const TITLE_LEAST: u16 = 8;
+
+/// One of the things at the right of a row: its text, the blank cells to
+/// its left, and how readily it goes when the line is too full.
+struct Piece {
+    text: String,
+    style: Style,
+    gap: u16,
+    /// Dropped in descending order, so the chips go before the row's own
+    /// words and the time it was closed goes last.
+    drop: u8,
+}
+
 /// `[ ] Book dentist                          [◷ today]`
+///
+/// The right-hand side is measured before anything is drawn, and shrinks
+/// to fit: first every chip to the mark a narrow pane would give it, then
+/// pieces dropped from the left until the title has `TITLE_LEAST` cells.
+/// Nothing is ever placed left of the title, whatever the row carries.
 fn task_row(canvas: &mut Canvas, column: Column, y: u16, row: &domain::Row, look: Look) {
     let Column { x, width, .. } = column;
     let Look {
@@ -1257,9 +1330,8 @@ fn task_row(canvas: &mut Canvas, column: Column, y: u16, row: &domain::Row, look
     let (mark, mark_style, title_style) = mark_of(row, kind);
     canvas.put(x + 1, y, mark, mark_style);
 
-    // The right of the row, filled from its edge inwards: the time it was
-    // closed, then the chips, then whatever text is left.
-    let mut edge = x + width - 1;
+    let title_x = x + 5;
+    let edge = x + width.saturating_sub(1);
     // A moved row says where the task is now and nothing else: what
     // became of it there belongs to the day it is on. Nor does a row the
     // caller has given its own words, which are the whole of its right.
@@ -1268,32 +1340,78 @@ fn task_row(canvas: &mut Canvas, column: Column, y: u16, row: &domain::Row, look
     } else {
         closed_label(row, today)
     };
-    if !closed.is_empty() && !narrow {
-        edge = canvas.rput(edge, y, &closed, dim()) - count(&closed) - 2;
-    }
-    for chip in chips_of(row, look).iter().rev() {
-        let text = if narrow { chip.short } else { &chip.text };
-        edge = canvas.rput(edge, y, &format!("[{text}]"), chip.style) - count(text) - 4;
-    }
     let meta = match note {
         Some(note) => note.to_owned(),
         None => meta_of(row, kind, today, moving),
     };
-    // A narrow pane drops the row's words, except where they are the
-    // content of the row: where a moved task went, and what the review
-    // did to a row it has answered.
-    if !meta.is_empty() && (!narrow || kind == Kind::Moved || note.is_some()) {
-        edge = canvas
-            .rput(edge, y, &meta, dim())
-            .saturating_sub(count(&meta) + 1);
+
+    let pieces_of = |short: bool| {
+        let mut pieces = Vec::new();
+        // A narrow pane drops the row's words, except where they are the
+        // content of the row: where a moved task went, and what the review
+        // did to a row it has answered.
+        if !meta.is_empty() && (!narrow || kind == Kind::Moved || note.is_some()) {
+            pieces.push(Piece {
+                text: meta.clone(),
+                style: dim(),
+                gap: 1,
+                drop: 1,
+            });
+        }
+        for chip in chips_of(row, look) {
+            let text = if short { chip.short } else { &chip.text };
+            pieces.push(Piece {
+                text: format!("[{text}]"),
+                style: chip.style,
+                gap: 2,
+                drop: 2,
+            });
+        }
+        if !closed.is_empty() && !narrow {
+            pieces.push(Piece {
+                text: closed.clone(),
+                style: dim(),
+                gap: 2,
+                drop: 0,
+            });
+        }
+        pieces
+    };
+    let span = |pieces: &[Piece]| -> u16 {
+        pieces
+            .iter()
+            .map(|piece| count(&piece.text) + piece.gap)
+            .sum()
+    };
+
+    let room = edge.saturating_sub(title_x);
+    let budget = room.saturating_sub(TITLE_LEAST.min(room));
+    let mut pieces = pieces_of(narrow);
+    if span(&pieces) > budget {
+        pieces = pieces_of(true);
+    }
+    while span(&pieces) > budget {
+        // The leftmost of the pieces that go first, so a row loses its
+        // chips in the order it gained them.
+        let Some(at) = (0..pieces.len()).rev().max_by_key(|at| pieces[*at].drop) else {
+            break;
+        };
+        pieces.remove(at);
+    }
+
+    let mut right = edge;
+    for piece in pieces.iter().rev() {
+        right = canvas
+            .rput(right, y, &piece.text, piece.style)
+            .saturating_sub(count(&piece.text) + piece.gap);
     }
 
     // The title has whatever is left, so a row carrying three chips loses
     // the end of its own title rather than running under them.
     canvas.put(
-        x + 5,
+        title_x,
         y,
-        clip(&row.title, edge.saturating_sub(x + 5)),
+        clip(&row.title, right.saturating_sub(title_x)),
         title_style,
     );
 }
@@ -1325,11 +1443,32 @@ fn add_field(canvas: &mut Canvas, x: u16, width: u16, y: u16, editor: &Editor) {
 
 /// The text of a field with its caret where the next character goes.
 fn field_text(canvas: &mut Canvas, x: u16, y: u16, width: u16, editor: &Editor) {
-    let typed: String = editor.text.chars().take(editor.caret).collect();
-    let rest: String = editor.text.chars().skip(editor.caret).collect();
-    let at = canvas.put(x, y, clip(&typed, width), plain());
+    caret_line(canvas, x, y, width, &editor.text, editor.caret);
+}
+
+/// A line being typed, in `width` cells, scrolled so that the caret is
+/// always on it: what is before the caret gives up its beginning until
+/// the caret fits, and what is after it is cut off at the end of the line
+/// (DESIGN.md section 8).
+fn caret_line(canvas: &mut Canvas, x: u16, y: u16, width: u16, text: &str, caret: usize) {
+    let before: String = text.chars().take(caret).collect();
+    let after: String = text.chars().skip(caret).collect();
+
+    // The caret has a cell of its own, so the text before it has one
+    // fewer than the line.
+    let mut over = (count(&before) + 1).saturating_sub(width);
+    let mut from = 0;
+    for glyph in before.chars() {
+        if over == 0 {
+            break;
+        }
+        over = over.saturating_sub(cells(glyph));
+        from += glyph.len_utf8();
+    }
+
+    let at = canvas.put(x, y, &before[from..], plain());
     let at = canvas.put(at, y, CARET, bold());
-    canvas.put(at, y, clip(&rest, width.saturating_sub(at - x)), plain());
+    canvas.put(at, y, clip(&after, (x + width).saturating_sub(at)), plain());
 }
 
 /// ` ↻  Write standup notes                     every work day`
@@ -1450,18 +1589,24 @@ fn open_note(
     let first = scroll_to(lines.len(), caret.map(|(row, _)| row), height);
 
     for (at, (text, _)) in lines.iter().skip(first).take(height).enumerate() {
-        canvas.put(x + 2, column.top + at as u16, text, plain());
-    }
-    if let Some((row, glyph)) = caret
-        && row >= first
-        && row < first + height
-    {
-        canvas.put(
-            x + 2 + glyph as u16,
-            column.top + (row - first) as u16,
-            CARET,
-            bold(),
-        );
+        let y = column.top + at as u16;
+        // The caret is a cell of its own between two characters, the way
+        // it is in a field, so the character it is in front of is still
+        // drawn and a wide one is not cut in half.
+        match caret.filter(|(row, _)| *row == first + at) {
+            Some((_, glyph)) => {
+                let split = text
+                    .char_indices()
+                    .nth(glyph)
+                    .map_or(text.len(), |(at, _)| at);
+                let at = canvas.put(x + 2, y, &text[..split], plain());
+                let at = canvas.put(at, y, CARET, bold());
+                canvas.put(at, y, &text[split..], plain());
+            }
+            None => {
+                canvas.put(x + 2, y, text, plain());
+            }
+        }
     }
 }
 
@@ -1477,23 +1622,37 @@ fn stacked_rule(canvas: &mut Canvas, column: Column, view: &PaneView) {
 /// character of the body it starts at so that the caret can be found on
 /// it again.
 fn wrapped(body: &str, width: u16) -> Vec<(String, usize)> {
-    let width = width.max(1) as usize;
+    let width = width.max(1);
     let mut lines = Vec::new();
     let mut at = 0;
     for line in body.split('\n') {
         let glyphs: Vec<char> = line.chars().collect();
         let mut from = 0;
         loop {
-            if glyphs.len() - from <= width {
+            // How many characters of the rest the line has room for. A
+            // character wider than the whole pane still takes a line of
+            // its own rather than none.
+            let mut fits = 0;
+            let mut taken = 0;
+            while from + fits < glyphs.len() {
+                let cells = cells(glyphs[from + fits]);
+                if taken + cells > width {
+                    break;
+                }
+                taken += cells;
+                fits += 1;
+            }
+            let fits = fits.max(1);
+            if from + fits >= glyphs.len() {
                 lines.push((glyphs[from..].iter().collect(), at + from));
                 break;
             }
             // After the last space that fits, or through a word longer
             // than the pane.
-            let take = glyphs[from..from + width]
+            let take = glyphs[from..from + fits]
                 .iter()
                 .rposition(|glyph| *glyph == ' ')
-                .map_or(width, |space| space + 1);
+                .map_or(fits, |space| space + 1);
             lines.push((glyphs[from..from + take].iter().collect(), at + from));
             from += take;
         }
@@ -1503,7 +1662,7 @@ fn wrapped(body: &str, width: u16) -> Vec<(String, usize)> {
     lines
 }
 
-/// Which drawn line a caret is on, and how far along it.
+/// Which drawn line a caret is on, and how many characters along it.
 fn caret_at(lines: &[(String, usize)], caret: usize) -> (usize, usize) {
     let row = lines
         .iter()
@@ -1512,9 +1671,15 @@ fn caret_at(lines: &[(String, usize)], caret: usize) -> (usize, usize) {
     (row, caret - lines.get(row).map_or(0, |(_, start)| *start))
 }
 
+/// As much of `text` as fits in `width` cells. A character that would
+/// straddle the edge is left out whole.
 fn clip(text: &str, width: u16) -> &str {
-    match text.char_indices().nth(width as usize) {
-        Some((at, _)) => &text[..at],
-        None => text,
+    let mut taken = 0;
+    for (at, glyph) in text.char_indices() {
+        taken += cells(glyph);
+        if taken > width {
+            return &text[..at];
+        }
     }
+    text
 }

@@ -47,7 +47,7 @@ means none. Names are separated by commas.
 | `storage`  | domain                | rusqlite, jiff, serde_json     |
 | `input`    | none                  | crossterm                      |
 | `app`      | domain, input         | jiff, tracing                  |
-| `ui`       | domain, app, input    | ratatui, jiff                  |
+| `ui`       | domain, app, input    | ratatui, jiff, unicode_width   |
 | `terminal` | app, ui, input        | crossterm, ratatui, tracing    |
 | `main.rs`  | storage, app, terminal| jiff, tracing, tracing_subscriber, xdg |
 
@@ -237,7 +237,8 @@ adds it here first, the way a new dependency is added to section 2 first.
   printable keys become `Insert` and only `Enter`, `Escape`, `Tab`, `Up`,
   `Down`, the editing keys and the `Alt` shortcuts keep a name. The
   editing keys belong to the field rather than to the table, so they are
-  never a row of the hint bar.
+  never a row of the hint bar. `ctrl-c` is answered before any context is
+  consulted, because it means the same thing in all of them.
 - `Pane`, `NotesPane`, `ReviewStep`, `Shown`, `Field` and `PopupKind`:
   what a context is of.
 - `action_for(Event, KeyContext) -> Option<Action>`.
@@ -258,6 +259,9 @@ adds it here first, the way a new dependency is added to section 2 first.
   - `bar` and `narrow`: where the hint bar puts the row when the window
     has two panes and when it has collapsed to tabs, as a `Bar` of `Off`,
     `Left`, `Right`, or `Short(Side, name)` where the bar is tight.
+
+  and one question, `Binding::acts_on_the_row()`, which is what the
+  command palette groups its two sections by (DESIGN.md section 4).
 - `Decision` and `decisions(ReviewStep) -> &[Decision]`: the rows of the
   panel beside the review, each a key, the action it means, the name the
   panel gives it and the few words on what it does to the task. The

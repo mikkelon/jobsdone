@@ -325,9 +325,14 @@ pub fn surfaced(model: &Model, today: Date) -> Surfaced {
                 view.reminders.push(row());
             }
         }
-        if task.scheduled_on == Some(today) {
+        // A copy generation made for today, which is on today. The task
+        // a schedule was created from is scheduled for today as well
+        // (section 10), and until a copy is actually made there is
+        // nothing new to say about it: it is where it always was, and
+        // the group would be claiming it had arrived on the plan.
+        if task.scheduled_on == Some(today) && task.day == Some(today) {
             view.also_starting_today
-                .push(row_of(model, task, today, task.day));
+                .push(row_of(model, task, today, Some(today)));
         }
     }
 
