@@ -404,6 +404,7 @@ fn every_colour_is_one_the_terminal_themes() {
         Action::Search,
         Action::MoveToDay,
         Action::DueBy,
+        Action::Repeat,
         Action::Add,
     ] {
         app.update(action);
@@ -652,6 +653,27 @@ fn the_date_cards_calendar_takes_the_keyboard_on_tab() {
 }
 
 #[test]
+fn the_repeat_card_shows_the_shapes_and_the_dates_they_fall_on() {
+    let mut app = app();
+    app.update(Action::Repeat);
+    app.update(Action::EveryWeek);
+    let text = look(&app, 120, 36).join("\n");
+
+    assert!(text.contains("Repeat Ship invoice export"));
+    assert!(text.contains("Every work day"));
+    assert!(text.contains("Mon–Fri"));
+    assert!(text.contains("Every week on"));
+    assert!(
+        text.contains(" Mo  Tu  We  Th [Fr] Sa  Su "),
+        "the weekdays, the ones in the set bracketed"
+    );
+    assert!(text.contains("Stop repeating"));
+    assert!(text.contains("copies stay"));
+    assert!(text.contains("Next: Fri 12 Sep · Fri 19 Sep · Fri 26 Sep"));
+    assert!(text.contains("⏎ save"));
+}
+
+#[test]
 fn the_copy_question_spells_both_answers_out() {
     let mut app = app();
     app.update(Action::Edit);
@@ -704,6 +726,7 @@ fn no_size_the_window_can_take_makes_the_drawing_panic() {
         Action::Search,
         Action::MoveToDay,
         Action::DueBy,
+        Action::Repeat,
         Action::Add,
     ] {
         app.update(action);

@@ -186,6 +186,31 @@ fn place_label(place: Place, today: Date) -> String {
     }
 }
 
+/// The weekdays in the order a calendar and the repeat card lay them
+/// out, Monday first.
+pub(super) const WEEKDAYS: [Weekday; 7] = [
+    Weekday::Mon,
+    Weekday::Tue,
+    Weekday::Wed,
+    Weekday::Thu,
+    Weekday::Fri,
+    Weekday::Sat,
+    Weekday::Sun,
+];
+
+/// `Mo`, the two letters a calendar column has room for.
+fn short_weekday(day: Weekday) -> &'static str {
+    &weekday_name(day)[..2]
+}
+
+/// `1st`, or `last`.
+fn month_day_label(day: MonthDay) -> String {
+    match day {
+        MonthDay::Day(day) => format!("{day}{}", ordinal(day)),
+        MonthDay::Last => "last".to_owned(),
+    }
+}
+
 fn weekday_name(day: Weekday) -> &'static str {
     match day {
         Weekday::Mon => "Mon",

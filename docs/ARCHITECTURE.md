@@ -197,6 +197,8 @@ adds it here first, the way a new dependency is added to section 2 first.
   `pile`, `surfaced`, `search`, `day_list`, `notes`, `next_dates`,
   `working_day`, and `previous_review`, the lower bound of the reminder
   window.
+- `Weekday::of(date)`, so a card can open on the weekday of the day it
+  is about without a second mapping of jiff's weekdays.
 - `parse_date(text, today) -> Option<Date>`: the date a typed line means
   (DOMAIN.md section 2). It takes no model: the date card previews what
   is typed on every keystroke, and what a shape means is a rule whether
@@ -267,13 +269,14 @@ adds it here first, the way a new dependency is added to section 2 first.
   `today`, `model`, the views `day`, `backlog`, `notes` and
   `review_count`, `page`, `pane`, `notes_pane`, `focused`, `popup`,
   `editor`, `message`, `cursor`, `palette_rows`, `search_results`,
-  `move_choices`, `date_choices` and `layout`.
+  `move_choices`, `date_choices`, `repeat_preview` and `layout`.
   `Page` is `Home` or `Notes`; `List` is `Day`, `Backlog` or `Notes`, one
   cursor each, held by id; `Popup` carries the kind, the text typed into
   it, the caret, the selected row, the task it is about, and the `Draft` a
   card is building before Enter turns it into a command, which for the
   date card is the day it is on and which of its two controls has the
-  keyboard; `Editor` is a title being typed on a row; `Message` is what the hint bar says until
+  keyboard, and for the repeat card the parameters of every shape, so
+  that stepping through them loses nothing; `Editor` is a title being typed on a row; `Message` is what the hint bar says until
   the next key, and whether `u` takes it back; `MoveChoice` is a row of
   the move card, its key and name from the key table and its day worked
   out here.

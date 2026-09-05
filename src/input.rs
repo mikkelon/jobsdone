@@ -44,6 +44,8 @@ pub enum PopupKind {
     /// The date card: due by, remind on, or the day the move card sends
     /// a task to. One card, three things to set.
     Date,
+    /// The repeat card: the five rule shapes, and stopping.
+    Repeat,
     /// The one deliberate question: whether a recurring copy's new title
     /// is for this copy or for this and future copies.
     CopyQuestion,
@@ -131,6 +133,17 @@ pub enum Action {
     NextMonth,
     Waiting,
     Repeat,
+    /// The rows of the repeat card, which are the five rule shapes of
+    /// DOMAIN.md section 10 and the end of them all.
+    EveryWorkDay,
+    EveryDay,
+    EveryWeek,
+    EveryMonth,
+    EveryFewWeeks,
+    StopRepeat,
+    /// Take the highlighted thing into the row's answer, which is how a
+    /// weekday joins the set the weekly shape repeats on.
+    Pick,
     Keep,
     Undo,
     /// The two answers to the copy question.
@@ -1006,6 +1019,99 @@ const DATE_CALENDAR: &[Binding] = date_table![
     },
 ];
 
+/// The repeat card. Its six shapes are rows of the card rather than of
+/// the hint bar; the application reads them back to build a rule, and
+/// `h`/`l` adjust whichever one is selected.
+const REPEAT_CARD: &[Binding] = &[
+    Binding {
+        keys: &[("1", Action::EveryWorkDay)],
+        shown: "1",
+        label: "Every work day",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("2", Action::EveryDay)],
+        shown: "2",
+        label: "Every day",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("3", Action::EveryWeek)],
+        shown: "3",
+        label: "Every week on",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("4", Action::EveryMonth)],
+        shown: "4",
+        label: "Every month on the",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("5", Action::EveryFewWeeks)],
+        shown: "5",
+        label: "Every",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("0", Action::StopRepeat)],
+        shown: "0",
+        label: "Stop repeating",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("enter", Action::Confirm)],
+        shown: "⏎",
+        label: "save",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("esc", Action::Cancel)],
+        shown: "esc",
+        label: "cancel",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[
+            ("h", Action::Left),
+            ("l", Action::Right),
+            ("left", Action::Left),
+            ("right", Action::Right),
+        ],
+        shown: "h/l",
+        label: "adjust",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("space", Action::Pick)],
+        shown: "space",
+        label: "pick a day",
+        bar: Bar::Left,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[
+            ("j", Action::Down),
+            ("k", Action::Up),
+            ("down", Action::Down),
+            ("up", Action::Up),
+        ],
+        shown: "j/k",
+        label: "move",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+];
+
 /// The one deliberate question (DESIGN.md section 8). Both answers are a
 /// key of their own, because there is no default that is safe to guess.
 const COPY_QUESTION: &[Binding] = &[
@@ -1131,6 +1237,10 @@ pub fn bindings(context: KeyContext) -> &'static [Binding] {
             kind: PopupKind::Date,
             text_field: false,
         } => DATE_CALENDAR,
+        KeyContext::Popup {
+            kind: PopupKind::Repeat,
+            ..
+        } => REPEAT_CARD,
     }
 }
 
@@ -1184,6 +1294,10 @@ pub fn name(context: KeyContext) -> &'static str {
             kind: PopupKind::Date,
             ..
         } => "DATE",
+        KeyContext::Popup {
+            kind: PopupKind::Repeat,
+            ..
+        } => "REPEAT",
     }
 }
 

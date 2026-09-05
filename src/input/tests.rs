@@ -57,6 +57,7 @@ fn every_context() -> Vec<KeyContext> {
         popup(PopupKind::CopyQuestion),
         field(PopupKind::Date),
         popup(PopupKind::Date),
+        popup(PopupKind::Repeat),
     ]
 }
 

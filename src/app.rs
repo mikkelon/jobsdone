@@ -6,13 +6,31 @@ use jiff::{Span, Zoned};
 use tracing::warn;
 
 use crate::domain::{
-    self, BacklogView, Change, Command, DayView, Id, Model, NotesView, Place, Rule, SearchResults,
-    Store, StoreError, Weekday, Write,
+    self, BacklogView, Change, Command, DayView, Id, Model, MonthDay, NotesView, Place, Rule,
+    SearchResults, Store, StoreError, Weekday, Write,
 };
 use crate::input::{self, Action, Binding, Field, KeyContext, NotesPane, Pane, PopupKind};
 
 #[cfg(test)]
 mod tests;
+
+/// The most weeks apart the repeat card offers, which is a year.
+const WEEKS_APART: usize = 52;
+
+/// How many of the next dates the repeat card previews.
+const PREVIEW: usize = 3;
+
+/// The weekdays in the order the repeat card lays them out, Monday
+/// first, which is also the order the weekly rule stores them in.
+const WEEKDAYS: [Weekday; 7] = [
+    Weekday::Mon,
+    Weekday::Tue,
+    Weekday::Wed,
+    Weekday::Thu,
+    Weekday::Fri,
+    Weekday::Sat,
+    Weekday::Sun,
+];
 
 /// The length the undo stack is held to. The domain does not choose the
 /// number (DOMAIN.md section 11); a hundred is more than a day's work and
@@ -144,9 +162,10 @@ pub struct Popup {
     /// Which row of its list is selected. A popup lists commands, results
     /// and days, not model rows, so an index is what it means.
     pub selected: usize,
-    /// The task the popup is about, held by id so that a reload cannot
-    /// turn it into another one.
-    pub target: Option<Id>,
+    /// The row the popup is about, held by id so that a reload cannot
+    /// turn it into another one. The repeat card is about a schedule as
+    /// readily as about a task.
+    pub target: Option<RowId>,
     /// What a card is building before Enter turns it into a command.
     pub draft: Draft,
 }
@@ -156,8 +175,21 @@ impl Popup {
     pub fn date(&self) -> Option<&DateDraft> {
         match &self.draft {
             Draft::Date(draft) => Some(draft),
-            Draft::None => None,
+            _ => None,
         }
+    }
+
+    /// The repeat card's draft, if that is what this popup is.
+    pub fn repeat(&self) -> Option<&RepeatDraft> {
+        match &self.draft {
+            Draft::Repeat(draft) => Some(draft),
+            _ => None,
+        }
+    }
+
+    /// The task the popup is about, if the row it is about is one.
+    pub fn task(&self) -> Option<Id> {
+        self.target.and_then(RowId::task)
     }
 }
 
@@ -169,6 +201,7 @@ pub enum Draft {
     /// A popup that answers with a key or a row, and builds nothing.
     None,
     Date(DateDraft),
+    Repeat(RepeatDraft),
 }
 
 /// Which date the card is setting. One card, three things to set, and the
@@ -201,6 +234,24 @@ pub struct DateChoice {
     pub key: &'static str,
     pub label: &'static str,
     pub date: Option<Date>,
+}
+
+/// The repeat card: the parameters of every shape, kept while another
+/// shape is looked at, so that stepping through the rows loses nothing.
+/// Which shape is selected is the popup's selected row.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RepeatDraft {
+    /// The weekdays the weekly shape repeats on, and which of the seven
+    /// `h` and `l` are on.
+    pub weekdays: Vec<Weekday>,
+    pub weekday: usize,
+    pub month_day: MonthDay,
+    /// How many weeks apart, and the date they are counted from.
+    pub weeks: u32,
+    pub from: Date,
+    /// The date the preview of the next dates counts on from, which is
+    /// how far the schedule has already been generated.
+    pub after: Date,
 }
 
 /// Where the move card sends a task.
@@ -474,19 +525,26 @@ impl App {
                 self.walk_the_calendar(Span::new().months(1));
             }
             Action::Waiting => self.wait_on_someone(),
-            Action::Repeat => self.not_yet("The repeat card is not built yet."),
+            Action::Repeat => self.open_the_repeat_card(),
+            Action::EveryWorkDay
+            | Action::EveryDay
+            | Action::EveryWeek
+            | Action::EveryMonth
+            | Action::EveryFewWeeks
+            | Action::StopRepeat => self.choose_the_shape(action),
+            Action::Pick => self.pick_a_weekday(),
             Action::Keep => {}
 
             Action::Insert(typed) => self.type_in(typed),
             Action::Backspace => self.rub_out(),
             Action::DeleteForward => self.rub_forward(),
             Action::Left => {
-                if !self.walk_the_calendar(Span::new().days(-1)) {
+                if !self.walk_the_calendar(Span::new().days(-1)) && !self.adjust(false) {
                     self.move_caret(false);
                 }
             }
             Action::Right => {
-                if !self.walk_the_calendar(Span::new().days(1)) {
+                if !self.walk_the_calendar(Span::new().days(1)) && !self.adjust(true) {
                     self.move_caret(true);
                 }
             }
@@ -714,8 +772,7 @@ impl App {
     /// The row the cursor lands on when the one it is on leaves the list:
     /// the next of its group, then the one before it, then whatever is
     /// nearest.
-    fn neighbour_of(&self, list: List, id: Id) -> Option<RowId> {
-        let id = RowId::Task(id);
+    fn neighbour_of(&self, list: List, id: RowId) -> Option<RowId> {
         let rows = self.rows_of(list);
         let at = rows.iter().position(|(row, _)| *row == id)?;
         let group = rows[at].1;
@@ -745,7 +802,7 @@ impl App {
         let next = if closed {
             None
         } else {
-            self.neighbour_of(list, id)
+            self.neighbour_of(list, RowId::Task(id))
         };
 
         let command = if closed {
@@ -786,7 +843,9 @@ impl App {
         let waiting = !task.waiting;
         let leaves = waiting && task.day.is_some();
         let list = self.focused();
-        let next = leaves.then(|| self.neighbour_of(list, id)).flatten();
+        let next = leaves
+            .then(|| self.neighbour_of(list, RowId::Task(id)))
+            .flatten();
 
         if self
             .run(Command::SetWaiting { task: id, waiting })
@@ -803,7 +862,7 @@ impl App {
             return;
         };
         let list = self.focused();
-        let next = self.neighbour_of(list, id);
+        let next = self.neighbour_of(list, RowId::Task(id));
         if self.run(Command::DeleteTask { task: id }).is_some()
             && let Some(next) = next
         {
@@ -883,7 +942,7 @@ impl App {
     /// group, so the cursor steps to the next one (DESIGN.md section 4).
     fn move_task(&mut self, id: Id, place: Place) {
         let list = self.focused();
-        let next = self.neighbour_of(list, id);
+        let next = self.neighbour_of(list, RowId::Task(id));
         if self.run(Command::Move { task: id, place }).is_some()
             && let Some(next) = next
         {
@@ -897,7 +956,7 @@ impl App {
         if open.kind != PopupKind::Move {
             return None;
         }
-        let target = open.target;
+        let target = open.task();
         self.popup = None;
         target
     }
@@ -906,7 +965,7 @@ impl App {
         let Some(id) = self.task_at_cursor() else {
             return;
         };
-        self.open(PopupKind::Move, Some(id));
+        self.open(PopupKind::Move, Some(RowId::Task(id)));
     }
 
     /// The day a quick pick on either card means. "Next work day" and
@@ -1010,7 +1069,7 @@ impl App {
             DateKind::Move => task.day,
         }
         .unwrap_or(self.today);
-        self.open_card(PopupKind::Date, Some(id), kind, on);
+        self.open_card(PopupKind::Date, Some(RowId::Task(id)), kind, on);
     }
 
     /// `g`: on the move card, the calendar for the day it could not
@@ -1025,10 +1084,10 @@ impl App {
             .live_task(task)
             .and_then(|task| task.day)
             .unwrap_or(self.today);
-        self.open_card(PopupKind::Date, Some(task), DateKind::Move, on);
+        self.open_card(PopupKind::Date, Some(RowId::Task(task)), DateKind::Move, on);
     }
 
-    fn open_card(&mut self, kind: PopupKind, target: Option<Id>, date: DateKind, on: Date) {
+    fn open_card(&mut self, kind: PopupKind, target: Option<RowId>, date: DateKind, on: Date) {
         self.open(kind, target);
         if let Some(popup) = &mut self.popup {
             popup.draft = Draft::Date(DateDraft {
@@ -1094,7 +1153,7 @@ impl App {
     /// is moved to. Either way the card has said its piece and closes.
     fn take_the_date(&mut self, date: Option<Date>) {
         let (Some(task), Some(draft)) = (
-            self.popup.as_ref().and_then(|popup| popup.target),
+            self.popup.as_ref().and_then(Popup::task),
             self.popup.as_ref().and_then(Popup::date).copied(),
         ) else {
             return;
@@ -1147,6 +1206,222 @@ impl App {
             return;
         }
         self.shift_pane(true, true);
+    }
+
+    // ---- the repeat card ---------------------------------------------
+
+    /// `R`: the schedule behind a copy, the schedule a row of the backlog
+    /// list is, or a new one for an ordinary task. The card opens on what
+    /// the schedule already is, so a rule is adjusted rather than
+    /// described again.
+    fn open_the_repeat_card(&mut self) {
+        let list = self.focused();
+        let on_a_schedule = self
+            .cursor(list)
+            .filter(|_| self.page == Page::Home)
+            .and_then(RowId::schedule);
+        let target = match on_a_schedule {
+            Some(schedule) => RowId::Schedule(schedule),
+            None => match self.task_at_cursor() {
+                Some(task) => RowId::Task(task),
+                None => return,
+            },
+        };
+
+        // Where "every N weeks" counts from and where the preview picks
+        // up: the schedule's own dates if there is one, else the day the
+        // task is on.
+        let anchor = match target {
+            RowId::Task(task) => self
+                .model
+                .live_task(task)
+                .and_then(|task| task.day)
+                .unwrap_or(self.today),
+            _ => self.today,
+        };
+        let schedule = self
+            .schedule_of(target)
+            .and_then(|id| self.model.schedule(id));
+        let rule = schedule.map(|schedule| schedule.rule.clone());
+        let after = schedule.map_or(anchor, |schedule| schedule.generated_through);
+
+        let draft = RepeatDraft {
+            weekdays: match &rule {
+                Some(Rule::Weekly { weekdays }) => weekdays.clone(),
+                _ => vec![Weekday::of(anchor)],
+            },
+            weekday: Weekday::of(anchor) as usize,
+            month_day: match &rule {
+                Some(Rule::Monthly { day }) => *day,
+                _ => MonthDay::Day(anchor.day() as u8),
+            },
+            weeks: match &rule {
+                Some(Rule::EveryNWeeks { n, .. }) => *n,
+                _ => 2,
+            },
+            from: match &rule {
+                Some(Rule::EveryNWeeks { from, .. }) => *from,
+                _ => anchor,
+            },
+            after,
+        };
+        let selected = rule.as_ref().and_then(shape_of).unwrap_or(0);
+
+        self.open(PopupKind::Repeat, Some(target));
+        if let Some(popup) = &mut self.popup {
+            popup.draft = Draft::Repeat(draft);
+            popup.selected = selected;
+        }
+    }
+
+    /// The schedule a row is, or the one behind the copy it is.
+    fn schedule_of(&self, row: RowId) -> Option<Id> {
+        match row {
+            RowId::Schedule(id) => Some(id),
+            RowId::Task(id) => self.model.live_task(id).and_then(|task| task.schedule_id),
+            RowId::Note(_) => None,
+        }
+    }
+
+    /// A digit on the repeat card: the shape it names.
+    fn choose_the_shape(&mut self, action: Action) {
+        let Some(at) = repeat_shapes().iter().position(|shape| *shape == action) else {
+            return;
+        };
+        if let Some(popup) = &mut self.popup
+            && popup.kind == PopupKind::Repeat
+        {
+            popup.selected = at;
+        }
+    }
+
+    /// `h` and `l`: whatever the selected shape has to adjust. Says
+    /// whether the card took the key.
+    fn adjust(&mut self, forward: bool) -> bool {
+        let Some(popup) = &mut self.popup else {
+            return false;
+        };
+        let shape = repeat_shapes().get(popup.selected).copied();
+        let Draft::Repeat(draft) = &mut popup.draft else {
+            return false;
+        };
+        let step = |at: usize, last: usize| {
+            if forward {
+                (at + 1).min(last)
+            } else {
+                at.saturating_sub(1)
+            }
+        };
+        match shape {
+            Some(Action::EveryWeek) => draft.weekday = step(draft.weekday, 6),
+            Some(Action::EveryMonth) => {
+                // The days of a month and then "last", as one row of
+                // choices (DOMAIN.md section 10).
+                let at = match draft.month_day {
+                    MonthDay::Day(day) => day.clamp(1, 31) as usize - 1,
+                    MonthDay::Last => 31,
+                };
+                let at = step(at, 31);
+                draft.month_day = match at {
+                    31 => MonthDay::Last,
+                    at => MonthDay::Day(at as u8 + 1),
+                };
+            }
+            Some(Action::EveryFewWeeks) => {
+                draft.weeks = step(draft.weeks as usize - 1, WEEKS_APART - 1) as u32 + 1;
+            }
+            _ => {}
+        }
+        true
+    }
+
+    /// `space` on the weekly shape: the highlighted weekday joins the
+    /// set, or leaves it.
+    fn pick_a_weekday(&mut self) {
+        let Some(popup) = &mut self.popup else {
+            return;
+        };
+        if repeat_shapes().get(popup.selected) != Some(&Action::EveryWeek) {
+            return;
+        }
+        let Draft::Repeat(draft) = &mut popup.draft else {
+            return;
+        };
+        let day = WEEKDAYS[draft.weekday.min(6)];
+        match draft.weekdays.iter().position(|other| *other == day) {
+            Some(at) => {
+                draft.weekdays.remove(at);
+            }
+            None => draft.weekdays.push(day),
+        }
+        draft.weekdays.sort();
+    }
+
+    /// The rule the card is describing, or nothing on the row that ends
+    /// the schedule instead of changing it.
+    fn drafted_rule(&self) -> Option<Rule> {
+        let popup = self.popup.as_ref()?;
+        let draft = popup.repeat()?;
+        match repeat_shapes().get(popup.selected)? {
+            Action::EveryWorkDay => Some(Rule::Workdays),
+            Action::EveryDay => Some(Rule::Daily),
+            Action::EveryWeek => Some(Rule::Weekly {
+                weekdays: draft.weekdays.clone(),
+            }),
+            Action::EveryMonth => Some(Rule::Monthly {
+                day: draft.month_day,
+            }),
+            Action::EveryFewWeeks => Some(Rule::EveryNWeeks {
+                n: draft.weeks,
+                from: draft.from,
+            }),
+            _ => None,
+        }
+    }
+
+    /// The next few dates the drafted rule falls on, so that "the 1st"
+    /// and "every 2 weeks" are unambiguous before they are saved
+    /// (DOMAIN.md section 10).
+    pub fn repeat_preview(&self) -> Vec<Date> {
+        let Some(after) = self.popup.as_ref().and_then(Popup::repeat) else {
+            return Vec::new();
+        };
+        match self.drafted_rule() {
+            Some(rule) => domain::next_dates(&rule, after.after.max(self.today), PREVIEW),
+            None => Vec::new(),
+        }
+    }
+
+    /// Enter on the repeat card: the rule of the schedule behind the row,
+    /// a schedule where there was none, or the end of one.
+    fn take_the_rule(&mut self) {
+        let Some(target) = self.popup.as_ref().and_then(|popup| popup.target) else {
+            return;
+        };
+        let rule = self.drafted_rule();
+        let command = match (self.schedule_of(target), rule) {
+            (Some(schedule), Some(rule)) => Command::SetRule { schedule, rule },
+            (Some(schedule), None) => Command::StopSchedule { schedule },
+            (None, Some(rule)) => match target.task() {
+                Some(task) => Command::CreateSchedule { task, rule },
+                None => return,
+            },
+            (None, None) => {
+                self.say("That task does not repeat.", false);
+                return;
+            }
+        };
+        // A refused rule leaves the card open with the reason in the
+        // hint bar, so the shape can be changed and saved again.
+        let stopping = self.schedule_of(target).is_some() && self.drafted_rule().is_none();
+        let list = self.focused();
+        let next = stopping.then(|| self.neighbour_of(list, target)).flatten();
+        if self.run(command).is_some() {
+            self.popup = None;
+            if let Some(next) = next {
+                self.set_cursor(list, next);
+            }
+        }
     }
 
     // ---- the title being typed ---------------------------------------
@@ -1225,7 +1500,7 @@ impl App {
                 if copy && !title.is_empty() {
                     // The one deliberate question (DESIGN.md section 8).
                     self.editor = None;
-                    self.open(PopupKind::CopyQuestion, Some(id));
+                    self.open(PopupKind::CopyQuestion, Some(RowId::Task(id)));
                     if let Some(popup) = &mut self.popup {
                         popup.text = title;
                     }
@@ -1245,7 +1520,7 @@ impl App {
         let Some(popup) = self.popup.take() else {
             return;
         };
-        let Some(task) = popup.target else {
+        let Some(task) = popup.task() else {
             return;
         };
         let title = popup.text;
@@ -1475,6 +1750,7 @@ impl App {
             Some(PopupKind::Palette) => self.palette_rows().len(),
             Some(PopupKind::Search) => self.search_results().total,
             Some(PopupKind::Move) => self.move_choices().len(),
+            Some(PopupKind::Repeat) => repeat_shapes().len(),
             _ => 0,
         }
     }
@@ -1580,7 +1856,7 @@ impl App {
 
     // ---- popups and their text fields --------------------------------
 
-    fn open(&mut self, kind: PopupKind, target: Option<Id>) {
+    fn open(&mut self, kind: PopupKind, target: Option<RowId>) {
         self.editor = None;
         self.popup = Some(Popup {
             kind,
@@ -1611,6 +1887,7 @@ impl App {
             PopupKind::Search => self.take_the_search(),
             PopupKind::Move => self.take_the_chosen_day(),
             PopupKind::Date => self.take_the_typed_date(),
+            PopupKind::Repeat => self.take_the_rule(),
             // The question has no answer safe enough to be Enter's.
             PopupKind::Help | PopupKind::CopyQuestion => {}
         }
@@ -1755,6 +2032,47 @@ impl App {
             *caret = at.min(text.chars().count());
         }
     }
+}
+
+/// The rows of the repeat card, in the order the key table puts them,
+/// which is what a row's number means. Both the card and its drawing read
+/// the shapes from here, so neither can invent a row the other lacks.
+pub(crate) fn repeat_shapes() -> Vec<Action> {
+    input::bindings(KeyContext::Popup {
+        kind: PopupKind::Repeat,
+        text_field: false,
+    })
+    .iter()
+    .filter_map(|binding| match binding.keys.first() {
+        Some((_, action)) if is_a_shape(*action) => Some(*action),
+        _ => None,
+    })
+    .collect()
+}
+
+fn is_a_shape(action: Action) -> bool {
+    matches!(
+        action,
+        Action::EveryWorkDay
+            | Action::EveryDay
+            | Action::EveryWeek
+            | Action::EveryMonth
+            | Action::EveryFewWeeks
+            | Action::StopRepeat
+    )
+}
+
+/// Which row of the card a rule is, so that the card opens on the shape
+/// the schedule already has.
+fn shape_of(rule: &Rule) -> Option<usize> {
+    let shape = match rule {
+        Rule::Workdays => Action::EveryWorkDay,
+        Rule::Daily => Action::EveryDay,
+        Rule::Weekly { .. } => Action::EveryWeek,
+        Rule::Monthly { .. } => Action::EveryMonth,
+        Rule::EveryNWeeks { .. } => Action::EveryFewWeeks,
+    };
+    repeat_shapes().iter().position(|other| *other == shape)
 }
 
 /// The byte offset of a character offset, so that a caret counted in

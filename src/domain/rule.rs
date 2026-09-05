@@ -28,7 +28,9 @@ pub enum Weekday {
 }
 
 impl Weekday {
-    fn of(date: Date) -> Weekday {
+    /// The weekday a date falls on, which the repeat card needs to open
+    /// on the weekday of the day it is about.
+    pub fn of(date: Date) -> Weekday {
         match date.weekday() {
             Civil::Monday => Weekday::Mon,
             Civil::Tuesday => Weekday::Tue,

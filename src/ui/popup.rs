@@ -10,10 +10,12 @@ use jiff::Span;
 use jiff::civil::{Date, Weekday};
 use ratatui::style::{Color, Modifier, Style};
 
-use super::{Canvas, Rows, accent, bold, count, cursor, day_label, dim, place_label, plain};
-use crate::app::{App, DateDraft, DateKind, MoveTarget, Popup};
+use super::{
+    Canvas, Rows, WEEKDAYS, accent, bold, count, cursor, day_label, dim, place_label, plain,
+};
+use crate::app::{App, DateDraft, DateKind, MoveTarget, Popup, RepeatDraft, RowId};
 use crate::domain::Row;
-use crate::input::{self, Binding, KeyContext, NotesPane, Pane, PopupKind, ReviewStep};
+use crate::input::{self, Action, Binding, KeyContext, NotesPane, Pane, PopupKind, ReviewStep};
 
 pub(super) fn draw(canvas: &mut Canvas, app: &App, rows: &Rows) {
     let Some(popup) = app.popup() else {
@@ -25,6 +27,7 @@ pub(super) fn draw(canvas: &mut Canvas, app: &App, rows: &Rows) {
         PopupKind::Help => help(canvas, rows),
         PopupKind::Move => move_card(canvas, app, popup, rows),
         PopupKind::Date => date_card(canvas, app, popup, rows),
+        PopupKind::Repeat => repeat_card(canvas, app, popup, rows),
         PopupKind::CopyQuestion => copy_question(canvas, app, popup, rows),
     }
 }
@@ -287,11 +290,15 @@ fn card(canvas: &mut Canvas, x: u16, y: u16, width: u16, height: u16, title: &st
 
 /// The task a card is about, by the id it captured when it opened.
 fn about(app: &App, popup: &Popup) -> String {
-    popup
-        .target
-        .and_then(|task| app.model().live_task(task))
-        .map_or("a task", |task| task.title.as_str())
-        .to_owned()
+    let named = match popup.target {
+        Some(RowId::Task(task)) => app.model().live_task(task).map(|task| task.title.clone()),
+        Some(RowId::Schedule(id)) => app
+            .model()
+            .schedule(id)
+            .map(|schedule| schedule.title.clone()),
+        _ => None,
+    };
+    named.unwrap_or_else(|| "a task".to_owned())
 }
 
 /// A card's footer, drawn from the rows of its own key table so that it
@@ -507,6 +514,129 @@ fn calendar(
                 style,
             );
         }
+    }
+}
+
+// ---- the repeat card -------------------------------------------------
+
+/// The five shapes of DOMAIN.md section 10 and the end of them all, with
+/// what the selected one is adjusted to on the right, and the dates it
+/// would fall on next underneath.
+fn repeat_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
+    let Some(draft) = popup.repeat() else {
+        return;
+    };
+    let shapes = crate::app::repeat_shapes();
+    let width = DATE_WIDTH.min(canvas.width().saturating_sub(4));
+    // The border, a blank, the shapes, a blank, the preview, the rule,
+    // the footer, a blank and the border.
+    let height = shapes.len() as u16 + 8;
+    let (x, y) = place(canvas, rows, width, height);
+    card(canvas, x, y, width, height, "Repeat", &about(app, popup));
+
+    for (at, shape) in shapes.iter().enumerate() {
+        let row = y + 2 + at as u16;
+        let named = input::bindings(KeyContext::Popup {
+            kind: PopupKind::Repeat,
+            text_field: false,
+        })
+        .iter()
+        .find(|binding| {
+            binding
+                .keys
+                .first()
+                .is_some_and(|(_, action)| action == shape)
+        });
+        let Some(binding) = named else { continue };
+
+        canvas.put(x + 2, row, binding.shown, accent());
+        canvas.put(x + 8, row, binding.label, plain());
+        shape_of(canvas, x, width, row, *shape, draft, at == popup.selected);
+        if at == popup.selected {
+            canvas.restyle(x + 1, row, width - 2, cursor());
+        }
+    }
+
+    let preview: Vec<String> = app
+        .repeat_preview()
+        .iter()
+        .map(|date| day_label(*date))
+        .collect();
+    let next = if preview.is_empty() {
+        "Next: nothing; a repeat with no day never comes round".to_owned()
+    } else {
+        format!("Next: {}", preview.join(" · "))
+    };
+    // The preview, its rule and the footer sit at the bottom of the
+    // card, above the blank row that keeps the border off the text.
+    let last = y + height - 4;
+    canvas.put(x + 2, last - 1, super::clip(&next, width - 4), dim());
+    divide(canvas, x, last, width);
+    footer(
+        canvas,
+        x,
+        last + 1,
+        width,
+        &keys_of(KeyContext::Popup {
+            kind: PopupKind::Repeat,
+            text_field: false,
+        }),
+    );
+}
+
+/// What a shape has to say on the right of its row: the days it repeats
+/// on, and, on the selected row, what `h` and `l` are pointing at.
+fn shape_of(
+    canvas: &mut Canvas,
+    x: u16,
+    width: u16,
+    y: u16,
+    shape: Action,
+    draft: &RepeatDraft,
+    selected: bool,
+) {
+    let right = x + width - 2;
+    match shape {
+        Action::EveryWorkDay => {
+            canvas.rput(right, y, "Mon–Fri", dim());
+        }
+        Action::EveryWeek => {
+            // Seven cells of four: the days in the set are bracketed and
+            // the one the keys are on is marked.
+            let left = right.saturating_sub(4 * 7 - 1);
+            for (at, day) in WEEKDAYS.iter().enumerate() {
+                let on = draft.weekdays.contains(day);
+                let text = if on {
+                    format!("[{}]", super::short_weekday(*day))
+                } else {
+                    format!(" {} ", super::short_weekday(*day))
+                };
+                let cell = left + at as u16 * 4;
+                canvas.put(cell, y, &text, if on { bold() } else { dim() });
+                if selected && at == draft.weekday {
+                    canvas.restyle(cell, y, 3, accent().add_modifier(Modifier::REVERSED));
+                }
+            }
+        }
+        Action::EveryMonth => {
+            let day = super::month_day_label(draft.month_day);
+            canvas.rput(right, y, "· or last", dim());
+            canvas.rput(right.saturating_sub(10), y, &format!("[ {day} ]"), bold());
+        }
+        Action::EveryFewWeeks => {
+            let from = format!("weeks from {}", day_label(draft.from));
+            canvas.rput(right, y, &from, dim());
+            canvas.rput(
+                right.saturating_sub(count(&from) + 1),
+                y,
+                &format!("[ {} ]", draft.weeks),
+                bold(),
+            );
+        }
+        Action::StopRepeat => {
+            canvas.rput(right, y, "copies stay", dim());
+        }
+        _ => {}
     }
 }
 

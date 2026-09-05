@@ -743,6 +743,158 @@ fn the_move_card_acts_on_the_row_it_was_opened_on() {
     assert_eq!(app.model().task(first).and_then(|task| task.day), None);
 }
 
+// ---- the repeat card -------------------------------------------------
+
+fn rule_of(app: &App, schedule: Id) -> Option<Rule> {
+    app.model()
+        .schedule(schedule)
+        .map(|schedule| schedule.rule.clone())
+}
+
+#[test]
+fn r_gives_a_task_a_repeat_and_the_task_is_the_first_copy() {
+    let mut app = started();
+    let task = add(&mut app, "Write standup notes");
+
+    app.update(Action::Repeat);
+    app.update(Action::EveryWorkDay);
+    app.update(Action::Confirm);
+
+    assert!(app.popup().is_none());
+    assert_eq!(hint(&app), "Set \"Write standup notes\" to repeat");
+    assert_eq!(rule_of(&app, 1), Some(Rule::Workdays));
+    assert_eq!(
+        app.model().task(task).and_then(|task| task.scheduled_on),
+        Some(on("2025-09-05")),
+        "the task it was made from is the first copy"
+    );
+    assert_eq!(app.backlog().schedules.len(), 1, "and the backlog lists it");
+}
+
+#[test]
+fn the_weekly_shape_is_a_set_of_days_that_space_picks() {
+    let mut app = started();
+    add(&mut app, "Water the plants");
+
+    app.update(Action::Repeat);
+    app.update(Action::EveryWeek);
+    // The card opens on the weekday of the day the task is on, Friday.
+    // Left four times is Monday; space adds it, and Thursday too.
+    for _ in 0..4 {
+        app.update(Action::Left);
+    }
+    app.update(Action::Pick);
+    for _ in 0..3 {
+        app.update(Action::Right);
+    }
+    app.update(Action::Pick);
+    app.update(Action::Confirm);
+
+    assert_eq!(
+        rule_of(&app, 1),
+        Some(Rule::Weekly {
+            weekdays: vec![Weekday::Mon, Weekday::Thu, Weekday::Fri]
+        })
+    );
+}
+
+#[test]
+fn a_repeat_with_no_day_in_it_is_refused_and_the_card_stays_open() {
+    let mut app = started();
+    add(&mut app, "Water the plants");
+
+    app.update(Action::Repeat);
+    app.update(Action::EveryWeek);
+    // Friday is the only day in the set, and space takes it out again.
+    app.update(Action::Pick);
+    app.update(Action::Confirm);
+
+    assert_eq!(hint(&app), "That repeat never comes round.");
+    assert!(app.popup().is_some(), "the card stays open to be fixed");
+    assert!(app.model().schedules.is_empty());
+}
+
+#[test]
+fn the_card_previews_the_dates_the_rule_falls_on() {
+    let mut app = started();
+    add(&mut app, "Pay rent");
+
+    app.update(Action::Repeat);
+    app.update(Action::EveryMonth);
+    // The 5th of the month, which is the day the task is on.
+    assert_eq!(
+        app.repeat_preview()
+            .iter()
+            .map(|date| date.to_string())
+            .collect::<Vec<_>>(),
+        ["2025-10-05", "2025-11-05", "2025-12-05"]
+    );
+
+    app.update(Action::Left);
+    app.update(Action::Left);
+    assert_eq!(
+        app.repeat_preview().first().map(|date| date.to_string()),
+        Some("2025-10-03".to_owned()),
+        "h walks the day of the month back, and the 3rd has gone"
+    );
+}
+
+#[test]
+fn r_on_a_copy_changes_the_schedule_behind_it() {
+    let (mut app, copy) = with_a_recurring_copy();
+
+    app.update(Action::Repeat);
+    app.update(Action::EveryDay);
+    app.update(Action::Confirm);
+
+    assert_eq!(rule_of(&app, 1), Some(Rule::Daily));
+    assert_eq!(hint(&app), "Changed the repeat of \"Write standup notes\"");
+    assert!(
+        app.model()
+            .task(copy)
+            .is_some_and(|task| task.day.is_some()),
+        "the copy on the day stays as it is"
+    );
+}
+
+#[test]
+fn r_on_a_schedule_row_stops_it_and_the_copies_stay() {
+    let mut app = app_at(a_schedule_through("2025-09-04"), NOW);
+    app.update(Action::PaneRight);
+    assert_eq!(app.cursor(List::Backlog), Some(RowId::Schedule(1)));
+
+    app.update(Action::Repeat);
+    app.update(Action::StopRepeat);
+    app.update(Action::Confirm);
+
+    assert_eq!(hint(&app), "Stopped repeating \"Write standup notes\"");
+    assert!(
+        app.backlog().schedules.is_empty(),
+        "a stopped schedule leaves the list"
+    );
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Write standup notes"],
+        "and its copies stay where they are"
+    );
+
+    app.update(Action::Undo);
+    assert_eq!(app.backlog().schedules.len(), 1);
+}
+
+#[test]
+fn stopping_a_task_that_does_not_repeat_says_so() {
+    let mut app = started();
+    add(&mut app, "Book dentist");
+
+    app.update(Action::Repeat);
+    app.update(Action::StopRepeat);
+    app.update(Action::Confirm);
+
+    assert_eq!(hint(&app), "That task does not repeat.");
+    assert!(app.model().schedules.is_empty());
+}
+
 // ---- the schedules under the backlog ---------------------------------
 
 #[test]
@@ -1044,7 +1196,6 @@ fn a_key_a_later_phase_owns_says_so_and_does_nothing() {
     add(&mut app, "Clean out the garage");
 
     for (action, said) in [
-        (Action::Repeat, "The repeat card is not built yet."),
         (Action::PrevDay, "Stepping through days is not built yet."),
         // `g` on the page is going to another day, which is stepping.
         (Action::GoToDate, "Stepping through days is not built yet."),
