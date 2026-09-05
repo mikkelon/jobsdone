@@ -647,8 +647,12 @@ impl App {
         let Some(at) = siblings.iter().position(|row| *row == id) else {
             return;
         };
-        let swap = if down { at + 1 } else { at.wrapping_sub(1) };
-        let Some(other) = siblings.get(swap) else {
+        let swap = if down {
+            Some(at + 1)
+        } else {
+            at.checked_sub(1)
+        };
+        let Some(other) = swap.and_then(|swap| siblings.get(swap)) else {
             return;
         };
         let Some(position) = self.model.live_task(*other).map(|task| task.position) else {
@@ -714,18 +718,21 @@ impl App {
     /// The day each row of the move card means. "Next work day" is the
     /// work-days rule's own definition of one (DOMAIN.md section 10).
     fn target_for(&self, action: Action) -> MoveTarget {
+        // A day the calendar cannot reach, which is only ever the last
+        // day it has, is offered as the date card rather than as some
+        // other day the row does not name.
         let next = |rule: Rule| {
             domain::next_dates(&rule, self.today, 1)
                 .first()
                 .copied()
-                .map_or(MoveTarget::Backlog, MoveTarget::Day)
+                .map_or(MoveTarget::Pick, MoveTarget::Day)
         };
         match action {
             Action::ToToday => MoveTarget::Day(self.today),
             Action::Tomorrow => self
                 .today
                 .tomorrow()
-                .map_or(MoveTarget::Backlog, MoveTarget::Day),
+                .map_or(MoveTarget::Pick, MoveTarget::Day),
             Action::NextWorkDay => next(Rule::Workdays),
             Action::NextMonday => next(Rule::Weekly {
                 weekdays: vec![Weekday::Mon],
