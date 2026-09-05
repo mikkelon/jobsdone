@@ -137,7 +137,8 @@ ssh_base() {
 GUEST_ENV='export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}";
 sig="$(ls -1t "$XDG_RUNTIME_DIR/hypr" 2>/dev/null | head -1)"; [ -n "$sig" ] && export HYPRLAND_INSTANCE_SIGNATURE="$sig";
 wd="$(ls -1 "$XDG_RUNTIME_DIR"/wayland-[0-9]* 2>/dev/null | grep -v lock | head -1)"; [ -n "$wd" ] && export WAYLAND_DISPLAY="$(basename "$wd")";
-export PATH="$HOME/.cargo/bin:$HOME/.local/bin:/usr/share/omarchy/bin:$PATH";'
+export PATH="$HOME/.cargo/bin:$HOME/.local/bin:/usr/share/omarchy/bin:$PATH";
+[ -n "${OMARCHY_PATH:-}" ] || { [ -f /etc/omarchy.conf ] && . /etc/omarchy.conf; }; export OMARCHY_PATH="${OMARCHY_PATH:-/usr/share/omarchy}";'
 
 LUKS_PROMPT="A password is required to access the root volume"
 

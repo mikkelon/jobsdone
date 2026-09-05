@@ -193,9 +193,22 @@ On Omarchy, recognised by `/usr/share/omarchy` and `omarchy-launch-tui`:
   fails loudly if `hyprctl configerrors` has anything to say.
 
 foot is the reference terminal. alacritty, ghostty and kitty are reached
-through the same `xdg-terminal-exec` and are supported as far as they
-behave the same; their cell sizes differ, so 120 by 36 is exact only in
-foot with the default font.
+through the same `xdg-terminal-exec`, each installed and made the default
+with `omarchy-install-terminal`, and all four float the app at 870 by
+650 on a clean install. The grid differs with the font metrics:
+
+| Terminal  | Cells at 870 by 650 |
+|-----------|---------------------|
+| foot      | 120 by 36           |
+| alacritty | 120 by 36           |
+| ghostty   | 119 by 38           |
+| kitty     | 118 by 38           |
+
+The app lays itself out for whatever grid it gets, so the last two lose a
+column or two of the 120 the wireframes are drawn at and gain two rows.
+The app id reaches alacritty only through Omarchy's own desktop entry for
+it, which maps the flag to `--class=`; the stock entry has no mapping and
+the window then keeps the class `Alacritty` and tiles.
 
 Rejected:
 
