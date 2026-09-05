@@ -2,7 +2,7 @@
 
 DEV_DATA_DIR := $(CURDIR)/.dev
 
-.PHONY: check fmt test run install
+.PHONY: check fmt test run install uninstall
 
 check:
 	cargo fmt --check
@@ -20,5 +20,9 @@ test:
 run:
 	JOBSDONE_DATA_DIR=$(DEV_DATA_DIR) cargo run
 
+# The binary, a launcher entry, and on Omarchy the window rule and keybind.
 install:
-	cargo install --path .
+	scripts/install
+
+uninstall:
+	scripts/uninstall

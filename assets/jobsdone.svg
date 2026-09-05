@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <!-- A ticked box on a dark card: the closed-task mark, at launcher size. -->
+  <rect x="16" y="16" width="224" height="224" rx="48" fill="#1e1e2e"/>
+  <rect x="60" y="60" width="136" height="136" rx="22" fill="none" stroke="#cdd6f4" stroke-width="14"/>
+  <path d="M88 130 L118 160 L172 100" fill="none" stroke="#89b4fa" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

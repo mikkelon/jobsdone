@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# Install jobsdone for the current user: the binary, a launcher entry, and
+# on Omarchy the Hyprland window rule and, if wanted and free, the keybind.
+#
+#   scripts/install [--keybind | --no-keybind]
+#
+# Without a flag the keybind is offered at the prompt when a terminal is
+# attached and skipped otherwise. Running again updates everything in
+# place. scripts/uninstall takes it all out again and leaves the data.
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+
+APP_ID="org.omarchy.jobsdone"       # Omarchy's app-id convention for TUIs
+KEYBIND="SUPER + SHIFT + J"
+DESKTOP_FILE="$DATA_HOME/applications/jobsdone.desktop"
+ICON_FILE="$DATA_HOME/icons/hicolor/scalable/apps/jobsdone.svg"
+BINDINGS="$CONFIG_HOME/hypr/bindings.lua"
+BEGIN="-- jobsdone: begin (written by scripts/install; scripts/uninstall removes it)"
+END="-- jobsdone: end"
+
+keybind_choice=""
+case "${1:-}" in
+    "") ;;
+    --keybind) keybind_choice=yes ;;
+    --no-keybind) keybind_choice=no ;;
+    *) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
+esac
+
+say() { printf '%s\n' "$*"; }
+die() { printf 'install: %s\n' "$*" >&2; exit 1; }
+
+on_omarchy() { [ -d "${OMARCHY_PATH:-/usr/share/omarchy}" ] && command -v omarchy-launch-tui >/dev/null; }
+hyprland_running() { [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && command -v hyprctl >/dev/null; }
+
+# --- the binary --------------------------------------------------------------
+
+# ~/.local/bin rather than cargo's own ~/.cargo/bin: the desktop session
+# that runs the keybind and the launcher entry has the former on its PATH
+# and, on a machine where Rust was installed for this alone, not the latter.
+command -v cargo >/dev/null || die "cargo was not found. Install Rust first: on Arch 'sudo pacman -S rustup && rustup default stable', elsewhere https://rustup.rs"
+say "building and installing the binary with cargo..."
+(cd "$ROOT" && cargo install --path . --root "$HOME/.local" --quiet)
+say "installed $HOME/.local/bin/jobsdone"
+case ":$PATH:" in
+    *":$HOME/.local/bin:"*) ;;
+    *) say "note: $HOME/.local/bin is not on your PATH in this shell" ;;
+esac
+
+# --- the launcher entry ------------------------------------------------------
+
+mkdir -p "$(dirname "$ICON_FILE")" "$(dirname "$DESKTOP_FILE")"
+cp "$ROOT/assets/jobsdone.svg" "$ICON_FILE"
+
+if on_omarchy; then
+    # The same shape omarchy-tui-install writes, with the app's own id so the
+    # window rule below can find it.
+    exec_line="xdg-terminal-exec --app-id=$APP_ID -e jobsdone"
+    terminal=false
+else
+    # Any desktop with a launcher runs a Terminal=true entry in its own
+    # terminal emulator.
+    exec_line="jobsdone"
+    terminal=true
+fi
+cat > "$DESKTOP_FILE" <<EOF
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=Jobsdone
+Comment=A keyboard-first daily task manager for the terminal
+Exec=$exec_line
+Terminal=$terminal
+Icon=jobsdone
+Categories=Office;Utility;
+Keywords=tasks;todo;
+StartupNotify=true
+EOF
+command -v update-desktop-database >/dev/null && update-desktop-database "$(dirname "$DESKTOP_FILE")" 2>/dev/null || true
+command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q "$DATA_HOME/icons/hicolor" 2>/dev/null || true
+say "installed the launcher entry $DESKTOP_FILE"
+
+# --- Omarchy: window rule and keybind ---------------------------------------
+
+if ! on_omarchy; then
+    say "not an Omarchy machine; the desktop integration is left to you."
+    say "The app draws nothing of its own around itself: a floating, centred terminal of 120 by 36 cells is the intended window."
+    exit 0
+fi
+
+# What the keybind is bound to right now, or nothing. Hyprland answers
+# exactly when it runs; otherwise the user's own bindings file is the best
+# available witness.
+keybind_taken_by() {
+    if hyprland_running; then
+        hyprctl binds -j 2>/dev/null | python3 -c '
+import json, sys
+for bind in json.load(sys.stdin):
+    # SUPER is 64, SHIFT is 1 in Hyprland modmasks.
+    if bind["modmask"] == 65 and bind["key"].lower() == "j":
+        print(bind["description"] or bind["dispatcher"] + " " + bind["arg"])
+        break
+'
+    elif [ -f "$BINDINGS" ]; then
+        grep -v '^[[:space:]]*--' "$BINDINGS" | grep -oE "o\.bind\(\"$KEYBIND\",[[:space:]]*\"[^\"]*\"" |
+            head -1 | sed -E 's/.*,[[:space:]]*"([^"]*)"/\1/' || true
+    fi
+}
+
+block_present() { [ -f "$BINDINGS" ] && grep -qF -- "$BEGIN" "$BINDINGS"; }
+block_has_keybind() {
+    block_present && awk -v b="$BEGIN" -v e="$END" '$0 == b { inside = 1 } inside && /o\.bind\(/ { found = 1 } $0 == e { inside = 0 } END { exit !found }' "$BINDINGS"
+}
+
+want_keybind=no
+if block_has_keybind; then
+    want_keybind=yes   # already ours; keep it
+else
+    taken="$(keybind_taken_by)"
+    if [ -n "$taken" ]; then
+        say "$KEYBIND is already bound to '$taken', so no keybind is added. Bind one yourself with"
+        say "    o.bind(\"<keys>\", \"Jobsdone\", { tui = \"jobsdone\" })"
+        say "in $BINDINGS."
+    elif [ -n "$keybind_choice" ]; then
+        want_keybind="$keybind_choice"
+    elif [ -t 0 ] && [ -t 1 ]; then
+        printf '%s is free. Bind it to open Jobsdone? [Y/n] ' "$KEYBIND"
+        read -r answer
+        case "$answer" in n* | N*) want_keybind=no ;; *) want_keybind=yes ;; esac
+    else
+        say "no terminal to ask on; the keybind is not added (pass --keybind to add it)"
+    fi
+fi
+
+mkdir -p "$(dirname "$BINDINGS")"
+touch "$BINDINGS"
+block="$BEGIN
+o.window(\"$APP_ID\", { float = true, center = true, size = { 870, 650 } })"
+if [ "$want_keybind" = yes ]; then
+    block="$block
+o.bind(\"$KEYBIND\", \"Jobsdone\", { tui = \"jobsdone\" })"
+fi
+block="$block
+$END"
+
+if block_present; then
+    python3 - "$BINDINGS" "$BEGIN" "$END" "$block" <<'PY'
+import re, sys
+path, begin, end, block = sys.argv[1:]
+text = open(path).read()
+pattern = re.compile(re.escape(begin) + r".*?" + re.escape(end) + r"\n?", re.S)
+open(path, "w").write(pattern.sub(lambda _: block + "\n", text, count=1))
+PY
+else
+    printf '\n%s\n' "$block" >> "$BINDINGS"
+fi
+say "wrote the window rule$([ "$want_keybind" = yes ] && echo " and the $KEYBIND keybind") to $BINDINGS"
+
+if hyprland_running; then
+    hyprctl reload >/dev/null
+    errors="$(hyprctl configerrors 2>/dev/null || true)"
+    if [ -n "$errors" ] && [ "$errors" != "no errors" ]; then
+        say "Hyprland reports config errors after the reload:"
+        say "$errors"
+        exit 1
+    fi
+    say "Hyprland reloaded"
+    [ "$want_keybind" = yes ] && say "press $KEYBIND to open Jobsdone"
+else
+    say "Hyprland is not running here; the rule takes effect at the next login"
+fi
+exit 0

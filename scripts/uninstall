@@ -1,0 +1,46 @@
+#!/usr/bin/env bash
+# Remove what scripts/install put in place: the binary, the launcher entry
+# and icon, and the Hyprland block. The data and the log stay where they
+# are; the last line says where.
+set -euo pipefail
+
+DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
+CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
+STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
+
+DESKTOP_FILE="$DATA_HOME/applications/jobsdone.desktop"
+ICON_FILE="$DATA_HOME/icons/hicolor/scalable/apps/jobsdone.svg"
+BINDINGS="$CONFIG_HOME/hypr/bindings.lua"
+BEGIN="-- jobsdone: begin (written by scripts/install; scripts/uninstall removes it)"
+END="-- jobsdone: end"
+
+say() { printf '%s\n' "$*"; }
+
+if [ -e "$HOME/.local/bin/jobsdone" ]; then
+    if command -v cargo >/dev/null && cargo install --list --root "$HOME/.local" 2>/dev/null | grep -q '^jobsdone '; then
+        cargo uninstall jobsdone --root "$HOME/.local" --quiet
+    else
+        rm -f "$HOME/.local/bin/jobsdone"
+    fi
+    say "removed the binary"
+fi
+
+rm -f "$DESKTOP_FILE" "$ICON_FILE"
+command -v update-desktop-database >/dev/null && update-desktop-database "$(dirname "$DESKTOP_FILE")" 2>/dev/null || true
+say "removed the launcher entry"
+
+if [ -f "$BINDINGS" ] && grep -qF -- "$BEGIN" "$BINDINGS"; then
+    python3 - "$BINDINGS" "$BEGIN" "$END" <<'PY'
+import re, sys
+path, begin, end = sys.argv[1:]
+text = open(path).read()
+pattern = re.compile(r"\n?" + re.escape(begin) + r".*?" + re.escape(end) + r"\n?", re.S)
+open(path, "w").write(pattern.sub("\n", text, count=1).rstrip("\n") + "\n")
+PY
+    say "removed the Hyprland block from $BINDINGS"
+    if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && command -v hyprctl >/dev/null; then
+        hyprctl reload >/dev/null && say "Hyprland reloaded"
+    fi
+fi
+
+say "kept the data in $DATA_HOME/jobsdone and the log in $STATE_HOME/jobsdone"

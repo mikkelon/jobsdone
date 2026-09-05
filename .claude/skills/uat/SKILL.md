@@ -22,6 +22,7 @@ Neither is a gate. Reach for them when the question is one they answer.
 1. `uat/tui start --fresh --size 120x36` builds and launches on wiped data. Every later step prints what it did, so the transcript reads on its own.
 2. `uat/tui screen NAME` after each step that changes the screen. The text print is the truth about layout; the PNG is for colour, bold and dim in the current theme.
 3. Judge against `wireframes/*.txt` at the same size, `docs/DESIGN.md` for colour and keys, `docs/PRODUCT.md` for behaviour. A difference from a wireframe is a finding unless a doc explains it.
+   For colour across themes, `uat/themes.py uat/out/NAME.ansi` draws the capture in every installed theme on one sheet, light ones first; `--themes a,b` gives a close-up of a few.
 4. `uat/tui stop` when done. `uat/MATRIX.md` lists the checks per phase if a full pass is wanted.
 
 ## The clean machine
@@ -41,4 +42,6 @@ Facts about the guest that no command confesses:
 - The guest keyboard is US layout; `type` and `keys` assume it.
 - `--show` opens a QEMU window instead of running headless. The guest's resolution then follows the window, so fullscreen it for a 1080p-like screen. Headless is 1920x1080.
 - The disk passphrase and guest user live in the config file under `~/.local/share/jobsdone-uat/vm`, outside the repository.
+- Start a program in the guest's desktop with `omarchy-launch-tui --app-id=NAME command` under `setsid` over ssh, never `hyprctl dispatch exec`: Omarchy's hyprctl parses dispatches as Lua and rejects a bare command line.
+- The guest's `/tmp` is cleared by every boot, so a helper script written there is gone after a `stop`, `restore` or `fresh`.
 - The QEMU window on the host counts as a `qemu` client in the host's own Hyprland; `grim -g` on that geometry captures it when a headless screenshot is not possible.

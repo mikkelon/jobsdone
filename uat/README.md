@@ -37,6 +37,10 @@ for judging colour, bold and dim. `uat/render.py SCREEN.ansi OUT.png
 120x36 --theme catppuccin-latte` renders a capture again in another
 installed theme, for the light-mode check.
 
+`uat/themes.py SCREEN.ansi...` puts one capture in every installed theme
+on a single sheet, light themes first, under `uat/out/themes/`; with
+`--themes a,b` it draws only those, twice the size, for a close look.
+
 Row 1 of the screen is the blank margin, row 2 the status line, row 3 its
 rule, row 4 the pane titles, row 5 their rule, so the first list row is
 row 6; the hint bar is the second-to-last row. Column 1 is the margin.

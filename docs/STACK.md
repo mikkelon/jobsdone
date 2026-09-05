@@ -140,7 +140,7 @@ Rejected:
 - `make fmt` and `make test`: the halves of it, on their own.
 - `make run`: the program against a scratch database in `.dev`, so
   development never touches the real one.
-- `make install`: see section 7.
+- `make install` and `make uninstall`: see section 7.
 
 GitHub Actions runs `make check` on every push. The repository is
 `jobsdone` on the author's personal GitHub account, private for now and
@@ -152,20 +152,50 @@ Rejected:
 - **Local-only checks.** A hosted run on a clean machine is what catches
   a missing file or an untracked dependency.
 
-## 7. Build and install on Omarchy
+## 7. Build and install
 
-`cargo install --path .` puts the binary in `~/.cargo/bin`. `make install`
-runs that and also installs the desktop pieces: the Hyprland window rule
-on the app id `jobsdone`, and a keybind that runs
+`scripts/install`, behind `make install`, installs for the current user
+and runs again to update in place; `scripts/uninstall` takes everything
+out and leaves the data. It works on any Linux and does more on Omarchy.
 
-    foot --app-id jobsdone -e jobsdone
+Everywhere:
 
-Omarchy configures Hyprland in Lua, so the snippet is Lua and is written
-in phase 12. The program never positions or sizes its own window.
+- The binary, with `cargo install --path . --root ~/.local`, so it lands
+  in `~/.local/bin`. The desktop session that runs a keybind or a
+  launcher entry has that directory on its PATH; it does not have
+  `~/.cargo/bin`, least of all on a machine where Rust was installed for
+  this program alone.
+- A launcher entry at `~/.local/share/applications/jobsdone.desktop`
+  with the icon from `assets/`. Off Omarchy it is a `Terminal=true`
+  entry, which any desktop opens in its own terminal emulator.
 
-foot is the reference terminal. alacritty and ghostty are checked in
-phase 12 and supported as far as they behave the same. The install is
-aimed at the author's own machine.
+On Omarchy, recognised by `/usr/share/omarchy` and `omarchy-launch-tui`:
+
+- The launcher entry has the shape `omarchy-tui-install` writes:
+  `xdg-terminal-exec --app-id=org.omarchy.jobsdone -e jobsdone`, so the
+  user's default terminal opens it under an app id the window rule can
+  match. `org.omarchy.<name>` is the id Omarchy gives every TUI it
+  launches, and the same id is what `o.bind` with `{ tui = "jobsdone" }`
+  produces.
+- A marked block in `~/.config/hypr/bindings.lua`, the file Omarchy
+  keeps for personal bindings, holding the window rule and the keybind:
+
+      o.window("org.omarchy.jobsdone", { float = true, center = true, size = { 870, 650 } })
+      o.bind("SUPER + SHIFT + J", "Jobsdone", { tui = "jobsdone" })
+
+  870 by 650 pixels is 120 by 36 cells in foot with Omarchy's default
+  font (JetBrainsMono Nerd Font 9) and 14-pixel padding, measured on a
+  clean install. Hyprland sizes in logical pixels, so the count holds on
+  a scaled monitor too. The keybind line is written only when the key is
+  free, as `hyprctl binds` reports it (or the bindings file, when
+  Hyprland is not running), and the person says yes at the prompt or
+  passes `--keybind`. After writing, the script reloads Hyprland and
+  fails loudly if `hyprctl configerrors` has anything to say.
+
+foot is the reference terminal. alacritty, ghostty and kitty are reached
+through the same `xdg-terminal-exec` and are supported as far as they
+behave the same; their cell sizes differ, so 120 by 36 is exact only in
+foot with the default font.
 
 Rejected:
 
@@ -173,6 +203,13 @@ Rejected:
   installing yet. It can be added when someone is.
 - **A release tarball with an install script.** Packaging work for no
   present user.
+- **Hardcoding `foot` in the keybind.** It would allow
+  `--window-size-chars=120x36` and an exact grid in any font, but it
+  ignores the terminal the person chose, and the pixel rule gets the
+  same grid in the default setup.
+- **Omarchy's `TUI.float` app id.** It floats without any rule of ours,
+  but at Omarchy's fixed 875 by 600, which is 121 by 33 cells, and one
+  size for every TUI cannot be changed for this one.
 
 ## 8. Files on disk
 
