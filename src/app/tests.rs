@@ -387,6 +387,7 @@ fn the_launch_opens_the_review_over_the_pile_and_writes_the_gate() {
         app.key_context(),
         KeyContext::Review {
             step: ReviewStep::Pile,
+            asks: true,
             text_field: false
         }
     );
@@ -619,6 +620,7 @@ fn a_title_is_edited_in_place_in_the_review() {
         app.page_context(),
         KeyContext::Review {
             step: ReviewStep::Pile,
+            asks: true,
             text_field: true
         }
     );

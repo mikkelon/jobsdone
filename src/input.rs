@@ -90,6 +90,10 @@ pub enum KeyContext {
     },
     Review {
         step: ReviewStep,
+        /// Whether the step asks a decision about any of its rows. A step
+        /// of copies that only started this morning asks none, so it
+        /// offers no outcome at all (DESIGN.md section 5).
+        asks: bool,
         text_field: bool,
     },
     Popup {
@@ -1025,6 +1029,46 @@ const REVIEW_SURFACED: &[Binding] = &[
     },
 ];
 
+/// A step whose rows are all information: the copies a schedule started
+/// this morning. Nothing is decided about them, so the one thing to
+/// press is all the bar has to name (DESIGN.md section 5).
+const REVIEW_INFORMATION: &[Binding] = &[
+    Binding {
+        keys: &[("enter", Action::Confirm)],
+        shown: "⏎",
+        label: "start the day",
+        bar: Bar::Right,
+        narrow: Bar::Right,
+    },
+    Binding {
+        keys: &[("esc", Action::Cancel)],
+        shown: "esc",
+        label: "skip",
+        bar: Bar::Right,
+        narrow: Bar::Right,
+    },
+    // `k` keeps its silence here too: the review is one set of keys
+    // whether or not the step in front of you asks anything.
+    Binding {
+        keys: &[
+            ("j", Action::Down),
+            ("down", Action::Down),
+            ("up", Action::Up),
+        ],
+        shown: "j ↑/↓",
+        label: "move",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("q", Action::Quit)],
+        shown: "q",
+        label: "quit",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+];
+
 /// One row of the panel beside the review: the key that decides the row
 /// the cursor is on, what the panel calls it, and what it does to the
 /// task.
@@ -1604,6 +1648,10 @@ pub fn bindings(context: KeyContext) -> &'static [Binding] {
         KeyContext::Review {
             text_field: true, ..
         } => HOME_RENAMING,
+        // An outcome beside a row nobody is being asked about is a key
+        // that would act on the wrong thing, so the step that asks
+        // nothing offers none (DESIGN.md section 5).
+        KeyContext::Review { asks: false, .. } => REVIEW_INFORMATION,
         KeyContext::Review {
             step: ReviewStep::Pile,
             ..

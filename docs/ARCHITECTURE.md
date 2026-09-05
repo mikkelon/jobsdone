@@ -224,8 +224,9 @@ adds it here first, the way a new dependency is added to section 2 first.
   the mouse actions `MouseDown`, `MouseUp`, `MouseDrag`, `Scroll` with
   cell coordinates, and in text fields `Insert(char)` and the editing
   keys.
-- `KeyContext`: `Home { pane, day }`, `Notes { pane }`, `Review { step }`,
-  `Popup { kind }`, each with a text-field overlay, and
+- `KeyContext`: `Home { pane, day }`, `Notes { pane }`,
+  `Review { step, asks }`, `Popup { kind }`, each with a text-field
+  overlay, and
   `KeyContext::text_field()` to read it. Home's overlay is a
   `Option<Field>` rather than a bool, because the hint bar has to say
   which field it is: adding keeps the field open after Enter and
@@ -233,7 +234,11 @@ adds it here first, the way a new dependency is added to section 2 first.
   is on, because history is the same page stepped to another day and its
   keys differ there: `t` puts a task from a day that has passed onto
   today, and the pane beside it is the list of days rather than the
-  backlog (DESIGN.md section 6). When the overlay is set,
+  backlog (DESIGN.md section 6). The review carries `asks`, whether the
+  step on screen asks a decision about any of its rows, because a step of
+  copies that only started this morning asks none: its keys are the
+  navigation, Enter and Escape, and no outcome that would act on a row
+  nobody is being asked about (DESIGN.md section 5). When the overlay is set,
   printable keys become `Insert` and only `Enter`, `Escape`, `Tab`, `Up`,
   `Down`, the editing keys and the `Alt` shortcuts keep a name. The
   editing keys belong to the field rather than to the table, so they are

@@ -1958,10 +1958,9 @@ fn the_palette_names_the_row_it_is_about_and_the_app_apart() {
     );
 }
 
-/// A surfaced step whose only rows are today's copies asks nothing, and
-/// said `0 surfaced today` and `0 of 0 decided` under a full bar.
-#[test]
-fn a_step_with_nothing_to_decide_says_so_and_draws_no_bar() {
+/// A review whose only surfaced rows are the copies a schedule started
+/// this morning, which is a step that asks nothing.
+fn nothing_to_decide() -> App {
     let today = on("2025-09-05");
     let mut model = Model::empty();
     model.schedules.insert(
@@ -1983,7 +1982,14 @@ fn a_step_with_nothing_to_decide_says_so_and_draws_no_bar() {
             ..task(1, "Write standup notes", Some(today), 0)
         },
     );
-    let app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+    App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app")
+}
+
+/// A surfaced step whose only rows are today's copies asks nothing, and
+/// said `0 surfaced today` and `0 of 0 decided` under a full bar.
+#[test]
+fn a_step_with_nothing_to_decide_says_so_and_draws_no_bar() {
+    let app = nothing_to_decide();
 
     let text = look(&app, 120, 36).join("\n");
     assert!(text.contains("ALSO STARTING TODAY 1"), "{text}");
@@ -2006,6 +2012,35 @@ fn a_step_with_nothing_to_decide_says_so_and_draws_no_bar() {
     assert!(
         text.contains("Start the day"),
         "the one thing to press stays: {text}"
+    );
+}
+
+/// The hint bar named the outcomes beside a step that asks for none, and
+/// under 100 columns it dropped Enter, so the one thing to press was
+/// named nowhere.
+#[test]
+fn the_step_that_asks_nothing_names_only_the_one_thing_to_press() {
+    let app = nothing_to_decide();
+
+    let wide = look(&app, 120, 36);
+    assert_eq!(
+        wide[34],
+        " SURFACED                                                                                     ⏎ start the day  esc skip"
+    );
+    assert_eq!(
+        wide[1],
+        " MORNING REVIEW step 1 of 1 · due & reminders                    1 starting today, nothing to decide   esc skip for now"
+    );
+
+    let narrow = look(&app, 60, 44);
+    assert_eq!(
+        narrow[42],
+        " SURFACED                         ⏎ start the day  esc skip"
+    );
+    // `due & remindnothing to decide` ran the two ends together.
+    assert_eq!(
+        narrow[1],
+        " MORNING REVIEW step 1 of 1               nothing to decide"
     );
 }
 

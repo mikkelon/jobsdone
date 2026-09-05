@@ -2187,6 +2187,10 @@ impl App {
         if let Some(review) = &self.review {
             return KeyContext::Review {
                 step: review.step,
+                // A step of copies that only started this morning asks
+                // nothing, and a key that would answer it acts on the
+                // wrong thing (DESIGN.md section 5).
+                asks: review.progress().1 > 0,
                 text_field: self.editor.is_some(),
             };
         }

@@ -812,6 +812,7 @@ fn columns() -> Vec<(&'static str, Vec<Help>)> {
     third.extend(only(
         KeyContext::Review {
             step: ReviewStep::Pile,
+            asks: true,
             text_field: false,
         },
         &shared,
