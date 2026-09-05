@@ -17,8 +17,10 @@ use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 
 use crate::app::{App, Editor, Layout, List, ListArea, Page, Rect as Cells, RowArea, RowId};
-use crate::domain::{self, MonthDay, NoteRow, Place, Rule, ScheduleRow, Weekday};
-use crate::input::{self, Field, NotesPane, Pane, Side};
+use crate::domain::{
+    self, DayListRow, MonthDay, NoteRow, Place, Rule, ScheduleRow, Stretch, Weekday,
+};
+use crate::input::{self, Field, NotesPane, Pane, Shown, Side};
 
 mod popup;
 #[cfg(test)]
@@ -174,6 +176,20 @@ fn when(date: Date, today: Date) -> String {
         "today".to_owned()
     } else {
         date.strftime("%-d %b").to_string()
+    }
+}
+
+/// How far off a day is, which is what the status line says about the
+/// day the pane has been stepped to.
+fn ago(day: Date, today: Date) -> String {
+    let days = today
+        .until(day)
+        .map_or(0, |span| i64::from(span.get_days()));
+    match days {
+        -1 => "yesterday".to_owned(),
+        1 => "tomorrow".to_owned(),
+        ..=0 => format!("{} days ago", -days),
+        _ => format!("in {days} days"),
     }
 }
 
@@ -339,9 +355,23 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
     } else {
         dim()
     };
-    let day = (format!("Today · {}", day_label(app.today())), bold());
+    let browsing = app.shown() != Shown::Today;
+    let day = if browsing {
+        (day_label(app.showing()), bold())
+    } else {
+        (format!("Today · {}", day_label(app.today())), bold())
+    };
     let count = app.notes().count;
     let notes = format!("{count} note{}", if count == 1 { "" } else { "s" });
+    // A day that is not today says how far off it is and how to come
+    // back, which leaves the right end no room for its own words.
+    let short = vec![
+        (format!("● {review} in review"), pile),
+        quiet(&format!("{notes} n")),
+        quiet("/"),
+        quiet(":"),
+        quiet("?"),
+    ];
 
     let (left, right) = match (app.page(), narrow) {
         (Page::Home, true) => (
@@ -352,6 +382,16 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
                 quiet(":"),
                 quiet("?"),
             ],
+        ),
+        (Page::Home, false) if browsing => (
+            vec![
+                quiet("‹"),
+                day,
+                quiet("›"),
+                quiet(&ago(app.showing(), app.today())),
+                quiet(". back to today"),
+            ],
+            short,
         ),
         (Page::Home, false) => (
             vec![
@@ -421,6 +461,11 @@ fn hint_bar(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
 
     let mut edge = canvas.width() - 1;
     for (shown, name) in right.into_iter().rev() {
+        // A row that would reach what the left end has already drawn is
+        // left out rather than written over it.
+        if edge.saturating_sub(count(name) + count(shown) + 1) < x {
+            break;
+        }
         edge = canvas.rput(edge, y, name, dim()) - count(name) - 1;
         edge = canvas.rput(edge, y, shown, accent()) - count(shown) - 2;
     }
@@ -433,9 +478,29 @@ fn tab_row(canvas: &mut Canvas, app: &App, y: u16) {
         (Page::Home, Pane::Day) => 0,
         (Page::Home, Pane::Backlog) => 1,
     };
-    let counts = [app.day().counts.open, app.backlog().open, app.notes().count];
+    // Stepped to another day, the first two tabs are that day and the
+    // list of days, because that is what the two panes hold.
+    let browsing = app.shown() != Shown::Today;
+    let tabs: [String; 3] = if browsing {
+        [
+            day_label(app.showing()).to_uppercase(),
+            "DAYS".to_owned(),
+            TABS[2].to_owned(),
+        ]
+    } else {
+        TABS.map(str::to_owned)
+    };
+    let counts = if browsing {
+        [
+            app.day().counts.planned,
+            app.days().days().count(),
+            app.notes().count,
+        ]
+    } else {
+        [app.day().counts.open, app.backlog().open, app.notes().count]
+    };
     let mut x = 1;
-    for (at, (name, count)) in TABS.iter().zip(counts).enumerate() {
+    for (at, (name, count)) in tabs.iter().zip(counts).enumerate() {
         let style = if at == here {
             accent().add_modifier(Modifier::REVERSED)
         } else {
@@ -476,7 +541,14 @@ fn two_panes(canvas: &mut Canvas, app: &App, rows: &Rows, layout: &mut Layout) {
     match app.page() {
         Page::Home => {
             pane(canvas, app, List::Day, left, rows, on_left, layout);
-            pane(canvas, app, List::Backlog, right, rows, !on_left, layout);
+            // The pane beside the day is the backlog only while the day
+            // is today (DESIGN.md section 6).
+            let beside = if app.browsing() {
+                List::Days
+            } else {
+                List::Backlog
+            };
+            pane(canvas, app, beside, right, rows, !on_left, layout);
         }
         Page::Notes => {
             pane(canvas, app, List::Notes, left, rows, on_left, layout);
@@ -560,6 +632,7 @@ enum Kind {
 enum Content<'a> {
     Tasks(&'a [domain::Row], Kind),
     Schedules(&'a [ScheduleRow]),
+    Days(&'a [DayListRow]),
     Notes(&'a [NoteRow]),
 }
 
@@ -574,19 +647,25 @@ struct Section<'a> {
 /// A pane: what its header says, its groups, and what it says instead
 /// when it has nothing in it.
 struct PaneView<'a> {
-    title: &'static str,
+    title: String,
     sub: String,
     right: String,
     sections: Vec<Section<'a>>,
+    /// A last dim line under the whole pane, which only the day list has:
+    /// what it does not show.
+    foot: Option<&'static str>,
     /// What the list is for and the keys that fill it (DESIGN.md section
     /// 10).
     empty: [&'static str; 2],
 }
 
-/// Today, or whichever day the day pane is showing.
+/// Today, or whichever day the day pane has been stepped to. A day is
+/// drawn the same way whichever it is (DESIGN.md section 6); only the
+/// header says which, and only the words around the add line change.
 fn day_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
     let view = app.day();
     let counts = view.counts;
+    let shown = app.shown();
     let mut sections = Vec::new();
 
     if !view.focus.is_empty() {
@@ -604,7 +683,10 @@ fn day_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
             label: "Plan",
             count: None,
             content: Content::Tasks(&view.plan, Kind::Open),
-            add: Some("add a task"),
+            add: Some(match shown {
+                Shown::Today => "add a task",
+                _ => "add a task to this day",
+            }),
         });
     }
     if !view.done.is_empty() {
@@ -624,28 +706,94 @@ fn day_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
         });
     }
 
-    let right = if counts.planned == 0 {
-        "nothing planned".to_owned()
-    } else {
-        let mut parts = vec![format!("{} open", counts.open)];
-        if counts.done > 0 {
-            parts.push(format!("{} done", counts.done));
+    // Today counts what it still holds; a day that is over is a record,
+    // so it counts everything that was planned on it (DOMAIN.md section
+    // 6).
+    let right = match (counts.planned, shown) {
+        (0, Shown::Past) => "nothing was planned".to_owned(),
+        (0, _) => "nothing planned".to_owned(),
+        (_, Shown::Today) => {
+            let mut parts = vec![format!("{} open", counts.open)];
+            if counts.done > 0 {
+                parts.push(format!("{} done", counts.done));
+            }
+            if counts.moved > 0 {
+                parts.push(format!("{} moved", counts.moved));
+            }
+            parts.join(" · ")
         }
-        if counts.moved > 0 {
-            parts.push(format!("{} moved", counts.moved));
-        }
-        parts.join(" · ")
+        _ => format!(
+            "{} planned · {} done · {} open · {} moved",
+            counts.planned, counts.done, counts.open, counts.moved
+        ),
+    };
+
+    let (title, sub) = match shown {
+        Shown::Today => ("Today".to_owned(), day_label(view.day)),
+        Shown::Past => (day_label(view.day), "past day".to_owned()),
+        Shown::Future => (day_label(view.day), "future day".to_owned()),
     };
 
     PaneView {
-        title: "Today",
-        sub: day_label(view.day),
+        title,
+        sub,
         right,
         sections,
+        foot: None,
+        empty: match shown {
+            Shown::Today => [
+                "Nothing planned.",
+                "a add a task · l then t pull from the backlog",
+            ],
+            Shown::Past => [
+                "Nothing was planned on this day.",
+                "[ keeps stepping back · g pick a date",
+            ],
+            Shown::Future => [
+                "Nothing planned for this day.",
+                "] keeps stepping on · g pick a date",
+            ],
+        },
+    }
+}
+
+/// The days that have something planned on them, which is what the pane
+/// beside the day becomes as soon as the day is not today (DESIGN.md
+/// section 6).
+fn days_pane(app: &App) -> PaneView<'_> {
+    let view = app.days();
+    let sections: Vec<Section<'_>> = view
+        .stretches
+        .iter()
+        .map(|stretch| Section {
+            label: stretch_label(stretch.stretch),
+            count: None,
+            content: Content::Days(&stretch.days),
+            add: None,
+        })
+        .collect();
+
+    PaneView {
+        title: "Days".to_owned(),
+        sub: String::new(),
+        right: "g go to date".to_owned(),
+        sections,
+        foot: Some("days with nothing planned are skipped"),
         empty: [
-            "Nothing planned.",
-            "a add a task · l then t pull from the backlog",
+            "Nothing has been planned on any day yet.",
+            ". back to today",
         ],
+    }
+}
+
+/// What a stretch of the day list is called. Which days are in it is the
+/// domain's (DOMAIN.md section 6); the name is the screen's.
+fn stretch_label(stretch: Stretch) -> &'static str {
+    match stretch {
+        Stretch::Later => "Later",
+        Stretch::ThisWeek => "This week",
+        Stretch::LastWeek => "Last week",
+        Stretch::Earlier => "Earlier",
     }
 }
 
@@ -692,10 +840,11 @@ fn backlog_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
     };
 
     PaneView {
-        title: "Backlog",
+        title: "Backlog".to_owned(),
         sub: String::new(),
         right,
         sections,
+        foot: None,
         empty: ["Backlog is empty.", "a add · b on a day task sends it here"],
     }
 }
@@ -706,7 +855,7 @@ fn backlog_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
 fn notes_pane(app: &App) -> PaneView<'_> {
     let view = app.notes();
     PaneView {
-        title: "Notes",
+        title: "Notes".to_owned(),
         sub: String::new(),
         // The count is in the status line; the header names the key that
         // fills the list instead (DESIGN.md section 9).
@@ -726,6 +875,7 @@ fn notes_pane(app: &App) -> PaneView<'_> {
                 add: Some("new note"),
             },
         ],
+        foot: None,
         empty: ["", ""],
     }
 }
@@ -739,8 +889,11 @@ enum Line<'a> {
     Rule(&'static str, Option<usize>),
     Task(&'a domain::Row, Kind),
     Schedule(&'a ScheduleRow),
+    Day(&'a DayListRow),
     Note(&'a NoteRow),
     Add(&'static str),
+    /// The pane's last word about itself, under everything else.
+    Foot(&'static str),
 }
 
 fn lines_of<'a>(view: &'a PaneView<'a>) -> Vec<Line<'a>> {
@@ -758,11 +911,15 @@ fn lines_of<'a>(view: &'a PaneView<'a>) -> Vec<Line<'a>> {
                 lines.extend(rows.iter().map(|row| Line::Task(row, kind)));
             }
             Content::Schedules(rows) => lines.extend(rows.iter().map(Line::Schedule)),
+            Content::Days(rows) => lines.extend(rows.iter().map(Line::Day)),
             Content::Notes(rows) => lines.extend(rows.iter().map(Line::Note)),
         }
         if let Some(add) = section.add {
             lines.push(Line::Add(add));
         }
+    }
+    if let Some(foot) = view.foot {
+        lines.push(Line::Foot(foot));
     }
     lines
 }
@@ -793,6 +950,7 @@ fn pane(
     let view = match list {
         List::Day => day_pane(app, adding),
         List::Backlog => backlog_pane(app, adding),
+        List::Days => days_pane(app),
         List::Notes => notes_pane(app),
     };
 
@@ -828,8 +986,15 @@ fn pane(
         Line::Task(row, _) => !adding && on == Some(RowId::Task(row.task)),
         Line::Note(row) => !adding && on == Some(RowId::Note(row.note)),
         Line::Schedule(row) => !adding && on == Some(RowId::Schedule(row.schedule)),
+        Line::Day(row) => !adding && on == Some(RowId::Day(row.day)),
         _ => false,
     });
+    // The foot is the pane's last word about itself, so it follows the
+    // last row on screen rather than being scrolled off under it.
+    let anchor = match (anchor, view.foot) {
+        (Some(at), Some(_)) if at + 2 == lines.len() => Some(at + 1),
+        (anchor, _) => anchor,
+    };
     let first = scroll_to(lines.len(), anchor, height as usize);
 
     for (at, line) in lines.iter().skip(first).take(height as usize).enumerate() {
@@ -850,9 +1015,18 @@ fn pane(
                 }
                 continue;
             }
+            Line::Foot(text) => {
+                canvas.put(x + 5, y, "…", dim());
+                canvas.rput(x + width - 1, y, text, dim());
+                continue;
+            }
             Line::Note(row) => {
                 note_row(canvas, x, width, y, row, today);
                 RowId::Note(row.note)
+            }
+            Line::Day(row) => {
+                day_row(canvas, x, width, y, row, today);
+                RowId::Day(row.day)
             }
             Line::Schedule(row) => {
                 schedule_row(canvas, x, width, y, row);
@@ -918,9 +1092,9 @@ fn empty_state(canvas: &mut Canvas, column: Column, empty: [&str; 2]) {
 /// `Today Fri 5 Sep                    6 open · 2 done · 1 moved`
 fn header(canvas: &mut Canvas, x: u16, width: u16, y: u16, view: &PaneView, focused: bool) {
     let title = if focused { accent() } else { bold() };
-    canvas.put(x + 1, y, view.title, title);
+    canvas.put(x + 1, y, &view.title, title);
     if !view.sub.is_empty() {
-        canvas.put(x + 2 + count(view.title), y, &view.sub, dim());
+        canvas.put(x + 2 + count(&view.title), y, &view.sub, dim());
     }
     if !view.right.is_empty() {
         canvas.rput(x + width - 1, y, &view.right, dim());
@@ -1001,6 +1175,15 @@ fn chips_of(row: &domain::Row, kind: Kind, today: Date) -> Vec<Chip> {
             style: Style::new().fg(Color::Cyan),
         });
     }
+    // A task still open on a day that has passed. Red, because the cost
+    // of leaving it there is the point (DESIGN.md section 3).
+    if row.on_the_pile {
+        chips.push(Chip {
+            text: "on the pile".to_owned(),
+            short: "pile",
+            style: Style::new().fg(Color::Red),
+        });
+    }
     chips
 }
 
@@ -1052,7 +1235,13 @@ fn task_row(canvas: &mut Canvas, column: Column, y: u16, row: &domain::Row, look
     // The right of the row, filled from its edge inwards: the time it was
     // closed, then the chips, then whatever text is left.
     let mut edge = x + width - 1;
-    let closed = closed_label(row, today);
+    // A moved row says where the task is now and nothing else: what
+    // became of it there belongs to the day it is on.
+    let closed = if kind == Kind::Moved {
+        String::new()
+    } else {
+        closed_label(row, today)
+    };
     if !closed.is_empty() && !narrow {
         edge = canvas.rput(edge, y, &closed, dim()) - count(&closed) - 2;
     }
@@ -1126,6 +1315,21 @@ fn schedule_row(canvas: &mut Canvas, x: u16, width: u16, y: u16, row: &ScheduleR
     canvas.rput(x + width - 1, y, &rule, dim());
 }
 
+/// `     Thu 4 Sep                               4 / 5 · 1 open`
+fn day_row(canvas: &mut Canvas, x: u16, width: u16, y: u16, row: &DayListRow, today: Date) {
+    let mut name = day_label(row.day);
+    if row.day == today {
+        name.push_str(" · today");
+    }
+    canvas.put(x + 5, y, &name, plain());
+
+    let mut counts = format!("{} / {}", row.done, row.kept);
+    if row.open > 0 {
+        counts.push_str(&format!(" · {} open", row.open));
+    }
+    canvas.rput(x + width - 1, y, &counts, dim());
+}
+
 /// ` ▪ Mention to Anna: CI runner b                        yesterday`
 fn note_row(canvas: &mut Canvas, x: u16, width: u16, y: u16, row: &NoteRow, today: Date) {
     canvas.put(x + 1, y, " ▪ ", dim());
@@ -1178,7 +1382,7 @@ fn open_note(
         .map(|row| row.created_at.strftime("%a %-d %b %H:%M").to_string());
 
     let view = PaneView {
-        title: "Note",
+        title: "Note".to_owned(),
         sub: made.clone().unwrap_or_default(),
         // The way out, on the pane the way out is from.
         right: if focused && made.is_some() {
@@ -1187,6 +1391,7 @@ fn open_note(
             String::new()
         },
         sections: Vec::new(),
+        foot: None,
         empty: ["No notes yet.", "a writes one"],
     };
     match header_row {

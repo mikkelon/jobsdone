@@ -147,8 +147,16 @@ beside the open note. Everything else is a popup over a page: the date
 card, the repeat card, the day picker, search, the palette, help.
 
 History is not a separate screen. It is the day pane stepped backwards with
-`[`, while the backlog pane becomes a list of days with their done counts.
-Future days work the same way forwards.
+`[`, while the backlog pane becomes a list of days with their done counts,
+newest first, under a rule per week: this week, last week, earlier, and
+later for a day ahead. Future days work the same way forwards. `.` comes
+back to today and `g` goes straight to a date.
+
+The header of a day that is not today is the date itself, with "past day"
+or "future day" beside it where today has the word "Today" before the
+date, and its counts are the whole record of the day rather than what is
+left of it: `8 planned · 3 done · 2 open · 3 moved`. The status line says
+how far off the day is and offers the one key home.
 
 A past day shows every task that was planned for it, in three states: closed
 (dim, with the time, in the Done group), still open (marked "on the pile",
@@ -163,6 +171,12 @@ A past day is drawn exactly as it was while it was today: the same four
 groups in the same order, Focus, Plan, Done, Moved, and a group with
 nothing in it is not drawn at all. That is why today rarely shows a Moved
 group and a finished past day rarely shows a Focus one.
+
+A future day is the same again, and holds only what has actually been put
+there: tasks moved onto it, and whatever is added to it. The recurring
+copies a schedule will make are not drawn ahead of time, because the app
+creates them when the day arrives (section 7) and a preview would be the
+one place a screen showed something the model does not hold.
 
 ## 7. Nothing moves on its own
 

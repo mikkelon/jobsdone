@@ -231,6 +231,150 @@ Draft:
 Hi Anna, two things before Friday. The CI runner budget needs a decision
 this week, and I would like the demo slot after lunch rather than before.";
 
+/// The model wireframe 08 is a picture of: a Monday with two tasks still
+/// open on it, three closed and three moved away, and the other days the
+/// list counts.
+fn history_model() -> Model {
+    let monday = on("2025-09-01");
+    let mut model = Model::empty();
+    let mut put = |task: Task| {
+        model.tasks.insert(task.id, task);
+    };
+
+    put(Task {
+        schedule_id: Some(1),
+        scheduled_on: Some(monday),
+        ..task(2, "Write standup notes", Some(monday), 1)
+    });
+    put(task(1, "Call the accountant about VAT", Some(monday), 0));
+    for (id, title, at_time, focus) in [
+        (3, "Weekly planning", "09:05", false),
+        (4, "Send the contract draft", "11:20", true),
+        (5, "Reply to Anna", "15:48", false),
+    ] {
+        put(Task {
+            focus,
+            closed_at: Some(at(&format!(
+                "2025-09-01T{at_time}:00+02:00[Europe/Copenhagen]"
+            ))),
+            ..task(id, title, Some(monday), id as usize)
+        });
+    }
+    // The three that left the day, still pointed at from it.
+    put(task(
+        6,
+        "Prepare slides for Monday",
+        Some(on("2025-09-05")),
+        0,
+    ));
+    // Moved to the Wednesday and closed two days later, so the day it is
+    // on and the day it was closed are not the same.
+    put(Task {
+        closed_at: Some(at("2025-09-05T14:00:00+02:00[Europe/Copenhagen]")),
+        ..task(7, "Book the venue", Some(on("2025-09-03")), 0)
+    });
+    put(task(8, "Order new office chair", None, 0));
+
+    for (task_id, day, minute) in [
+        (1, monday, 0),
+        (2, monday, 0),
+        (3, monday, 0),
+        (4, monday, 0),
+        (5, monday, 0),
+        (6, monday, 0),
+        (7, monday, 1),
+        (8, monday, 2),
+        (6, on("2025-09-05"), 0),
+        (7, on("2025-09-03"), 0),
+    ] {
+        model.placements.insert(
+            (task_id, day),
+            Placement {
+                task_id,
+                day,
+                placed_at: at(&format!("{day}T08:0{minute}:00+02:00[Europe/Copenhagen]")),
+                from_place: FromPlace::New,
+            },
+        );
+    }
+
+    model.schedules.insert(
+        1,
+        Schedule {
+            id: 1,
+            title: "Write standup notes".to_owned(),
+            rule: Rule::Workdays,
+            generated_through: on("2025-09-05"),
+            stopped_on: None,
+            created_at: at(NOW),
+        },
+    );
+
+    // Every other day of the list, as many rows as its counts say. Only
+    // the counts are drawn, so the rows need nothing but a day.
+    let mut id = 100;
+    for (day, done, open) in [
+        ("2025-09-05", 2, 5),
+        ("2025-09-04", 4, 1),
+        ("2025-09-03", 5, 0),
+        ("2025-09-02", 3, 0),
+        ("2025-08-29", 5, 0),
+        ("2025-08-28", 4, 0),
+        ("2025-08-27", 2, 0),
+        ("2025-08-26", 7, 0),
+        ("2025-08-25", 3, 1),
+        ("2025-08-22", 1, 1),
+    ] {
+        let day = on(day);
+        for at_position in 0..done + open {
+            id += 1;
+            let closed = at_position < done;
+            model.tasks.insert(
+                id,
+                Task {
+                    closed_at: closed
+                        .then(|| at(&format!("{day}T12:00:00+02:00[Europe/Copenhagen]"))),
+                    ..task(id, &format!("Something on {day}"), Some(day), at_position)
+                },
+            );
+            model.placements.insert(
+                (id, day),
+                Placement {
+                    task_id: id,
+                    day,
+                    placed_at: at(&format!("{day}T08:00:00+02:00[Europe/Copenhagen]")),
+                    from_place: FromPlace::New,
+                },
+            );
+        }
+    }
+
+    for id in 1..=4 {
+        let made = at("2025-09-04T16:40:00+02:00[Europe/Copenhagen]");
+        model.notes.insert(
+            id,
+            Note {
+                id,
+                body: "A note".to_owned(),
+                created_at: made.clone(),
+                updated_at: made,
+                deleted_at: None,
+            },
+        );
+    }
+    model
+}
+
+/// The same window, stepped back to the Monday.
+fn history() -> App {
+    let mut app = App::new(Box::new(MemStore::holding(history_model())), &at(NOW)).expect("an app");
+    for _ in 0..4 {
+        app.update(Action::PrevDay);
+    }
+    assert_eq!(app.showing(), on("2025-09-01"));
+    app
+}
+
 fn app() -> App {
     App::new(Box::new(MemStore::holding(wireframe_model())), &at(NOW)).expect("an app")
 }
@@ -326,6 +470,90 @@ fn the_half_width_tile_collapses_to_tabs() {
         &drawn,
         &wireframe("04-narrow", 0, 44),
         "the home page at 80x44",
+    );
+}
+
+#[test]
+fn the_past_day_matches_the_wireframe() {
+    let drawn = look(&history(), 120, 36);
+    same(
+        &drawn,
+        &wireframe("08-history", 0, 36),
+        "a past day at 120x36",
+    );
+}
+
+#[test]
+fn a_past_day_with_nothing_on_it_names_the_keys_that_leave_it() {
+    let mut app = history();
+    // A Sunday nobody planned anything for (wireframe 12 panel D).
+    for _ in 0..1 {
+        app.update(Action::PrevDay);
+    }
+    let text = look(&app, 120, 36).join("\n");
+
+    assert!(text.contains("Sun 31 Aug past day"));
+    assert!(
+        text.contains("nothing was planned"),
+        "and the header says so"
+    );
+    assert!(text.contains("Nothing was planned on this day."));
+    assert!(text.contains("[ keeps stepping back · g pick a date"));
+    assert!(
+        text.contains("Sun 31 Aug"),
+        "the day list still skips it, but the pane is there"
+    );
+}
+
+#[test]
+fn the_narrow_window_makes_the_day_and_the_day_list_its_tabs() {
+    let drawn = look(&history(), 80, 44);
+    let tabs = drawn[3].clone();
+
+    assert!(tabs.contains("MON 1 SEP"), "the tab is the day, not TODAY");
+    assert!(tabs.contains("DAYS 11"), "and the backlog gives way to it");
+    assert_eq!(
+        drawn[drawn.len() - 2],
+        " PAST DAY  [ ] day  . back  space close  t today  x del                  ? more",
+        "and the bar keeps the way home in it"
+    );
+}
+
+#[test]
+fn a_hint_bar_too_full_for_its_right_end_leaves_it_out() {
+    let mut app = history();
+    // A day ahead: "FUTURE DAY" is the longest name a context has, and
+    // its bar is the longest too.
+    for _ in 0..8 {
+        app.update(Action::NextDay);
+    }
+    let drawn = look(&app, 120, 36);
+    let bar = drawn[34].clone();
+
+    assert!(bar.starts_with(" FUTURE DAY  [ ] day  . today"));
+    assert!(
+        !bar.contains("pane"),
+        "the row that does not fit is left out, not written over"
+    );
+    assert!(bar.len() <= 120, "and nothing runs past the window");
+}
+
+#[test]
+fn the_day_list_keeps_its_last_word_under_its_last_day() {
+    let mut app = history();
+    app.update(Action::PaneRight);
+    for _ in 0..11 {
+        app.update(Action::Down);
+    }
+    // A window too short for the whole list, so it has scrolled.
+    let drawn = look(&app, 120, 20);
+    let body: Vec<&String> = drawn[5..17].iter().collect();
+
+    assert!(
+        body.last()
+            .is_some_and(|row| row.contains("days with nothing planned are skipped")),
+        "drawn:\n{}",
+        drawn.join("\n")
     );
 }
 
@@ -516,6 +744,25 @@ fn search_says_when_nothing_matches_and_offers_to_add_it() {
     assert!(text.contains("0 matches"));
     assert!(text.contains("Nothing matches, open or closed."));
     assert!(text.contains("add \"tax return\" to today"));
+}
+
+#[test]
+fn a_closed_result_names_the_day_enter_would_go_to() {
+    let mut app = history();
+    app.update(Action::Search);
+    for typed in "venue".chars() {
+        app.update(Action::Insert(typed));
+    }
+    let drawn = look(&app, 120, 36);
+    let found = drawn
+        .iter()
+        .find(|row| row.contains("[x] Book the venue"))
+        .expect("the result");
+
+    assert!(
+        found.contains("Wed 3 Sep") && !found.contains("Fri 5 Sep"),
+        "the day it is on, not the Friday it was closed on: {found:?}"
+    );
 }
 
 #[test]

@@ -6,11 +6,11 @@
 
 use std::collections::BTreeMap;
 
-use jiff::Zoned;
 use jiff::civil::Date;
+use jiff::{Span, Zoned};
 
 use super::model::{FromPlace, Id, Model, Note, Place, REVIEW_BEFORE, REVIEW_ON, Task};
-use super::rule::Rule;
+use super::rule::{Rule, Weekday};
 use super::working_day;
 
 /// A task as a screen draws it, with every decision the domain owns
@@ -129,18 +129,45 @@ pub struct SearchResults {
     pub total: usize,
 }
 
-/// The distinct days that have a placement, newest first.
+/// The distinct days that have a placement, newest first, broken into
+/// the stretches of the calendar the screen draws as groups. A stretch
+/// with no day in it is left out.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct DayList {
+    pub stretches: Vec<DayStretch>,
+}
+
+impl DayList {
+    /// Every day of the list, newest first, whichever stretch it is in.
+    pub fn days(&self) -> impl Iterator<Item = &DayListRow> {
+        self.stretches.iter().flat_map(|stretch| &stretch.days)
+    }
+}
+
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DayStretch {
+    pub stretch: Stretch,
     pub days: Vec<DayListRow>,
+}
+
+/// Which stretch of the calendar a day falls in, counted in whole weeks
+/// from the Monday of the week today is in (DOMAIN.md section 6).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Stretch {
+    Later,
+    ThisWeek,
+    LastWeek,
+    Earlier,
 }
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct DayListRow {
     pub day: Date,
-    /// Kept, done and still open: `done / kept`, and "· n open".
+    /// Kept and done: `done / kept`.
     pub kept: usize,
     pub done: usize,
+    /// What the day still owes the pile, which is why it is counted only
+    /// for a day that has passed (DOMAIN.md section 6).
     pub open: usize,
 }
 
@@ -360,7 +387,7 @@ pub fn search(model: &Model, text: &str, today: Date) -> SearchResults {
 }
 
 /// The day list the backlog pane becomes when history is browsed.
-pub fn day_list(model: &Model) -> DayList {
+pub fn day_list(model: &Model, today: Date) -> DayList {
     let mut days: BTreeMap<Date, DayListRow> = BTreeMap::new();
 
     for placement in model.placements.values() {
@@ -377,16 +404,46 @@ pub fn day_list(model: &Model) -> DayList {
             continue;
         }
         row.kept += 1;
-        if task.is_open() {
-            row.open += 1;
-        } else {
+        if !task.is_open() {
             row.done += 1;
+        } else if placement.day < today {
+            // An open task on a day that has passed is on the pile; one
+            // on today or later is simply planned.
+            row.open += 1;
         }
     }
 
-    let mut days: Vec<DayListRow> = days.into_values().collect();
-    days.reverse();
-    DayList { days }
+    let mut stretches: Vec<DayStretch> = Vec::new();
+    for row in days.into_values().rev() {
+        let stretch = stretch_of(row.day, today);
+        match stretches.last_mut() {
+            Some(last) if last.stretch == stretch => last.days.push(row),
+            _ => stretches.push(DayStretch {
+                stretch,
+                days: vec![row],
+            }),
+        }
+    }
+    DayList { stretches }
+}
+
+/// The Monday of the week a date is in, because a week begins on a
+/// Monday everywhere else in the program too.
+fn monday_of(date: Date) -> Date {
+    date.saturating_sub(Span::new().days(Weekday::of(date) as i64))
+}
+
+fn stretch_of(day: Date, today: Date) -> Stretch {
+    let this = monday_of(today);
+    if day >= this.saturating_add(Span::new().days(7)) {
+        Stretch::Later
+    } else if day >= this {
+        Stretch::ThisWeek
+    } else if day >= this.saturating_sub(Span::new().days(7)) {
+        Stretch::LastWeek
+    } else {
+        Stretch::Earlier
+    }
 }
 
 /// The live notes, newest first. Editing does not move a note, so the

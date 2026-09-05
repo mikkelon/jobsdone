@@ -312,6 +312,7 @@ fn a_adds_to_the_pane_the_keyboard_is_on_and_keeps_the_field_open() {
         app.page_context(),
         KeyContext::Home {
             pane: Pane::Day,
+            day: Shown::Today,
             field: Some(Field::Adding)
         },
         "every letter types while the field is open"
@@ -1191,6 +1192,325 @@ fn undo_walks_back_through_the_day() {
     assert_eq!(hint(&app), "There is nothing to undo.");
 }
 
+// ---- stepping through the days ---------------------------------------
+
+/// The day before the one the tests stand on, which is the day `[` steps
+/// back to.
+const YESTERDAY: &str = "2025-09-04";
+
+/// The tasks of today's plan moved back a day, as if the window had been
+/// left open over the night, which is the shape every past-day test
+/// needs and no key can make.
+fn rewound(app: &App, ids: &[Id]) -> App {
+    let mut model = app.model().clone();
+    let yesterday = on(YESTERDAY);
+    for id in ids {
+        if let Some(task) = model.tasks.get_mut(id)
+            && task.day == Some(on("2025-09-05"))
+        {
+            task.day = Some(yesterday);
+        }
+        if let Some(placed) = model.placements.remove(&(*id, on("2025-09-05"))) {
+            model.placements.insert(
+                (*id, yesterday),
+                Placement {
+                    day: yesterday,
+                    ..placed
+                },
+            );
+        }
+    }
+    app_at(MemStore::holding(model), NOW)
+}
+
+/// An app on a store where one task was planned for yesterday and is
+/// still there, so yesterday is somewhere to step back to.
+fn with_a_past_day() -> (App, Id) {
+    let mut app = started();
+    let id = add(&mut app, "Call the accountant about VAT");
+    (rewound(&app, &[id]), id)
+}
+
+#[test]
+fn brackets_step_the_day_pane_and_a_dot_comes_back_to_today() {
+    let mut app = started();
+    assert_eq!(app.showing(), on("2025-09-05"));
+
+    app.update(Action::PrevDay);
+    app.update(Action::PrevDay);
+    assert_eq!(app.showing(), on("2025-09-03"));
+    assert_eq!(app.day().day, on("2025-09-03"));
+
+    app.update(Action::NextDay);
+    assert_eq!(app.showing(), on("2025-09-04"));
+
+    app.update(Action::Today);
+    assert_eq!(app.showing(), on("2025-09-05"));
+}
+
+#[test]
+fn the_pane_beside_a_day_that_is_not_today_is_the_list_of_days() {
+    let (mut app, _) = with_a_past_day();
+    app.update(Action::PaneRight);
+    assert_eq!(app.focused(), List::Backlog);
+
+    app.update(Action::PrevDay);
+
+    assert_eq!(app.focused(), List::Days, "the backlog gives way to it");
+    assert_eq!(
+        app.rows_of(List::Days),
+        [(RowId::Day(on(YESTERDAY)), Group::Days)]
+    );
+    assert_eq!(
+        app.key_context(),
+        KeyContext::Home {
+            pane: Pane::Backlog,
+            day: Shown::Past,
+            field: None
+        }
+    );
+}
+
+#[test]
+fn a_past_day_shows_what_was_planned_on_it_however_it_ended() {
+    let mut app = started();
+    let open = add(&mut app, "Call the accountant about VAT");
+    let done = add(&mut app, "Weekly planning");
+    app.update(Action::Close);
+    let moved = add(&mut app, "Book the venue");
+    app.update(Action::ToBacklog);
+
+    let mut app = rewound(&app, &[open, done, moved]);
+    app.update(Action::PrevDay);
+
+    assert_eq!(app.day().counts.planned, 3);
+    assert!(
+        app.day().plan[0].on_the_pile,
+        "still open on a day that is over"
+    );
+    assert_eq!(
+        titles(&app, List::Day),
+        [
+            "Call the accountant about VAT",
+            "Weekly planning",
+            "Book the venue"
+        ]
+    );
+    assert_eq!(
+        groups(&app, List::Day),
+        [Group::Plan, Group::Done, Group::Moved]
+    );
+    assert_eq!(
+        app.day().moved[0].place,
+        Place::Backlog,
+        "it points at the backlog"
+    );
+}
+
+#[test]
+fn moving_a_task_off_a_day_never_rewrites_what_that_day_planned() {
+    let (mut app, id) = with_a_past_day();
+    app.update(Action::PrevDay);
+    assert_eq!(groups(&app, List::Day), [Group::Plan]);
+
+    app.update(Action::ToToday);
+    assert_eq!(
+        groups(&app, List::Day),
+        [Group::Moved],
+        "the record stands; only the row's state changed"
+    );
+    assert_eq!(app.day().moved[0].place, Place::Day(on("2025-09-05")));
+
+    // And again, on: the day it was planned for points at wherever it
+    // ends up, not at the step in between.
+    app.update(Action::Today);
+    app.update(Action::MoveToDay);
+    app.update(Action::Tomorrow);
+    app.update(Action::GoToDate);
+    type_in(&mut app, YESTERDAY);
+    app.update(Action::Confirm);
+
+    assert_eq!(app.showing(), on(YESTERDAY));
+    assert_eq!(app.day().moved[0].place, Place::Day(on("2025-09-06")));
+    assert_eq!(
+        app.model().task(id).and_then(|task| task.day),
+        Some(on("2025-09-06"))
+    );
+}
+
+#[test]
+fn enter_on_a_moved_row_goes_to_where_the_task_is_now() {
+    let (mut app, id) = with_a_past_day();
+    app.update(Action::PrevDay);
+    app.update(Action::ToToday);
+    assert_eq!(groups(&app, List::Day), [Group::Moved]);
+
+    app.update(Action::Confirm);
+
+    assert_eq!(app.showing(), on("2025-09-05"), "today, where it went");
+    assert_eq!(app.focused(), List::Day);
+    assert_eq!(cursor(&app, List::Day), Some(id));
+}
+
+#[test]
+fn enter_on_a_moved_row_that_points_at_the_backlog_comes_back_to_today() {
+    let (mut app, id) = with_a_past_day();
+    app.update(Action::PrevDay);
+    app.update(Action::ToBacklog);
+
+    app.update(Action::Confirm);
+
+    assert_eq!(app.showing(), on("2025-09-05"));
+    assert_eq!(app.focused(), List::Backlog);
+    assert_eq!(cursor(&app, List::Backlog), Some(id));
+}
+
+#[test]
+fn enter_on_a_day_of_the_list_goes_to_that_day() {
+    let (mut app, _) = with_a_past_day();
+    app.update(Action::PrevDay);
+    app.update(Action::PrevDay);
+    assert_eq!(app.showing(), on("2025-09-03"), "a day with nothing on it");
+    app.update(Action::PaneRight);
+
+    app.update(Action::Confirm);
+
+    assert_eq!(app.showing(), on(YESTERDAY));
+    assert_eq!(
+        app.focused(),
+        List::Day,
+        "going to a day means looking at it"
+    );
+}
+
+#[test]
+fn g_opens_the_card_that_goes_to_a_day_and_is_about_no_task() {
+    let mut app = started();
+    add(&mut app, "Ship invoice export");
+
+    app.update(Action::GoToDate);
+    assert_eq!(
+        app.popup().map(|popup| (popup.kind, popup.target)),
+        Some((PopupKind::Date, None))
+    );
+
+    type_in(&mut app, YESTERDAY);
+    app.update(Action::Confirm);
+
+    assert!(app.popup().is_none());
+    assert_eq!(app.showing(), on(YESTERDAY));
+    assert_eq!(
+        titles(&app, List::Day),
+        Vec::<String>::new(),
+        "nothing was planned that day"
+    );
+}
+
+#[test]
+fn a_task_added_while_a_past_day_is_shown_goes_on_that_day() {
+    let (mut app, _) = with_a_past_day();
+    app.update(Action::PrevDay);
+
+    add(&mut app, "Send the meter reading");
+
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Call the accountant about VAT", "Send the meter reading"]
+    );
+    app.update(Action::Today);
+    assert_eq!(titles(&app, List::Day), Vec::<String>::new());
+}
+
+#[test]
+fn the_day_pane_follows_the_day_over_only_when_it_was_on_today() {
+    let mut app = started();
+    app.update(Action::PrevDay);
+    app.clock = at("2025-09-06T09:00:00+02:00[Europe/Copenhagen]");
+    app.update(Action::Tick);
+
+    assert_eq!(app.today(), on("2025-09-06"));
+    assert_eq!(app.showing(), on("2025-09-04"), "the day it was reading");
+
+    app.update(Action::Today);
+    app.clock = at("2025-09-07T09:00:00+02:00[Europe/Copenhagen]");
+    app.update(Action::Tick);
+    assert_eq!(app.showing(), on("2025-09-07"));
+}
+
+// ---- search ----------------------------------------------------------
+
+#[test]
+fn enter_in_search_goes_to_the_day_the_result_is_on() {
+    let mut app = started();
+    let id = add(&mut app, "Send the invoice to Nordic Ltd");
+    let mut app = rewound(&app, &[id]);
+    app.update(Action::Search);
+    type_in(&mut app, "invoice");
+
+    app.update(Action::Confirm);
+
+    assert!(app.popup().is_none());
+    assert_eq!(app.showing(), on(YESTERDAY));
+    assert_eq!(app.focused(), List::Day);
+    assert_eq!(cursor(&app, List::Day), Some(id));
+}
+
+#[test]
+fn enter_in_search_on_a_backlog_task_comes_back_to_today() {
+    let mut app = started();
+    app.update(Action::PaneRight);
+    let id = add(&mut app, "Chase the unpaid invoices");
+    app.update(Action::PaneLeft);
+    app.update(Action::PrevDay);
+    app.update(Action::Search);
+    type_in(&mut app, "invoice");
+
+    app.update(Action::Confirm);
+
+    assert_eq!(
+        app.showing(),
+        on("2025-09-05"),
+        "the backlog is beside today"
+    );
+    assert_eq!(app.focused(), List::Backlog);
+    assert_eq!(cursor(&app, List::Backlog), Some(id));
+}
+
+#[test]
+fn alt_t_in_search_starts_the_task_it_found_again_on_today() {
+    let mut app = started();
+    let old = add(&mut app, "Send the meter reading");
+    app.update(Action::Close);
+    let mut app = rewound(&app, &[old]);
+    app.update(Action::Search);
+    type_in(&mut app, "meter");
+
+    app.update(Action::ToToday);
+
+    assert!(app.popup().is_none());
+    assert_eq!(app.showing(), on("2025-09-05"));
+    assert_eq!(titles(&app, List::Day), ["Send the meter reading"]);
+    let added = cursor(&app, List::Day).expect("the new task");
+    assert_ne!(added, old, "a fresh task, not the one that was found");
+    assert!(
+        app.model()
+            .task(old)
+            .is_some_and(|task| !task.is_open() && task.day == Some(on(YESTERDAY))),
+        "what was found stays where it was, and closed"
+    );
+}
+
+#[test]
+fn a_search_that_found_nothing_adds_what_was_typed() {
+    let mut app = started();
+    app.update(Action::Search);
+    type_in(&mut app, "tax return");
+
+    app.update(Action::Confirm);
+
+    assert_eq!(titles(&app, List::Day), ["tax return"]);
+}
+
 // ---- the hint bar ----------------------------------------------------
 
 #[test]
@@ -1205,22 +1525,6 @@ fn what_the_hint_bar_says_stands_until_the_next_key() {
 
     app.update(Action::Down);
     assert!(app.message().is_none());
-}
-
-#[test]
-fn a_key_a_later_phase_owns_says_so_and_does_nothing() {
-    let mut app = started();
-    add(&mut app, "Clean out the garage");
-
-    for (action, said) in [
-        (Action::PrevDay, "Stepping through days is not built yet."),
-        // `g` on the page is going to another day, which is stepping.
-        (Action::GoToDate, "Stepping through days is not built yet."),
-    ] {
-        app.update(action);
-        assert_eq!(hint(&app), said);
-    }
-    assert_eq!(titles(&app, List::Day), ["Clean out the garage"]);
 }
 
 #[test]
@@ -1629,6 +1933,7 @@ fn the_hint_bar_has_a_context_to_draw_from() {
         app.key_context(),
         KeyContext::Home {
             pane: Pane::Day,
+            day: Shown::Today,
             field: None
         }
     );
@@ -1650,6 +1955,7 @@ fn a_popup_takes_the_keyboard_and_escape_gives_it_back() {
         app.page_context(),
         KeyContext::Home {
             pane: Pane::Day,
+            day: Shown::Today,
             field: None
         },
         "the page underneath is what the palette lists"
@@ -1972,17 +2278,4 @@ fn an_undo_that_no_longer_applies_is_dropped_and_says_so() {
         Some("Added \"Book dentist\""),
         "the entry that could not be undone is dropped off the stack"
     );
-}
-
-#[test]
-fn going_to_a_search_result_is_not_built_yet() {
-    let mut app = started();
-    add(&mut app, "Ship invoice export");
-    app.update(Action::Search);
-    type_in(&mut app, "invoice");
-
-    app.update(Action::Confirm);
-
-    assert_eq!(hint(&app), "Going to a task from search is not built yet.");
-    assert!(app.popup().is_some(), "and the search stays open");
 }

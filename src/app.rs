@@ -6,10 +6,10 @@ use jiff::{Span, Zoned};
 use tracing::warn;
 
 use crate::domain::{
-    self, BacklogView, Change, Command, DayView, Id, Model, MonthDay, NotesView, Place, Rule,
-    SearchResults, Store, StoreError, Weekday, Write,
+    self, BacklogView, Change, Command, DayList, DayView, Id, Model, MonthDay, NotesView, Place,
+    Rule, SearchResults, Store, StoreError, Weekday, Write,
 };
-use crate::input::{self, Action, Binding, Field, KeyContext, NotesPane, Pane, PopupKind};
+use crate::input::{self, Action, Binding, Field, KeyContext, NotesPane, Pane, PopupKind, Shown};
 
 #[cfg(test)]
 mod tests;
@@ -45,6 +45,9 @@ pub enum Page {
 pub enum List {
     Day,
     Backlog,
+    /// The list of days the backlog pane becomes while the day pane is on
+    /// a day other than today (DESIGN.md section 6).
+    Days,
     Notes,
 }
 
@@ -58,6 +61,9 @@ pub enum RowId {
     Task(Id),
     Schedule(Id),
     Note(Id),
+    /// A row of the day list, which is a date rather than a row of the
+    /// model: a day exists because something was planned for it.
+    Day(Date),
 }
 
 impl RowId {
@@ -84,6 +90,14 @@ impl RowId {
             _ => None,
         }
     }
+
+    /// The day the row is, if it is one.
+    pub fn day(self) -> Option<Date> {
+        match self {
+            RowId::Day(day) => Some(day),
+            _ => None,
+        }
+    }
 }
 
 /// Which group of a pane a row is in.
@@ -103,6 +117,9 @@ pub enum Group {
     /// The schedules the backlog pane lists under its two groups
     /// (DOMAIN.md section 7). A row here is a schedule, not a task.
     Schedules,
+    /// The day list the backlog pane becomes while another day is shown.
+    /// A row here is a day, not a task.
+    Days,
     Notes,
 }
 
@@ -216,6 +233,8 @@ pub enum DateKind {
     Remind,
     /// The day the move card was asked to pick.
     Move,
+    /// The day the day pane goes to, which is about no task at all.
+    Go,
 }
 
 /// The date card: the day it is on, however that day was arrived at, and
@@ -342,6 +361,7 @@ impl Layout {
 struct Cursors {
     day: Option<RowId>,
     backlog: Option<RowId>,
+    days: Option<RowId>,
     notes: Option<RowId>,
 }
 
@@ -351,6 +371,7 @@ struct Cursors {
 struct Views {
     day: DayView,
     backlog: BacklogView,
+    days: DayList,
     notes: NotesView,
     /// The size of the pile, which the status line counts in red.
     pile: usize,
@@ -363,6 +384,10 @@ pub struct App {
     /// another window can be noticed.
     version: u64,
     today: Date,
+    /// The day the day pane is on, which is today until `[` steps it
+    /// back. History is this page on another day, not a screen of its
+    /// own (DESIGN.md section 6).
+    showing: Date,
     views: Views,
     page: Page,
     pane: Pane,
@@ -402,6 +427,7 @@ impl App {
             model,
             version,
             today: domain::working_day(now),
+            showing: domain::working_day(now),
             views: Views::default(),
             page: Page::Home,
             pane: Pane::Day,
@@ -469,6 +495,11 @@ impl App {
                 let now = self.now();
                 let today = domain::working_day(&now);
                 let rolled = today != self.today;
+                // A pane that was on today follows the day over; one
+                // stepped back stays on the day it was looking at.
+                if self.showing == self.today {
+                    self.showing = today;
+                }
                 self.today = today;
                 // A window left open past 05:00 has reached a new day
                 // without a launch, and today's copies are owed to it.
@@ -516,7 +547,7 @@ impl App {
             Action::Delete => self.delete(),
             Action::MoveDown => self.reorder(true),
             Action::MoveUp => self.reorder(false),
-            Action::ToToday => self.move_it(MoveTarget::Day(self.today)),
+            Action::ToToday => self.pull_onto_today(),
             Action::ToBacklog => self.move_it(MoveTarget::Backlog),
             Action::Tomorrow
             | Action::NextWorkDay
@@ -530,10 +561,9 @@ impl App {
             Action::ThisAndFuture => self.answer_the_question(true),
             Action::Undo => self.undo(),
 
-            Action::PrevDay | Action::NextDay => {
-                self.not_yet("Stepping through days is not built yet.");
-            }
-            Action::Today => {}
+            Action::PrevDay => self.step_the_day(-1),
+            Action::NextDay => self.step_the_day(1),
+            Action::Today => self.show_the_day(self.today),
             Action::DueBy => self.open_the_date_card(DateKind::Due),
             Action::RemindOn => self.open_the_date_card(DateKind::Remind),
             Action::PrevMonth => {
@@ -592,8 +622,9 @@ impl App {
     /// either changes.
     fn refresh(&mut self) {
         self.views = Views {
-            day: domain::day_view(&self.model, self.today, self.today),
+            day: domain::day_view(&self.model, self.showing, self.today),
             backlog: domain::backlog_view(&self.model, self.today),
+            days: domain::day_list(&self.model, self.today),
             notes: domain::notes(&self.model),
             pile: domain::pile(&self.model, self.today).total,
         };
@@ -707,11 +738,6 @@ impl App {
         });
     }
 
-    /// A key the shell already declares and a later phase fills in.
-    fn not_yet(&mut self, what: &str) {
-        self.say(what, false);
-    }
-
     // ---- the rows ----------------------------------------------------
 
     /// Every row of a list in the order they are drawn, which is the
@@ -748,6 +774,14 @@ impl App {
                 ]
                 .concat()
             }
+            List::Days => self
+                .views
+                .days
+                .stretches
+                .iter()
+                .flat_map(|stretch| &stretch.days)
+                .map(|row| (RowId::Day(row.day), Group::Days))
+                .collect(),
             List::Notes => self
                 .views
                 .notes
@@ -781,7 +815,13 @@ impl App {
             return None;
         }
         let Some(task) = id.task() else {
-            self.say("That row is a repeat schedule, not a task.", false);
+            self.say(
+                match id {
+                    RowId::Day(_) => "That row is a day, not a task.",
+                    _ => "That row is a repeat schedule, not a task.",
+                },
+                false,
+            );
             return None;
         };
         Some(task)
@@ -940,6 +980,20 @@ impl App {
         }
     }
 
+    /// `t`: the cursor row onto today, or, in search, the result the
+    /// cursor is on as a new task there.
+    fn pull_onto_today(&mut self) {
+        if self
+            .popup
+            .as_ref()
+            .is_some_and(|open| open.kind == PopupKind::Search)
+        {
+            self.readd_from_search();
+            return;
+        }
+        self.move_it(MoveTarget::Day(self.today));
+    }
+
     /// `t`, `b`, and the days of the move card. With the card open the
     /// task is the one the card was opened on; otherwise it is the row
     /// the cursor is on.
@@ -1061,6 +1115,71 @@ impl App {
         .collect()
     }
 
+    // ---- the days ----------------------------------------------------
+
+    /// `[` and `]`: the day pane one day back or on. Nothing else moves,
+    /// so the keyboard stays in the pane it was in and the pane beside
+    /// the day becomes the list of days.
+    fn step_the_day(&mut self, days: i64) {
+        if let Ok(day) = self.showing.checked_add(Span::new().days(days)) {
+            self.show_the_day(day);
+        }
+    }
+
+    /// The day pane on a day, wherever the key came from: `.`, the day
+    /// list, the go-to card, or a moved row being followed.
+    fn show_the_day(&mut self, day: Date) {
+        self.showing = day;
+        self.refresh();
+    }
+
+    /// `⏎` on the home page: the day a row of the day list is, or the
+    /// place a moved row points at. Everywhere else it is the field
+    /// under the cursor, and there is no field here.
+    fn follow_the_row(&mut self) {
+        let list = self.focused();
+        let Some(id) = self.cursor(list) else {
+            return;
+        };
+        if let Some(day) = id.day() {
+            self.show_the_day(day);
+            // Going to a day means looking at it, so the keyboard goes
+            // to the pane the day is drawn in.
+            self.pane = Pane::Day;
+            return;
+        }
+        if self.group_of(list, id) != Some(Group::Moved) {
+            return;
+        }
+        if let Some(task) = id.task() {
+            self.follow_the_task(task);
+        }
+    }
+
+    /// Wherever a task is now, with the cursor on it. A moved row is a
+    /// pointer and a search result is another (DESIGN.md section 6).
+    fn follow_the_task(&mut self, task: Id) {
+        let Some(place) = self.model.live_task(task).map(|task| task.place()) else {
+            self.say("That task is gone.", false);
+            return;
+        };
+        self.page = Page::Home;
+        match place {
+            Place::Day(day) => {
+                self.show_the_day(day);
+                self.pane = Pane::Day;
+                self.set_cursor(List::Day, RowId::Task(task));
+            }
+            Place::Backlog => {
+                // The backlog is only beside today, so following a task
+                // into it comes back to today.
+                self.show_the_day(self.today);
+                self.pane = Pane::Backlog;
+                self.set_cursor(List::Backlog, RowId::Task(task));
+            }
+        }
+    }
+
     // ---- the date card -----------------------------------------------
 
     /// `d` and `r`: the card that puts a date on a backlog task. Pressed
@@ -1070,8 +1189,9 @@ impl App {
     fn open_the_date_card(&mut self, kind: DateKind) {
         if let Some(popup) = &mut self.popup {
             if let Card::Date(draft) = &mut popup.card {
-                // The move card's day is not a date the task carries.
-                if draft.kind != DateKind::Move {
+                // Only a date the task carries has two modes; the day a
+                // move or a step goes to has none.
+                if matches!(draft.kind, DateKind::Due | DateKind::Remind) {
                     draft.kind = kind;
                 }
             }
@@ -1088,17 +1208,17 @@ impl App {
         let on = match kind {
             DateKind::Due => task.due_on,
             DateKind::Remind => task.remind_on,
-            DateKind::Move => task.day,
+            DateKind::Move | DateKind::Go => task.day,
         }
         .unwrap_or(self.today);
         self.open_card(PopupKind::Date, Some(RowId::Task(id)), kind, on);
     }
 
     /// `g`: on the move card, the calendar for the day it could not
-    /// name. On the page itself, going to another day is phase 10's.
+    /// name. On the page itself, the day the day pane goes to.
     fn pick_a_date(&mut self) {
         let Some(task) = self.take_the_card() else {
-            self.not_yet("Stepping through days is not built yet.");
+            self.open_card(PopupKind::Date, None, DateKind::Go, self.showing);
             return;
         };
         let on = self
@@ -1129,7 +1249,7 @@ impl App {
             .popup
             .as_ref()
             .and_then(Popup::date)
-            .is_some_and(|draft| draft.kind != DateKind::Move);
+            .is_some_and(|draft| matches!(draft.kind, DateKind::Due | DateKind::Remind));
         input::bindings(KeyContext::Popup {
             kind: PopupKind::Date,
             text_field: true,
@@ -1174,10 +1294,19 @@ impl App {
     /// The day the card ended on: a date the task carries, or the day it
     /// is moved to. Either way the card has said its piece and closes.
     fn take_the_date(&mut self, date: Option<Date>) {
-        let (Some(task), Some(draft)) = (
-            self.popup.as_ref().and_then(Popup::task),
-            self.popup.as_ref().and_then(Popup::date).copied(),
-        ) else {
+        let Some(draft) = self.popup.as_ref().and_then(Popup::date).copied() else {
+            return;
+        };
+        // The card that goes to a day is about no task, so it answers
+        // before the task is looked for.
+        if draft.kind == DateKind::Go {
+            self.popup = None;
+            if let Some(day) = date {
+                self.show_the_day(day);
+            }
+            return;
+        }
+        let Some(task) = self.popup.as_ref().and_then(Popup::task) else {
             return;
         };
         // Clearing is a date the task carries; the move card's day is a
@@ -1198,6 +1327,7 @@ impl App {
                     self.move_task(task, Place::Day(day));
                 }
             }
+            DateKind::Go => {}
         }
     }
 
@@ -1306,7 +1436,7 @@ impl App {
         match row {
             RowId::Schedule(id) => Some(id),
             RowId::Task(id) => self.model.live_task(id).and_then(|task| task.schedule_id),
-            RowId::Note(_) => None,
+            RowId::Note(_) | RowId::Day(_) => None,
         }
     }
 
@@ -1662,7 +1792,10 @@ impl App {
     fn place_of(&self, list: List) -> Place {
         match list {
             List::Backlog => Place::Backlog,
-            List::Day | List::Notes => Place::Day(self.today),
+            // A task added while a past day is shown belongs to that
+            // day, which is what its add line says (wireframe 08).
+            List::Day => Place::Day(self.showing),
+            List::Days | List::Notes => Place::Day(self.today),
         }
     }
 
@@ -1691,6 +1824,7 @@ impl App {
         match self.page {
             Page::Home => KeyContext::Home {
                 pane: self.pane,
+                day: self.shown(),
                 field: self.editor.as_ref().map(|editor| editor.field),
             },
             Page::Notes => KeyContext::Notes {
@@ -1706,9 +1840,16 @@ impl App {
     pub fn focused(&self) -> List {
         match (self.page, self.pane) {
             (Page::Home, Pane::Day) => List::Day,
+            (Page::Home, Pane::Backlog) if self.browsing() => List::Days,
             (Page::Home, Pane::Backlog) => List::Backlog,
             (Page::Notes, _) => List::Notes,
         }
+    }
+
+    /// Whether the day pane is on a day other than today, which is the
+    /// whole of "history is being browsed".
+    pub fn browsing(&self) -> bool {
+        self.showing != self.today
     }
 
     // ---- reading the state, for `ui` --------------------------------
@@ -1722,8 +1863,28 @@ impl App {
         &self.model
     }
 
+    /// The day the day pane is on, which the status line names.
+    pub fn showing(&self) -> Date {
+        self.showing
+    }
+
+    /// Which side of today that day is on.
+    pub fn shown(&self) -> Shown {
+        match self.showing.cmp(&self.today) {
+            std::cmp::Ordering::Less => Shown::Past,
+            std::cmp::Ordering::Equal => Shown::Today,
+            std::cmp::Ordering::Greater => Shown::Future,
+        }
+    }
+
     pub fn day(&self) -> &DayView {
         &self.views.day
+    }
+
+    /// The days that have something planned on them, which the pane
+    /// beside a past day lists.
+    pub fn days(&self) -> &DayList {
+        &self.views.days
     }
 
     pub fn backlog(&self) -> &BacklogView {
@@ -1782,6 +1943,7 @@ impl App {
         let wanted = match list {
             List::Day => self.cursors.day,
             List::Backlog => self.cursors.backlog,
+            List::Days => self.cursors.days,
             List::Notes => self.cursors.notes,
         };
         match wanted {
@@ -1830,6 +1992,7 @@ impl App {
         self.cursors = Cursors {
             day: self.rows_of(List::Day).first().map(|(id, _)| *id),
             backlog: self.rows_of(List::Backlog).first().map(|(id, _)| *id),
+            days: self.rows_of(List::Days).first().map(|(id, _)| *id),
             notes: self.rows_of(List::Notes).first().map(|(id, _)| *id),
         };
     }
@@ -1838,6 +2001,7 @@ impl App {
         let slot = match list {
             List::Day => &mut self.cursors.day,
             List::Backlog => &mut self.cursors.backlog,
+            List::Days => &mut self.cursors.days,
             List::Notes => &mut self.cursors.notes,
         };
         *slot = Some(id);
@@ -1981,7 +2145,7 @@ impl App {
                 self.page = Page::Home;
                 self.pane = Pane::Day;
             }
-            List::Backlog => {
+            List::Backlog | List::Days => {
                 self.page = Page::Home;
                 self.pane = Pane::Backlog;
             }
@@ -2030,8 +2194,10 @@ impl App {
         let Some(kind) = self.popup.as_ref().map(|popup| popup.kind) else {
             if self.page == Page::Notes {
                 self.open_the_note();
-            } else {
+            } else if self.editor.is_some() {
                 self.commit_the_title();
+            } else {
+                self.follow_the_row();
             }
             return Flow::Continue;
         };
@@ -2076,26 +2242,64 @@ impl App {
         self.move_it(choice.target);
     }
 
-    /// Enter in search. A search that found nothing offers to add what was
-    /// typed as a task on today (DOMAIN.md section 14); going to a result
-    /// is phase 10's.
+    /// The result the cursor is on: the open matches and then the closed,
+    /// which is the order the box draws them in.
+    fn found_at_cursor(&self) -> Option<Id> {
+        let popup = self.popup.as_ref()?;
+        let results = self.search_results();
+        results
+            .open
+            .iter()
+            .chain(results.closed.iter())
+            .nth(popup.selected)
+            .map(|row| row.task)
+    }
+
+    /// Enter in search: the day the result is on, which for an open
+    /// backlog task is the backlog beside today. A search that found
+    /// nothing offers to add what was typed as a task on today instead
+    /// (DOMAIN.md section 14).
     fn take_the_search(&mut self) {
+        if let Some(task) = self.found_at_cursor() {
+            self.popup = None;
+            self.follow_the_task(task);
+            return;
+        }
         let Some(popup) = &self.popup else {
             return;
         };
         let title = popup.text.trim().to_owned();
-        if self.search_results().total > 0 {
-            self.not_yet("Going to a task from search is not built yet.");
-            return;
-        }
         if title.is_empty() {
             return;
         }
         self.popup = None;
+        self.add_to_today(title);
+    }
+
+    /// `alt-t` in search: the title of the result, as a fresh task on
+    /// today. What was found stays where it is; nothing about a closed
+    /// task is reopened (DOMAIN.md section 14).
+    fn readd_from_search(&mut self) {
+        let title = self
+            .found_at_cursor()
+            .and_then(|task| self.model.live_task(task))
+            .map(|task| task.title.clone());
+        let Some(title) = title else {
+            self.say("There is no task here to re-add.", false);
+            return;
+        };
+        self.popup = None;
+        self.add_to_today(title);
+    }
+
+    /// A new task at the end of today's plan, with the keyboard and the
+    /// cursor on it, which is where both offers of the search box end.
+    fn add_to_today(&mut self, title: String) {
         let place = Place::Day(self.today);
         if let Some(change) = self.run(Command::AddTask { title, place })
             && let Some(added) = added_task(&change)
         {
+            self.show_the_day(self.today);
             self.focus_on(List::Day);
             self.set_cursor(List::Day, RowId::Task(added));
         }

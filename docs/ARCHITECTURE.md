@@ -176,7 +176,7 @@ adds it here first, the way a new dependency is added to section 2 first.
   `Surfaced`, `SearchResults`, `DayList`, `NotesView`. With them the small
   types those name: `Id`, `Place`, `FromPlace`, `Weekday`, `MonthDay`,
   `Write`, `Row`, `DueChip`, `DayCounts`, `PileDay`, `DayListRow`,
-  `ScheduleRow`, `NoteRow`, `Undone`.
+  `DayStretch`, `Stretch`, `ScheduleRow`, `NoteRow`, `Undone`.
 - `apply(&Model, Command, now: &Zoned, undo_cap: usize) -> Result<Change,
   Rejected>`: every user command. Pushes the undo entry as part of the
   change. The cap is the length the undo stack is held to; the domain
@@ -218,18 +218,22 @@ adds it here first, the way a new dependency is added to section 2 first.
   the mouse actions `MouseDown`, `MouseUp`, `MouseDrag`, `Scroll` with
   cell coordinates, and in text fields `Insert(char)` and the editing
   keys.
-- `KeyContext`: `Home { pane }`, `Notes { pane }`, `Review { step }`,
+- `KeyContext`: `Home { pane, day }`, `Notes { pane }`, `Review { step }`,
   `Popup { kind }`, each with a text-field overlay, and
   `KeyContext::text_field()` to read it. Home's overlay is a
   `Option<Field>` rather than a bool, because the hint bar has to say
   which field it is: adding keeps the field open after Enter and
-  renaming does not. When the overlay is set,
+  renaming does not. Home also carries a `Shown`, which day the day pane
+  is on, because history is the same page stepped to another day and its
+  keys differ there: `t` puts a task from a day that has passed onto
+  today, and the pane beside it is the list of days rather than the
+  backlog (DESIGN.md section 6). When the overlay is set,
   printable keys become `Insert` and only `Enter`, `Escape`, `Tab`, `Up`,
   `Down`, the editing keys and the `Alt` shortcuts keep a name. The
   editing keys belong to the field rather than to the table, so they are
   never a row of the hint bar.
-- `Pane`, `NotesPane`, `ReviewStep`, `Field` and `PopupKind`: what a
-  context is of.
+- `Pane`, `NotesPane`, `ReviewStep`, `Shown`, `Field` and `PopupKind`:
+  what a context is of.
 - `action_for(Event, KeyContext) -> Option<Action>`.
 - `bindings(KeyContext) -> &[Binding]`: the rows of the key table for a
   context. The hint bar, the command palette and the help overlay are
@@ -264,18 +268,21 @@ adds it here first, the way a new dependency is added to section 2 first.
 - `Layout`: which pane and which row occupies which cell rectangle, as a
   `narrow` flag, a `ListArea` per pane and a `RowArea` per row, over a
   `Rect` of the terminal's own cells. A row is named by a `RowId`, which
-  is a task, a schedule or a note, because the backlog pane draws the
-  schedules under its tasks and the three number from one apiece. `app` may
+  is a task, a schedule, a note or a day, because the backlog pane draws
+  the schedules under its tasks, the notes page has its own list, and the
+  day list's rows are dates rather than rows of the model. `app` may
   not name ratatui, so the rectangle is its own.
   `App::set_layout(Layout)` stores the last one and the mouse actions are
   resolved against it.
 - Read access to the model and the application state for `ui`:
-  `today`, `model`, the views `day`, `backlog`, `notes` and
-  `review_count`, `page`, `pane`, `notes_pane`, `focused`, `popup`,
+  `today`, `showing` and `shown`, the day the day pane is on and which
+  side of today it is, `browsing`, `model`, the views `day`, `backlog`,
+  `days`, `notes` and `review_count`, `page`, `pane`, `notes_pane`, `focused`, `popup`,
   `editor`, `message`, `cursor`, `palette_rows`, `search_results`,
   `move_choices`, `date_choices`, `repeat_preview`, `draft` and `layout`.
-  `Page` is `Home` or `Notes`; `List` is `Day`, `Backlog` or `Notes`, one
-  cursor each, held by id; `Popup` carries the kind, the text typed into
+  `Page` is `Home` or `Notes`; `List` is `Day`, `Backlog`, `Days` or
+  `Notes`, one cursor each, held by id, `Days` being the list the backlog
+  pane becomes while the day pane is on another day; `Popup` carries the kind, the text typed into
   it, the caret, the selected row, the row it is about, and the `Card` it
   is building before Enter turns it into a command, which for the date
   card is the day it is on and which of its two controls has the
@@ -288,7 +295,7 @@ adds it here first, the way a new dependency is added to section 2 first.
   the move card, its key and name from the key table and its day worked
   out here.
 - `Group`: which group of a pane a row is in, the schedule list under the
-  backlog included. The domain decides what is in each; the application
+  backlog and the stretches of the day list included. The domain decides what is in each; the application
   needs the name because a key means something different in each, and
   `ui` because a group is drawn under its own rule.
 

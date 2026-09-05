@@ -156,9 +156,9 @@ moved rows that jump to where the task is now, and add search across all
 history with re-add from the empty result.
 
 - Deliverable: history browsing and search.
-- Done when: flow G works, a moved task is never rewritten on the day it
-  was planned for, and no dependency crosses a seam ARCHITECTURE.md
-  forbids.
+- Done when: flows F and F2 work, a moved task is never rewritten on the
+  day it was planned for, and no dependency crosses a seam
+  ARCHITECTURE.md forbids.
 
 ## Phase 11: Scratchpad
 
