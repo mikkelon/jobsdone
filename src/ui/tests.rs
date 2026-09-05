@@ -189,25 +189,47 @@ fn wireframe_model() -> Model {
         );
     }
 
-    for (id, body) in [
-        (1, "Mention to Anna: CI runner budget"),
-        (2, "Draft reply to tender Q3"),
-        (3, "nordic ltd PO 4471, due 30 days"),
-        (4, "rsync -av --delete ~/work nas:/bk"),
+    for (id, made, body) in [
+        (1, "2025-09-04T16:40:00", NOTE),
+        (
+            2,
+            "2025-09-03T11:20:00",
+            "Draft reply to tender Q3: \"We can",
+        ),
+        (3, "2025-09-03T09:05:00", "nordic ltd PO 4471, due 30 days"),
+        (
+            4,
+            "2025-08-29T14:00:00",
+            "rsync -av --delete ~/work nas:/bk",
+        ),
     ] {
+        let made = at(&format!("{made}+02:00[Europe/Copenhagen]"));
         model.notes.insert(
             id,
             Note {
                 id,
                 body: body.to_owned(),
-                created_at: at(NOW),
-                updated_at: at(NOW),
+                created_at: made.clone(),
+                updated_at: made,
                 deleted_at: None,
             },
         );
     }
     model
 }
+
+/// The note wireframe 10 has open, which is also the first row of its
+/// list: several lines, a blank one among them.
+const NOTE: &str = "Mention to Anna:
+- CI runner budget
+- Friday demo slot
+- ask about the retro format
+
+Also: the tender deadline moved to the 12th, check with legal first.
+
+Draft:
+Hi Anna, two things before Friday. The CI runner budget needs a decision
+this week, and I would like the demo slot after lunch rather than before.";
 
 fn app() -> App {
     App::new(Box::new(MemStore::holding(wireframe_model())), &at(NOW)).expect("an app")
@@ -601,26 +623,40 @@ fn the_copy_question_spells_both_answers_out() {
 }
 
 #[test]
-fn the_notes_page_lists_the_notes_and_says_the_rest_is_later() {
+fn the_notes_list_is_newest_first_with_the_age_of_each_note() {
     let mut app = app();
     app.update(Action::NotesPage);
     let drawn = look(&app, 120, 36);
+    let wanted = wireframe("10-scratchpad", 0, 36);
 
     assert!(drawn[1].contains("Notes 4 notes"));
     assert!(drawn[1].contains("n or esc back to today"));
-    assert!(drawn[5].contains("▪ rsync -av --delete ~/work na"));
-    assert!(
-        drawn
-            .join("\n")
-            .contains("Opening a note is not built yet."),
-        "the list is there; the note beside it is phase 11's"
-    );
     let divider = drawn[4].chars().position(|glyph| glyph == '┬');
     assert_eq!(
         divider,
         Some(44),
         "the list is a column, not half the window"
     );
+
+    // The list, its ages and the row that makes another note, against the
+    // wireframe's own column. Its first row is the one note whose body the
+    // wireframe draws in full beside it, so only its text differs.
+    assert_eq!(
+        left(&drawn[5]),
+        "  ▪ Mention to Anna:              yesterday"
+    );
+    for row in [6, 7, 8, 9, 10] {
+        assert_eq!(left(&drawn[row]), left(&wanted[row]), "row {row}");
+    }
+}
+
+/// The 44 columns the notes list has, without the pane beside it.
+fn left(row: &str) -> String {
+    row.chars()
+        .take(44)
+        .collect::<String>()
+        .trim_end()
+        .to_owned()
 }
 
 #[test]
@@ -680,7 +716,7 @@ fn the_narrow_tab_row_marks_the_tab_the_keyboard_is_on() {
     let notes = look(&app, 80, 44);
     assert_eq!(app.page(), Page::Notes);
     assert!(notes[1].starts_with(" Notes 4 notes"));
-    assert!(notes[5].contains("▪ rsync"));
+    assert!(notes[5].contains("▪ Mention to Anna:"));
 }
 
 /// The colour and attribute parameters of every `ESC [ … m` written, with

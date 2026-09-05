@@ -304,7 +304,7 @@ impl App {
             Action::Cancel => self.back_out(),
             Action::Confirm => return self.confirm(),
 
-            Action::Add => self.start_adding(),
+            Action::Add => self.add(),
             Action::Edit => self.start_renaming(),
             Action::Close => self.close_or_reopen(),
             Action::Focus => self.turn_focus_over(),
@@ -533,7 +533,7 @@ impl App {
     /// The task a key on the cursor row acts on, or nothing and a reason.
     fn task_at_cursor(&mut self) -> Option<Id> {
         if self.page == Page::Notes {
-            self.not_yet("The notes page is not built yet.");
+            self.say("That key is for tasks, and this page is notes.", false);
             return None;
         }
         let list = self.focused();
@@ -610,6 +610,10 @@ impl App {
 
     /// `x`: no confirm, and `u` in the hint bar until the next key.
     fn delete(&mut self) {
+        if self.page == Page::Notes {
+            self.throw_the_note_away();
+            return;
+        }
         let Some(id) = self.task_at_cursor() else {
             return;
         };
@@ -770,15 +774,55 @@ impl App {
         .collect()
     }
 
+    // ---- the notes page ----------------------------------------------
+
+    /// The note a key on the cursor row acts on, or nothing and a reason.
+    fn note_at_cursor(&mut self) -> Option<Id> {
+        let Some(id) = self.cursor(List::Notes) else {
+            self.say("There is no note here yet.", false);
+            return None;
+        };
+        Some(id)
+    }
+
+    /// `a` on the notes page: an empty note at the top of the list, with
+    /// the cursor on it.
+    fn new_note(&mut self) {
+        if let Some(change) = self.run(Command::CreateNote)
+            && let Some(note) = added_note(&change)
+        {
+            self.set_cursor(List::Notes, note);
+        }
+    }
+
+    /// `x` on the notes page. A note is thrown away the way a task is: no
+    /// confirm, and `u` in the hint bar until the next key.
+    fn throw_the_note_away(&mut self) {
+        let Some(id) = self.note_at_cursor() else {
+            return;
+        };
+        let next = self.neighbour_of(List::Notes, id);
+        if self.run(Command::DeleteNote { note: id }).is_some()
+            && let Some(next) = next
+        {
+            self.set_cursor(List::Notes, next);
+        }
+    }
+
     // ---- the title being typed ---------------------------------------
 
-    /// `a`: a field at the end of the list, which Enter empties and keeps
-    /// open, so a list of tasks is typed in one go.
-    fn start_adding(&mut self) {
-        if self.page == Page::Notes {
-            self.not_yet("The notes page is not built yet.");
-            return;
+    /// `a`: a new note on the notes page, and a field at the end of the
+    /// list on the home page.
+    fn add(&mut self) {
+        match self.page {
+            Page::Notes => self.new_note(),
+            Page::Home => self.start_adding(),
         }
+    }
+
+    /// A field at the end of the list, which Enter empties and keeps open,
+    /// so a list of tasks is typed in one go.
+    fn start_adding(&mut self) {
         self.editor = Some(Editor {
             field: Field::Adding,
             list: self.focused(),
@@ -1204,12 +1248,18 @@ impl App {
         });
     }
 
-    /// Escape backs out one level: the popup first, then the field.
+    /// Escape backs out one level: the popup, then the field, then the
+    /// notes page, which `esc` leaves the same way `n` does.
     fn back_out(&mut self) {
         if self.popup.take().is_some() {
             return;
         }
-        self.editor = None;
+        if self.editor.take().is_some() {
+            return;
+        }
+        if self.page == Page::Notes {
+            self.turn_the_page();
+        }
     }
 
     /// Enter: the popup if one is open, and the field under it otherwise.
@@ -1364,6 +1414,14 @@ fn byte_at(text: &str, caret: usize) -> usize {
 fn label_of(change: &Change) -> Option<String> {
     change.writes.iter().find_map(|write| match write {
         Write::PushUndo(entry) => Some(entry.label.clone()),
+        _ => None,
+    })
+}
+
+/// The note a CreateNote wrote, so the cursor can land on it.
+fn added_note(change: &Change) -> Option<Id> {
+    change.writes.iter().find_map(|write| match write {
+        Write::PutNote(note) => Some(note.id),
         _ => None,
     })
 }

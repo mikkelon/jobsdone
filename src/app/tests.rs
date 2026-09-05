@@ -875,13 +875,72 @@ fn n_turns_the_page_and_turns_it_back() {
 }
 
 #[test]
-fn the_notes_page_says_it_is_not_built_yet() {
+fn esc_leaves_the_notes_page_the_way_n_does() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    app.update(Action::Cancel);
+
+    assert_eq!(app.page(), Page::Home);
+}
+
+#[test]
+fn a_makes_a_note_and_puts_the_cursor_on_it() {
     let mut app = started();
     app.update(Action::NotesPage);
     app.update(Action::Add);
 
-    assert_eq!(hint(&app), "The notes page is not built yet.");
-    assert!(app.editor().is_none());
+    let first = app.cursor(List::Notes).expect("the note just made");
+    assert_eq!(app.notes().count, 1);
+    assert_eq!(hint(&app), "Added a note");
+    assert!(app.editor().is_none(), "a note is not a title being typed");
+
+    // The newest note is at the top of the list, and the cursor follows.
+    app.update(Action::Add);
+    let second = app.cursor(List::Notes).expect("the second note");
+    assert_ne!(second, first);
+    assert_eq!(
+        app.rows_of(List::Notes)
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect::<Vec<_>>(),
+        [second, first]
+    );
+}
+
+#[test]
+fn x_throws_a_note_away_and_u_brings_it_back() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    app.update(Action::Add);
+    app.update(Action::Add);
+    let top = app.cursor(List::Notes).expect("a note");
+
+    app.update(Action::Delete);
+    assert_eq!(app.notes().count, 1);
+    assert_eq!(hint(&app), "Deleted a note");
+    assert!(app.message().is_some_and(|message| message.undo));
+    assert_ne!(app.cursor(List::Notes), Some(top), "the cursor steps on");
+
+    app.update(Action::Undo);
+    assert_eq!(app.notes().count, 2);
+}
+
+#[test]
+fn a_key_for_tasks_says_so_on_the_notes_page() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    app.update(Action::Close);
+
+    assert_eq!(hint(&app), "That key is for tasks, and this page is notes.");
+}
+
+#[test]
+fn x_on_an_empty_notes_page_says_there_is_nothing_there() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    app.update(Action::Delete);
+
+    assert_eq!(hint(&app), "There is no note here yet.");
 }
 
 // ---- popups ----------------------------------------------------------

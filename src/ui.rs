@@ -608,20 +608,32 @@ fn backlog_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
     }
 }
 
-/// The notes list. Phase 11 opens a note; until then the list is the page.
+/// The notes list, and under it the row that makes another one. They are
+/// two groups rather than one so that a blank row separates them, which is
+/// what keeps the list a list.
 fn notes_pane(app: &App) -> PaneView<'_> {
     let view = app.notes();
     PaneView {
         title: "Notes",
         sub: String::new(),
-        right: view.count.to_string(),
+        // The count is in the status line; the header names the key that
+        // fills the list instead (DESIGN.md section 9).
+        right: "a new".to_owned(),
         // The new-note row is the whole empty state (DESIGN.md section 10).
-        sections: vec![Section {
-            label: "",
-            count: None,
-            content: Content::Notes(&view.rows),
-            add: Some("new note"),
-        }],
+        sections: vec![
+            Section {
+                label: "",
+                count: None,
+                content: Content::Notes(&view.rows),
+                add: None,
+            },
+            Section {
+                label: "",
+                count: None,
+                content: Content::Notes(&[]),
+                add: Some("new note"),
+            },
+        ],
         empty: ["", ""],
     }
 }
@@ -744,7 +756,7 @@ fn pane(
                 continue;
             }
             Line::Note(row) => {
-                note_row(canvas, x, width, y, row);
+                note_row(canvas, x, width, y, row, today);
                 row.note
             }
             Line::Task(row, kind) => {
@@ -976,8 +988,8 @@ fn field_text(canvas: &mut Canvas, x: u16, y: u16, width: u16, editor: &Editor) 
     canvas.put(at, y, clip(&rest, width.saturating_sub(at - x)), plain());
 }
 
-/// ` ▪ Mention to Anna: CI runner b`
-fn note_row(canvas: &mut Canvas, x: u16, width: u16, y: u16, row: &NoteRow) {
+/// ` ▪ Mention to Anna: CI runner b                        yesterday`
+fn note_row(canvas: &mut Canvas, x: u16, width: u16, y: u16, row: &NoteRow, today: Date) {
     canvas.put(x + 1, y, " ▪ ", dim());
     canvas.put(
         x + 4,
@@ -985,6 +997,23 @@ fn note_row(canvas: &mut Canvas, x: u16, width: u16, y: u16, row: &NoteRow) {
         clip(&row.first_line, width.saturating_sub(16)),
         plain(),
     );
+    canvas.rput(x + width - 1, y, &age(row.created_at.date(), today), dim());
+}
+
+/// How long ago a note was made, in the few words the list has room for.
+/// Past a couple of months the words stop being shorter than the date.
+fn age(made: Date, today: Date) -> String {
+    let days = made
+        .until(today)
+        .map_or(0, |span| i64::from(span.get_days()));
+    match days {
+        ..=0 => "today".to_owned(),
+        1 => "yesterday".to_owned(),
+        2..=6 => format!("{days} days"),
+        7..=13 => "last week".to_owned(),
+        14..=55 => format!("{} weeks", days / 7),
+        _ => made.strftime("%-d %b").to_string(),
+    }
 }
 
 /// The open note. Phase 11 puts a text area here; until then the pane is

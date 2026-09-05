@@ -487,8 +487,10 @@ const NOTES_LIST: &[Binding] = &[
         bar: Bar::Left,
         narrow: Bar::Short(Side::Left, "del"),
     },
+    // `esc` leaves the page as well, which is what the status line
+    // promises; `n` is the key the bar has room to name.
     Binding {
-        keys: &[("n", Action::NotesPage)],
+        keys: &[("n", Action::NotesPage), ("esc", Action::Cancel)],
         shown: "n",
         label: "back to today",
         bar: Bar::Left,
