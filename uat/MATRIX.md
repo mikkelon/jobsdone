@@ -92,7 +92,7 @@ for a phase that has not landed).
 
 | Id    | Steps | Expected |
 |-------|-------|----------|
-| 10.01 | On the home page, `keys [`, `screen` | The day pane shows yesterday, titled `<Ddd d Mon> past day`, with counts `n planned · n done · n open · n moved` and `. back to today` in the status line; the backlog pane becomes the day list as in 08-history: THIS WEEK, LAST WEEK, EARLIER, `done / planned`, `· n open`, days with nothing planned skipped. |
+| 10.01 | On the home page, `keys [`, `screen` | The day pane shows yesterday, titled `<Ddd d Mon> past day`, with counts `n planned · n done · n open · n moved`, a count of nothing left out and `. back to today` in the status line; the backlog pane becomes the day list as in 08-history: THIS WEEK, LAST WEEK, EARLIER, `done / planned`, `· n open`, days with nothing planned skipped. |
 | 10.02 | `keys [` several times, `keys ]`, `keys .` | Steps back and forward; `.` returns to today. A future day works forward. |
 | 10.03 | A past day with a task still open | The row shows a red `[on the pile]` chip in FOCUS or PLAN. |
 | 10.04 | A past day with a task moved away | MOVED group under DONE, `[→] title` and `to today` / `to <day>` / `to backlog`, normal weight. `keys Enter` on it jumps to where the task is now. |
