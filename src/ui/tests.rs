@@ -752,3 +752,38 @@ fn the_bytes_the_terminal_gets_name_a_palette_slot_and_never_a_colour() {
     }
     assert!(colours > 0, "the screen has some colour on it");
 }
+
+#[test]
+fn a_pane_longer_than_the_window_follows_the_cursor() {
+    let mut model = Model::empty();
+    for at in 0..40 {
+        model.tasks.insert(
+            at + 1,
+            task(at + 1, &format!("Task {}", at + 1), None, at as usize),
+        );
+    }
+    let mut app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+    app.update(Action::PaneRight);
+
+    let top = look(&app, 120, 36);
+    assert!(top.iter().any(|line| line.ends_with("Task 1")));
+    assert!(!top.iter().any(|line| line.ends_with("Task 40")));
+
+    for _ in 0..39 {
+        app.update(Action::Down);
+    }
+
+    let bottom = look(&app, 120, 36);
+    assert!(
+        bottom.iter().any(|line| line.ends_with("Task 40")),
+        "the cursor row is on screen"
+    );
+    assert!(
+        !bottom.iter().any(|line| line.ends_with("Task 1")),
+        "and the pane has scrolled no further than it had to"
+    );
+    assert!(
+        bottom.iter().any(|line| line.ends_with("Task 13")),
+        "the window has moved down by exactly what it had to"
+    );
+}

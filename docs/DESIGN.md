@@ -110,6 +110,10 @@ Conventions, so the map is guessable:
   row of the group it left, so a list is worked down without moving the
   cursor by hand. Everything else leaves the cursor on the task it acted
   on, which is how a reordered row is followed up or down the list.
+- A pane with more rows than the window has lines scrolls to keep the
+  cursor row on screen and keeps no scroll position of its own. The wheel
+  moves the cursor, so the view always follows it and there is never a
+  cursor somewhere off screen.
 - Where a text field has focus (search, the palette, the date card, an
   open note, a title being edited), every letter and digit types. Only
   `Enter`, `Escape`, `↑`/`↓` and `Tab` keep their meaning there. The few

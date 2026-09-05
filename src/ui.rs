@@ -627,6 +627,51 @@ fn notes_pane(app: &App) -> PaneView<'_> {
 }
 
 /// A pane: its header, then its groups, then whatever is left blank.
+/// One drawn line of a pane. A pane is laid out as lines first, so that
+/// one longer than the window can be scrolled a line at a time rather
+/// than a group at a time.
+enum Line<'a> {
+    Blank,
+    Rule(&'static str, Option<usize>),
+    Task(&'a domain::Row, Kind),
+    Note(&'a NoteRow),
+    Add(&'static str),
+}
+
+fn lines_of<'a>(view: &'a PaneView<'a>) -> Vec<Line<'a>> {
+    let mut lines = Vec::new();
+    for (at, section) in view.sections.iter().enumerate() {
+        // A blank line between groups, and none before the first.
+        if at > 0 {
+            lines.push(Line::Blank);
+        }
+        if !section.label.is_empty() {
+            lines.push(Line::Rule(section.label, section.count));
+        }
+        match section.content {
+            Content::Tasks(rows, kind) => {
+                lines.extend(rows.iter().map(|row| Line::Task(row, kind)));
+            }
+            Content::Notes(rows) => lines.extend(rows.iter().map(Line::Note)),
+        }
+        if let Some(add) = section.add {
+            lines.push(Line::Add(add));
+        }
+    }
+    lines
+}
+
+/// The first line drawn, which is as far down as it has to be for the
+/// cursor to be on screen and no further. A pane has no scroll position
+/// of its own: the cursor is what it follows (DESIGN.md section 4).
+fn scroll_to(lines: &[Line], anchor: Option<usize>, height: usize) -> usize {
+    let last = lines.len().saturating_sub(height);
+    let anchor = anchor.unwrap_or(0);
+    (anchor + 1).saturating_sub(height).min(last)
+}
+
+/// A pane: its header, then its lines from wherever the cursor has pushed
+/// them, then whatever is left blank.
 fn pane(
     canvas: &mut Canvas,
     app: &App,
@@ -649,13 +694,14 @@ fn pane(
     if !layout.narrow {
         header(canvas, x, width, rows.headers, &view, focused);
     }
+    let height = rows.bottom - rows.top + 1;
     layout.lists.push(ListArea {
         list,
         area: Cells {
             x,
             y: rows.top,
             width,
-            height: rows.bottom - rows.top + 1,
+            height,
         },
     });
 
@@ -667,100 +713,84 @@ fn pane(
     let narrow = layout.narrow;
     let on = if focused { app.cursor(list) } else { None };
     let today = app.today();
-    let mut y = rows.top;
+    let lines = lines_of(&view);
 
-    for (at, section) in view.sections.iter().enumerate() {
-        // A blank line between groups, and none before the first.
-        if at > 0 {
-            y += 1;
-        }
-        if !section.label.is_empty() {
-            if y > rows.bottom {
-                return;
+    // What has to stay on screen: the field being typed into, or the
+    // cursor row.
+    let anchor = lines.iter().position(|line| match line {
+        Line::Add(_) => adding,
+        Line::Task(row, _) => !adding && on == Some(row.task),
+        Line::Note(row) => !adding && on == Some(row.note),
+        _ => false,
+    });
+    let first = scroll_to(&lines, anchor, height as usize);
+
+    for (at, line) in lines.iter().skip(first).take(height as usize).enumerate() {
+        let y = rows.top + at as u16;
+        let id = match line {
+            Line::Blank => continue,
+            Line::Rule(label, count) => {
+                group_rule(canvas, x, width, y, label, *count);
+                continue;
             }
-            group_rule(canvas, x, width, y, section.label, section.count);
-            y += 1;
-        }
-
-        match section.content {
-            Content::Tasks(list_rows, kind) => {
-                for row in list_rows {
-                    if y > rows.bottom {
-                        return;
+            Line::Add(label) => {
+                match writing.filter(|editor| editor.field == Field::Adding) {
+                    Some(editor) => add_field(canvas, x, width, y, editor),
+                    None => {
+                        canvas.put(x + 1, y, &format!(" +  {label}"), dim());
+                        canvas.rput(x + width - 1, y, "a", accent());
                     }
-                    let renaming = writing
-                        .filter(|editor| editor.task == Some(row.task))
-                        .filter(|editor| editor.field == Field::Renaming);
-                    match renaming {
-                        Some(editor) => {
-                            title_field(canvas, x, width, y, mark_of(row, kind).0, editor)
-                        }
-                        None => task_row(
-                            canvas,
-                            column,
-                            y,
-                            row,
-                            Look {
-                                kind,
-                                today,
-                                narrow,
-                                moving: app.moving() == Some(row.task),
-                            },
-                        ),
+                }
+                continue;
+            }
+            Line::Note(row) => {
+                note_row(canvas, x, width, y, row);
+                row.note
+            }
+            Line::Task(row, kind) => {
+                let renaming = writing
+                    .filter(|editor| editor.task == Some(row.task))
+                    .filter(|editor| editor.field == Field::Renaming);
+                match renaming {
+                    Some(editor) => {
+                        title_field(canvas, x, width, y, mark_of(row, *kind).0, editor);
+                        // A row being typed into is not also a cursor row.
+                        layout.rows.push(row_area(list, row.task, column, y));
+                        continue;
                     }
-                    if on == Some(row.task) && renaming.is_none() {
-                        canvas.restyle(x, y, width, cursor());
-                    }
-                    layout.rows.push(RowArea {
-                        list,
-                        id: row.task,
-                        area: Cells {
-                            x,
-                            y,
-                            width,
-                            height: 1,
+                    None => task_row(
+                        canvas,
+                        column,
+                        y,
+                        row,
+                        Look {
+                            kind: *kind,
+                            today,
+                            narrow,
+                            moving: app.moving() == Some(row.task),
                         },
-                    });
-                    y += 1;
+                    ),
                 }
+                row.task
             }
-            Content::Notes(list_rows) => {
-                for row in list_rows {
-                    if y > rows.bottom {
-                        return;
-                    }
-                    note_row(canvas, x, width, y, row);
-                    if on == Some(row.note) {
-                        canvas.restyle(x, y, width, cursor());
-                    }
-                    layout.rows.push(RowArea {
-                        list,
-                        id: row.note,
-                        area: Cells {
-                            x,
-                            y,
-                            width,
-                            height: 1,
-                        },
-                    });
-                    y += 1;
-                }
-            }
+        };
+        if on == Some(id) {
+            canvas.restyle(x, y, width, cursor());
         }
+        layout.rows.push(row_area(list, id, column, y));
+    }
+}
 
-        if let Some(label) = section.add {
-            if y > rows.bottom {
-                return;
-            }
-            match writing.filter(|editor| editor.field == Field::Adding) {
-                Some(editor) => add_field(canvas, x, width, y, editor),
-                None => {
-                    canvas.put(x + 1, y, &format!(" +  {label}"), dim());
-                    canvas.rput(x + width - 1, y, "a", accent());
-                }
-            }
-            y += 1;
-        }
+fn row_area(list: List, id: i64, column: Column, y: u16) -> RowArea {
+    RowArea {
+        list,
+        id,
+        area: Cells {
+            x: column.x,
+            y,
+            width: column.width,
+            height: 1,
+        },
     }
 }
 
