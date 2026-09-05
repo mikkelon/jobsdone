@@ -25,7 +25,7 @@ for a phase that has not landed).
 | 7.07 | `keys Space`, `screen` | The row drops to a DONE group at the bottom with the time, dim, `[x]` in green. Cursor steps to the next row of the group it left. Hint bar says what happened and offers `u`. |
 | 7.08 | `keys u`, `screen` | The close is undone; the row is back where it was, open. |
 | 7.09 | Focus a row, close it, `screen` | The done row carries a `was focus` marker. |
-| 7.10 | Cursor on a done row, `keys Space` | Reopening puts it at the end of PLAN (DOMAIN.md 12) and the cursor follows it there. |
+| 7.10 | Cursor on a done row, `keys Space` | Reopening puts it at the end of its group, Focus if it was focus, else Plan (DOMAIN.md 3 and 12), and the cursor follows it there. |
 | 7.11 | `keys e`, `type " and send it"`, `keys Enter`, `screen` | The row becomes a text field with the old title; the hint bar says Enter saves. The title is stored trimmed. |
 | 7.12 | `keys e`, `keys Escape` | Editing backs out with the title unchanged. |
 | 7.13 | `keys x`, `screen`, `keys u` | Delete removes the row at once, no confirmation; cursor steps to the next row; `u` brings it back at its position. Stored: `deleted_at` set then cleared. |
@@ -46,7 +46,7 @@ for a phase that has not landed).
 | 7.28 | `restart`, `screen` | Everything is as it was: same rows, same groups, same order; the review count is 0. |
 | 7.29 | Add a task, then `stop` with `kill -9` on the jobsdone process instead of `q` (find it with `pgrep -f target/debug/jobsdone`), `start` | The task is there. No change is ever lost to a kill. |
 | 7.30 | Colour, on the PNGs | Only theme colours: cursor row in reverse video, key names in the hint bar in accent, group labels dim, focus bold, done dim with a green `[x]`. Nothing carries meaning by colour alone: read the `.txt` captures and confirm every state is legible without colour. |
-| 7.31 | Render one capture with `render.py … --theme catppuccin-latte` | The light theme reads as well as the dark. |
+| 7.31 | Render one capture with `uat/render.py uat/out/NAME.ansi uat/out/NAME-latte.png 120x36 --theme catppuccin-latte` | The light theme reads as well as the dark. |
 | 7.32 | `keys ?`, then `keys :` and `type "morning"` | Every key the hint bar, help and palette name does something; nothing answers "not built yet" anywhere in the program. The palette lists the morning review under `M`. |
 | 7.33 | Two instances: start a second copy on the same data in another tmux session (`UAT_SESSION=second uat/tui start --data uat/out/data`), add a task in one, `screen` in the other after a second | Both show the same rows within a tick (DESIGN.md 1). |
 
@@ -124,6 +124,6 @@ for a phase that has not landed).
 |------|-------|----------|
 | X.01 | Every popup at 80x44 | Fits inside the window, still boxed, still readable. |
 | X.02 | `keys q` inside a text field, inside a popup | `q` types or is ignored; it only quits from a list. |
-| X.03 | `keys C-c` | The terminal is restored (tmux shows a prompt, no raw-mode garbage). |
+| X.03 | `keys C-c` from the list and from inside a popup | What DESIGN.md 4 says Ctrl-C does; the terminal is restored on any exit the program makes itself. |
 | X.04 | `uat/tui log` after all of the above | No errors or warnings that a test did not deliberately cause. |
 | X.05 | Timing: `start` on a database with 500 tasks over 200 days | The first screen appears within a moment; `screen` right after `start` already shows it. |

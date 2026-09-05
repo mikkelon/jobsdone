@@ -18,25 +18,33 @@ PLAYWRIGHT = Path.home() / ".local/share/mise/installs/npm-playwright/latest/nod
 
 
 def palette(theme):
-    """Sixteen colours plus foreground and background from a foot.ini."""
+    """Sixteen colours plus foreground and background: from a theme's
+    foot.ini when it has one, else from its colors.toml the way Omarchy
+    writes a foot.ini from it. A theme that cannot be found is an error,
+    never a silent fallback to the current one."""
     if theme:
-        candidates = [Path(f"/usr/share/omarchy/themes/{theme}/foot.ini")]
+        root = Path(f"/usr/share/omarchy/themes/{theme}")
+        if not root.is_dir():
+            sys.exit(f"render.py: no theme {theme!r} under /usr/share/omarchy/themes")
+        candidates = [root / "foot.ini", root / "colors.toml"]
     else:
-        candidates = [Path.home() / ".local/state/omarchy/current/theme/foot.ini"]
-    colours = {}
-    for path in candidates:
-        if path.exists():
-            for line in path.read_text().splitlines():
-                m = re.match(r"\s*(\w+)\s*=\s*([0-9a-fA-F]{6})", line)
-                if m:
-                    colours[m.group(1)] = "#" + m.group(2)
-            break
-    slots = []
-    for i in range(8):
-        slots.append(colours.get(f"regular{i}", ["#282828", "#ea6962", "#a9b665", "#d8a657", "#7daea3", "#d3869b", "#89b482", "#d4be98"][i]))
-    for i in range(8):
-        slots.append(colours.get(f"bright{i}", slots[i] if i else "#665c54"))
-    return slots, colours.get("foreground", slots[7]), colours.get("background", slots[0])
+        root = Path.home() / ".local/state/omarchy/current/theme"
+        candidates = [root / "foot.ini", root / "colors.toml"]
+    source = next((path for path in candidates if path.exists()), None)
+    if source is None:
+        sys.exit(f"render.py: no foot.ini or colors.toml in {root}")
+    text = source.read_text()
+    if source.name == "colors.toml":
+        tokens = dict(re.findall(r'^\s*(\w+)\s*=\s*"#([0-9a-fA-F]{6})"', text, re.M))
+        names = ["background", "red", "green", "yellow", "blue", "magenta", "cyan", "foreground"]
+        regular = ["#" + tokens[n] for n in names]
+        bright = ["#" + tokens.get("bright_" + n, tokens[n]) for n in names]
+        bright[0] = "#" + tokens.get("muted", tokens.get("dark_foreground", tokens["background"]))
+        return regular + bright, "#" + tokens["foreground"], "#" + tokens["background"]
+    colours = dict(re.findall(r"^\s*(\w+)\s*=\s*([0-9a-fA-F]{6})", text, re.M))
+    slots = ["#" + colours[f"regular{i}"] for i in range(8)]
+    slots += ["#" + colours.get(f"bright{i}", colours[f"regular{i}"]) for i in range(8)]
+    return slots, "#" + colours.get("foreground", colours["regular7"]), "#" + colours.get("background", colours["regular0"])
 
 
 def render(ansi, cols, rows, slots, fg, bg):
@@ -140,7 +148,7 @@ def main():
         k = args.index("--theme")
         theme = args[k + 1]
         del args[k : k + 2]
-    src, dst, size = args[0], args[1], args[2]
+    src, dst, size = Path(args[0]).resolve(), Path(args[1]).resolve(), args[2]
     cols, rows = (int(x) for x in size.split("x"))
     slots, fg, bg = palette(theme)
     page = render(Path(src).read_text(errors="replace"), cols, rows, slots, fg, bg)
