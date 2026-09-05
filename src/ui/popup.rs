@@ -14,7 +14,9 @@ use ratatui::style::{Color, Modifier, Style};
 use super::{Canvas, Rows, accent, bold, count, cursor, day_label, dim, place_label, plain};
 use crate::app::{App, DateDraft, DateKind, MoveTarget, Popup, RepeatDraft, RowId};
 use crate::domain::{Row, Weekday};
-use crate::input::{self, Action, Binding, KeyContext, NotesPane, Pane, PopupKind, ReviewStep};
+use crate::input::{
+    self, Action, Binding, KeyContext, NotesPane, Pane, PopupKind, ReviewStep, Shown,
+};
 
 pub(super) fn draw(canvas: &mut Canvas, app: &App, rows: &Rows) {
     let Some(popup) = app.popup() else {
@@ -242,16 +244,12 @@ enum Line<'a> {
     Nothing,
 }
 
-/// What a result says about itself on the right: where an open task is,
-/// and when a closed one was closed.
+/// What a result says about itself on the right: the day it is on, which
+/// is the day Enter goes to (DOMAIN.md section 14), and for an open task
+/// the flags it carries there.
 fn beside(found: &Row, closed: bool, today: jiff::civil::Date) -> String {
-    let mut parts = Vec::new();
-    if closed {
-        if let Some(at) = &found.closed_at {
-            parts.push(day_label(at.date()));
-        }
-    } else {
-        parts.push(place_label(found.place, today));
+    let mut parts = vec![place_label(found.place, today)];
+    if !closed {
         if found.focus {
             parts.push("focus".to_owned());
         }
@@ -279,25 +277,30 @@ fn card(canvas: &mut Canvas, x: u16, y: u16, width: u16, height: u16, title: &st
         super::clip(&format!(" {title} "), width.saturating_sub(4)),
         accent(),
     );
-    canvas.put(
-        at,
-        y,
-        super::clip(&format!("{about} "), (x + width).saturating_sub(at + 2)),
-        dim(),
-    );
+    if !about.is_empty() {
+        canvas.put(
+            at,
+            y,
+            super::clip(&format!("{about} "), (x + width).saturating_sub(at + 2)),
+            dim(),
+        );
+    }
 }
 
 /// The task a card is about, by the id it captured when it opened.
 fn about(app: &App, popup: &Popup) -> String {
-    let named = match popup.target {
-        Some(RowId::Task(task)) => app.model().live_task(task).map(|task| task.title.clone()),
+    match popup.target {
+        Some(RowId::Task(task)) => app
+            .model()
+            .live_task(task)
+            .map_or_else(|| "a task".to_owned(), |task| task.title.clone()),
         Some(RowId::Schedule(id)) => app
             .model()
             .schedule(id)
-            .map(|schedule| schedule.title.clone()),
-        _ => None,
-    };
-    named.unwrap_or_else(|| "a task".to_owned())
+            .map_or_else(|| "a task".to_owned(), |schedule| schedule.title.clone()),
+        // The card that goes to a day is about no row at all.
+        _ => String::new(),
+    }
 }
 
 /// A card's footer, drawn from the rows of its own key table so that it
@@ -433,6 +436,7 @@ fn name_of(kind: DateKind) -> &'static str {
         DateKind::Due => "Due by",
         DateKind::Remind => "Remind on",
         DateKind::Move => "Move",
+        DateKind::Go => "Go to day",
     }
 }
 
@@ -442,7 +446,7 @@ fn switch(kind: DateKind) -> Option<&'static str> {
     match kind {
         DateKind::Due => Some(" alt-r remind on "),
         DateKind::Remind => Some(" alt-d due by "),
-        DateKind::Move => None,
+        DateKind::Move | DateKind::Go => None,
     }
 }
 
@@ -451,7 +455,7 @@ fn no_date(kind: DateKind) -> &'static str {
     match kind {
         DateKind::Due => "no due date",
         DateKind::Remind => "no reminder",
-        DateKind::Move => "no day",
+        DateKind::Move | DateKind::Go => "no day",
     }
 }
 
@@ -673,7 +677,21 @@ enum Help {
 }
 
 fn context(pane: Pane) -> KeyContext {
-    KeyContext::Home { pane, field: None }
+    KeyContext::Home {
+        pane,
+        day: Shown::Today,
+        field: None,
+    }
+}
+
+/// The same two panes with the day pane stepped off today, which is what
+/// gives them their other set of keys.
+fn browsing(pane: Pane) -> KeyContext {
+    KeyContext::Home {
+        pane,
+        day: Shown::Past,
+        field: None,
+    }
 }
 
 /// A row is the same row in two contexts when it says the same thing.
@@ -681,13 +699,20 @@ fn same(one: &Binding, other: &Binding) -> bool {
     one.shown == other.shown && one.label == other.label
 }
 
-/// Every row of a context that teaches a key, minus the ones that are
-/// everywhere.
-fn only(context: KeyContext, shared: &[&'static Binding]) -> Vec<Help> {
+/// Every row of a context that teaches a key.
+fn named(context: KeyContext) -> Vec<&'static Binding> {
     input::bindings(context)
         .iter()
         .filter(|binding| !binding.keys.is_empty())
-        .filter(|binding| !shared.iter().any(|common| same(common, binding)))
+        .collect()
+}
+
+/// The same, minus the rows already written somewhere the eye has been:
+/// the "everywhere" column, and the heading above this one.
+fn only(context: KeyContext, written: &[&'static Binding]) -> Vec<Help> {
+    named(context)
+        .into_iter()
+        .filter(|binding| !written.iter().any(|other| same(other, binding)))
         .map(Help::Key)
         .collect()
 }
@@ -703,7 +728,14 @@ fn columns() -> Vec<(&'static str, Vec<Help>)> {
         .filter(|binding| backlog.iter().any(|other| same(binding, other)))
         .collect();
 
+    // A heading takes the keys of the one above it as written already,
+    // so the same row is never twice in one column.
+    let mut above = shared.clone();
+    above.extend(named(context(Pane::Backlog)));
     let mut third = only(context(Pane::Backlog), &shared);
+    third.push(Help::Blank);
+    third.push(Help::Heading("DAYS"));
+    third.extend(only(browsing(Pane::Backlog), &above));
     third.push(Help::Blank);
     third.push(Help::Heading("REVIEW"));
     third.extend(only(
@@ -714,7 +746,12 @@ fn columns() -> Vec<(&'static str, Vec<Help>)> {
         &shared,
     ));
 
+    let mut above = shared.clone();
+    above.extend(named(context(Pane::Day)));
     let mut second = only(context(Pane::Day), &shared);
+    second.push(Help::Blank);
+    second.push(Help::Heading("PAST DAY"));
+    second.extend(only(browsing(Pane::Day), &above));
     second.push(Help::Blank);
     second.push(Help::Heading("NOTES"));
     second.extend(only(

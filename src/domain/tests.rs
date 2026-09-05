@@ -735,12 +735,70 @@ fn the_day_list_is_the_days_that_have_a_placement() {
         place: Place::Backlog,
     });
 
-    let list = day_list(&world.model);
-    let days: Vec<String> = list.days.iter().map(|row| row.day.to_string()).collect();
+    let list = day_list(&world.model, world.today());
+    let days: Vec<String> = list.days().map(|row| row.day.to_string()).collect();
     assert_eq!(days, ["2026-09-07", "2026-09-04"]);
+    let today = list.days().next().expect("today");
     assert_eq!(
-        (list.days[0].kept, list.days[0].done, list.days[0].open),
-        (2, 1, 1)
+        (today.kept, today.done, today.open),
+        (2, 1, 0),
+        "today's own open task is the working list, not the pile"
+    );
+}
+
+#[test]
+fn a_day_that_has_passed_counts_what_it_leaves_on_the_pile() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let done = world.add("Weekly planning", day("2026-09-04"));
+    world.add("Reply to Anna", day("2026-09-04"));
+    world.must(Command::Close { task: done });
+
+    let list = day_list(&world.model, world.today());
+    let friday = list.days().next().expect("the Friday before");
+    assert_eq!((friday.kept, friday.done, friday.open), (2, 1, 1));
+}
+
+#[test]
+fn the_day_list_is_broken_into_stretches_of_the_calendar() {
+    // A Monday, so this week begins on it.
+    let mut world = World::at("2026-09-07T09:00:00");
+    for date in [
+        "2026-09-14", // the week after this one
+        "2026-09-09",
+        "2026-09-07",
+        "2026-09-04", // the week before
+        "2026-08-31",
+        "2026-08-28", // older still
+    ] {
+        world.add(date, day(date));
+    }
+
+    let list = day_list(&world.model, world.today());
+    let stretches: Vec<(Stretch, Vec<String>)> = list
+        .stretches
+        .iter()
+        .map(|stretch| {
+            (
+                stretch.stretch,
+                stretch.days.iter().map(|row| row.day.to_string()).collect(),
+            )
+        })
+        .collect();
+
+    assert_eq!(
+        stretches,
+        [
+            (Stretch::Later, vec!["2026-09-14".to_owned()]),
+            (
+                Stretch::ThisWeek,
+                vec!["2026-09-09".to_owned(), "2026-09-07".to_owned()]
+            ),
+            (
+                Stretch::LastWeek,
+                vec!["2026-09-04".to_owned(), "2026-08-31".to_owned()]
+            ),
+            (Stretch::Earlier, vec!["2026-08-28".to_owned()]),
+        ]
     );
 }
 
@@ -1756,7 +1814,14 @@ fn a_deleted_task_is_invisible_everywhere_and_comes_back_whole() {
     assert_eq!(friday.counts.planned, 1);
     assert!(friday.done.is_empty());
     assert_eq!(search(&world.model, "Anna", world.today()).total, 0);
-    assert_eq!(day_list(&world.model).days[0].kept, 1);
+    assert_eq!(
+        day_list(&world.model, world.today())
+            .days()
+            .next()
+            .expect("a day")
+            .kept,
+        1
+    );
 
     world.undo();
     assert_eq!(world.model.tasks, before.tasks);
@@ -2216,9 +2281,8 @@ fn a_day_with_nothing_planned_is_empty_and_not_in_the_day_list() {
     assert!(quiet.focus.is_empty() && quiet.plan.is_empty());
     assert!(quiet.done.is_empty() && quiet.moved.is_empty());
 
-    let days: Vec<String> = day_list(&world.model)
-        .days
-        .iter()
+    let days: Vec<String> = day_list(&world.model, world.today())
+        .days()
         .map(|row| row.day.to_string())
         .collect();
     assert_eq!(days, ["2026-09-07"]);

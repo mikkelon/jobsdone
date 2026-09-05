@@ -1,13 +1,13 @@
 == 120×36 · floating window
 
 
- ‹ Mon 1 Sep › 4 days ago . back to today                                         ● 2 in review   4 notes n   /   :   ?
+ ‹ Mon 1 Sep › 4 days ago . back to today                                         ● 5 in review   4 notes n   /   :   ?
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  Mon 1 Sep past day  8 planned · 3 done · 2 open · 3 moved   Days                                          g go to date
 ───────────────────────────────────────────────────────────┬────────────────────────────────────────────────────────────
  PLAN ──────────────────────────────────────────────────── │ THIS WEEK ────────────────────────────────────────────────
  [ ] Call the accountant about VAT           [on the pile] │     Fri 5 Sep · today                                2 / 8
- [ ] Write standup notes                [↻]  [on the pile] │     Thu 4 Sep                               4 / 5 · 1 open
+ [ ] Write standup notes      [↻ work days]  [on the pile] │     Thu 4 Sep                               4 / 5 · 1 open
   +  add a task to this day                              a │     Wed 3 Sep                                        6 / 6
                                                            │     Tue 2 Sep                                        3 / 3
  DONE 3 ────────────────────────────────────────────────── │     Mon 1 Sep                               3 / 5 · 2 open
@@ -34,5 +34,5 @@
                                                            │
                                                            │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- PAST DAY  [ ] day  . today  g go to date  space close  t to today  b to backlog  m move…  ⏎ follow moved
+ PAST DAY  [ ] day  . today  g go to date  space close  t to today  b to backlog  m move…  ⏎ follow moved  tab h/l pane
 
