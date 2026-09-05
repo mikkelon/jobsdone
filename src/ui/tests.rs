@@ -1945,3 +1945,44 @@ fn the_palette_names_the_row_it_is_about_and_the_app_apart() {
         "and drops the one that has none: {text}"
     );
 }
+
+/// A surfaced step whose only rows are today's copies asks nothing, and
+/// said `0 surfaced today` and `0 of 0 decided` under a full bar.
+#[test]
+fn a_step_with_nothing_to_decide_says_so_and_draws_no_bar() {
+    let today = on("2025-09-05");
+    let mut model = Model::empty();
+    model.schedules.insert(
+        1,
+        Schedule {
+            id: 1,
+            title: "Write standup notes".to_owned(),
+            rule: Rule::Workdays,
+            generated_through: today,
+            stopped_on: None,
+            created_at: at(NOW),
+        },
+    );
+    model.tasks.insert(
+        1,
+        Task {
+            schedule_id: Some(1),
+            scheduled_on: Some(today),
+            ..task(1, "Write standup notes", Some(today), 0)
+        },
+    );
+    let app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+
+    let text = look(&app, 120, 36).join("\n");
+    assert!(text.contains("ALSO STARTING TODAY 1"), "{text}");
+    assert!(
+        text.contains("1 starting today, nothing to decide"),
+        "{text}"
+    );
+    assert!(text.contains("Nothing to decide here."), "{text}");
+    assert!(!text.contains("of 0 decided"), "{text}");
+    assert!(
+        !text.contains('█'),
+        "and no bar over a total of none: {text}"
+    );
+}

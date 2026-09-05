@@ -157,7 +157,11 @@ decision on the pile can unearth a second step: a task sent back to the
 backlog with a date already passed surfaces, and the count says so.
 
 Beside the list is a panel: the outcomes with their keys, how many rows
-have been answered, and the one thing to press. Under 100 columns the
+have been answered, and the one thing to press. A step whose rows are all
+information, the copies a schedule started this morning, asks nothing, so
+it says what it is instead of counting none of it: "2 starting today,
+nothing to decide", and no progress bar, because there is nothing to be
+part-way through. Under 100 columns the
 panel goes and the list has the window; the hint bar already names every
 key the panel named, and the status line carries the progress. A row
 that has been answered stays where it was, checked and dim, saying what
