@@ -977,6 +977,73 @@ fn j_and_k_reorder_within_a_group() {
     assert_eq!(titles(&app, List::Day), ["One", "Three", "Two"]);
 }
 
+/// The cursor is one row id per list, so a day pane that has been on
+/// another day holds an id today has not got. The row that answers for
+/// it must not change under the reorder it asked for.
+#[test]
+fn a_reorder_follows_its_task_after_the_day_pane_has_been_elsewhere() {
+    let mut app = started();
+    let alpha = add(&mut app, "Alpha");
+    add(&mut app, "Beta");
+
+    // A task added on tomorrow leaves the day cursor on a row today
+    // does not hold, so today answers with its first row instead.
+    app.update(Action::NextDay);
+    add(&mut app, "Gamma");
+    app.update(Action::PrevDay);
+    assert_eq!(cursor(&app, List::Day), Some(alpha));
+
+    app.update(Action::MoveDown);
+    assert_eq!(titles(&app, List::Day), ["Beta", "Alpha"]);
+    assert_eq!(
+        cursor(&app, List::Day),
+        Some(alpha),
+        "the cursor goes with it"
+    );
+
+    app.update(Action::MoveUp);
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Alpha", "Beta"],
+        "and the way back is the key that came"
+    );
+}
+
+/// The same with a schedule's copy in the plan, which is the shape the
+/// acceptance test found it in.
+#[test]
+fn a_reorder_follows_its_task_past_a_copy_of_a_schedule() {
+    let (mut app, _copy) = with_a_recurring_copy();
+    let dentist = add(&mut app, "Book dentist");
+    app.update(Action::MoveUp);
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Book dentist", "Write standup notes"]
+    );
+
+    app.update(Action::NextDay);
+    add(&mut app, "Collect the parcel");
+    app.update(Action::PrevDay);
+
+    app.update(Action::MoveDown);
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Write standup notes", "Book dentist"]
+    );
+    assert_eq!(
+        cursor(&app, List::Day),
+        Some(dentist),
+        "the cursor goes with it"
+    );
+
+    app.update(Action::MoveUp);
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Book dentist", "Write standup notes"],
+        "and the way back is the key that came"
+    );
+}
+
 #[test]
 fn a_focus_item_reorders_among_the_focus_items() {
     let mut app = started();

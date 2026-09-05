@@ -1156,6 +1156,11 @@ impl App {
             self.say("There is no task here yet.", false);
             return None;
         };
+        // The cursor answers with the first row when the row it was left
+        // on is not in the list, and a reorder changes which row that is.
+        // Acting on a row settles the cursor there, so the answer cannot
+        // move under the key that asked for it (ARCHITECTURE.md rule 6).
+        self.set_cursor(list, id);
         if self.group_of(list, id) == Some(Group::Moved) {
             self.say("That row only points at the task; it has moved.", false);
             return None;
@@ -1945,6 +1950,8 @@ impl App {
             self.say("There is no note here yet.", false);
             return None;
         };
+        // Settled for the same reason a task is.
+        self.set_cursor(List::Notes, RowId::Note(id));
         Some(id)
     }
 
