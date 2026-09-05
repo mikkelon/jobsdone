@@ -197,6 +197,10 @@ adds it here first, the way a new dependency is added to section 2 first.
   `pile`, `surfaced`, `search`, `day_list`, `notes`, `next_dates`,
   `working_day`, and `previous_review`, the lower bound of the reminder
   window.
+- `parse_date(text, today) -> Option<Date>`: the date a typed line means
+  (DOMAIN.md section 2). It takes no model: the date card previews what
+  is typed on every keystroke, and what a shape means is a rule whether
+  or not there is anything to apply it to.
 
 ### `storage`
 

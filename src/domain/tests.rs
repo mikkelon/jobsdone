@@ -1481,6 +1481,64 @@ fn the_rule_shapes_are_the_json_of_domain_section_10() {
     }
 }
 
+// ---- reading a typed date --------------------------------------------
+
+/// The date card's field, read on Friday 5 September 2025.
+fn typed(text: &str) -> Option<String> {
+    parse_date(text, on("2025-09-05")).map(|date| date.to_string())
+}
+
+#[test]
+fn a_typed_date_is_read_the_few_ways_a_date_is_written() {
+    for (text, wanted) in [
+        ("2025-09-30", "2025-09-30"),
+        ("30 sep", "2025-09-30"),
+        ("30 september", "2025-09-30"),
+        ("sep 30", "2025-09-30"),
+        ("30/9", "2025-09-30"),
+        ("30.9", "2025-09-30"),
+        ("1/10/2026", "2026-10-01"),
+        ("30 sep 2027", "2027-09-30"),
+        ("  30   SEP  ", "2025-09-30"),
+    ] {
+        assert_eq!(typed(text).as_deref(), Some(wanted), "{text}");
+    }
+}
+
+#[test]
+fn a_typed_date_with_no_year_is_the_next_one_that_has_not_passed() {
+    // 1 September has gone; 30 September has not.
+    assert_eq!(typed("1 sep").as_deref(), Some("2026-09-01"));
+    assert_eq!(typed("30 sep").as_deref(), Some("2025-09-30"));
+    // A bare day is the next month that has such a day: February is
+    // skipped for a 30th, not clamped to it.
+    assert_eq!(typed("30").as_deref(), Some("2025-09-30"));
+    assert_eq!(typed("3").as_deref(), Some("2025-10-03"));
+    assert_eq!(
+        parse_date("30", on("2026-01-31")).map(|date| date.to_string()),
+        Some("2026-03-30".to_owned())
+    );
+}
+
+#[test]
+fn a_weekday_a_word_and_a_count_of_days_are_dates_too() {
+    assert_eq!(typed("today").as_deref(), Some("2025-09-05"));
+    assert_eq!(typed("tomorrow").as_deref(), Some("2025-09-06"));
+    assert_eq!(typed("+3").as_deref(), Some("2025-09-08"));
+    assert_eq!(typed("mon").as_deref(), Some("2025-09-08"));
+    assert_eq!(typed("monday").as_deref(), Some("2025-09-08"));
+    // A weekday is the next one, so the day it is typed on is a week
+    // away rather than today.
+    assert_eq!(typed("fri").as_deref(), Some("2025-09-12"));
+}
+
+#[test]
+fn what_cannot_be_read_as_a_date_is_nothing() {
+    for text in ["", "   ", "someday", "31 feb", "40", "9 13", "1 2 3 4", "+"] {
+        assert_eq!(typed(text), None, "{text}");
+    }
+}
+
 // ---- the review ------------------------------------------------------
 
 #[test]

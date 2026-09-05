@@ -10,6 +10,7 @@ use jiff::civil::Date;
 use jiff::{Span, Zoned};
 
 mod command;
+mod date;
 mod model;
 mod rule;
 mod system;
@@ -19,6 +20,7 @@ mod view;
 pub(crate) mod tests;
 
 pub use self::command::{Command, Undone, apply, undo};
+pub use self::date::parse_date;
 pub use self::model::{
     Change, FromPlace, Id, Model, Note, Place, Placement, REVIEW_BEFORE, REVIEW_ON, Schedule, Task,
     UndoEntry, Write,

@@ -61,6 +61,28 @@ and the time zone it came from, for example
 9557's addition to RFC 3339; without it the offset alone would not read
 back as the zoned timestamp that was written.
 
+### Reading a typed date
+
+The date card is the one place a date is written rather than picked, and
+what the shapes mean is a rule about dates. `parse_date(text, today)`
+reads, case and spacing aside:
+
+| Typed                          | Means                                        |
+|--------------------------------|----------------------------------------------|
+| `2026-09-30`                   | That date.                                   |
+| `30 sep`, `sep 30`, `30/9`     | Day and month, in either order, any of ` / - . ,` between them. |
+| `30 sep 2027`, `1/10/2027`     | The same with a year.                        |
+| `30`                           | The next month that has a 30th.              |
+| `mon`, `monday`                | The next such weekday, never today.          |
+| `today`, `tomorrow`            | Those days.                                  |
+| `+3`                           | Three days from today.                       |
+
+A month or a weekday is written out or cut to three letters. A date with
+no year is the next one that has not passed, so `1 sep` typed in
+December is next September. Nothing else is guessed: text that is not
+one of these shapes is not a date, and the card says so rather than
+choosing a day.
+
 ## 3. Task
 
 | Field          | Type            | Meaning                                                  |
