@@ -3,9 +3,9 @@ use super::*;
 use std::fs;
 
 use jiff::Zoned;
-use ratatui::Terminal;
-use ratatui::backend::TestBackend;
+use ratatui::backend::{CrosstermBackend, TestBackend};
 use ratatui::style::Color;
+use ratatui::{Terminal, TerminalOptions, Viewport};
 
 use crate::app::App;
 use crate::domain::tests::MemStore;
@@ -395,4 +395,74 @@ fn the_narrow_tab_row_marks_the_tab_the_keyboard_is_on() {
     assert_eq!(app.page(), Page::Notes);
     assert!(notes[1].starts_with(" Notes 4 notes"));
     assert!(notes[5].contains("▪ Mention to Anna"));
+}
+
+/// The colour and attribute parameters of every `ESC [ … m` written, with
+/// an indexed colour kept together as `38;5;4`.
+fn style_codes(written: &str) -> Vec<String> {
+    let mut codes = Vec::new();
+    for rest in written.split("\u{1b}[").skip(1) {
+        let Some(end) = rest.find('m') else { continue };
+        let (parameters, after) = rest.split_at(end);
+        if !after.starts_with('m') || parameters.contains(|c: char| !"0123456789;".contains(c)) {
+            continue;
+        }
+        let mut parameters = parameters.split(';').peekable();
+        while let Some(parameter) = parameters.next() {
+            // 38 and 48 take their colour from the parameters after them.
+            if parameter == "38" || parameter == "48" {
+                let kind = parameters.next().unwrap_or_default();
+                let taking = if kind == "2" { 3 } else { 1 };
+                let rest: Vec<&str> = (0..taking).filter_map(|_| parameters.next()).collect();
+                codes.push(format!("{parameter};{kind};{}", rest.join(";")));
+            } else {
+                codes.push(parameter.to_owned());
+            }
+        }
+    }
+    codes
+}
+
+#[test]
+fn the_bytes_the_terminal_gets_name_a_palette_slot_and_never_a_colour() {
+    // This is what following a live Omarchy theme change comes down to:
+    // the program names slot 4, the theme decides what blue is, and the
+    // program is never told. A truecolour value here would freeze the
+    // screen at one theme.
+    let mut app = app();
+    app.update(Action::Commands);
+
+    let mut bytes: Vec<u8> = Vec::new();
+    {
+        let terminal = Terminal::with_options(
+            CrosstermBackend::new(&mut bytes),
+            TerminalOptions {
+                viewport: Viewport::Fixed(Rect::new(0, 0, 120, 36)),
+            },
+        );
+        terminal
+            .expect("a terminal writing to a buffer")
+            .draw(|frame| {
+                draw(&app, frame);
+            })
+            .expect("a frame");
+    }
+
+    let written = String::from_utf8(bytes).expect("what was written");
+    let mut colours = 0;
+    for code in style_codes(&written) {
+        let slot = match code.strip_prefix("38;5;").or(code.strip_prefix("48;5;")) {
+            Some(slot) => slot.parse::<u16>().expect("a palette slot"),
+            None => {
+                assert!(
+                    !code.starts_with("38;") && !code.starts_with("48;"),
+                    "{code} is a colour value, not a slot the theme fills"
+                );
+                continue;
+            }
+        };
+        assert!(slot < 16, "slot {slot} is outside the sixteen a theme sets");
+        colours += 1;
+    }
+    assert!(colours > 0, "the screen has some colour on it");
 }
