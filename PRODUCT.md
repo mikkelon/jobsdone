@@ -80,16 +80,19 @@ the schedule stops new copies; existing ones stay where they are.
 ## History
 
 Past days are kept and can be browsed. Stepping back through earlier days
-shows what was planned and what was closed on each of them. Completed tasks
-can be searched by title across all history.
+shows what was planned and what was closed on each of them. A task that was
+planned for a day and later moved elsewhere still shows on that day, marked
+as moved and pointing at where it is now, so the record of what was planned
+is never rewritten. Completed tasks can be searched by title across all
+history.
 
 ## Scratchpad
 
-The scratchpad is a small stack of short-lived notes, the equivalent of a
-post-it block on the desk. A note is for things like "remember to mention X",
-drafting a message before sending it, or sketching something out.
+The scratchpad is a small stack of short-lived text notes, the equivalent
+of a post-it block on the desk. A note is for things like "remember to
+mention X" or drafting a message before sending it.
 
-- A note can hold text and simple freehand drawing on the same surface.
+- A note is plain text. No formatting, no title, no attachments.
 - Notes are independent of tasks. They are not attached to or linked from
   anything.
 - Notes are created and thrown away individually. A note stays until it is
@@ -108,3 +111,4 @@ These are deliberate exclusions, not gaps:
   read from or written to.
 - **Rich task structure.** No descriptions, subtasks, tags, projects,
   priorities, time slots, or durations.
+- **Drawing.** Notes are text only. Sketching belongs in a drawing tool.

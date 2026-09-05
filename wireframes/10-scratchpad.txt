@@ -1,0 +1,38 @@
+== 120×36 · floating window, notes page
+
+
+ Notes 4 notes                                                                       n or esc back to today   /   :   ?
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Notes                                a new   Note Thu 4 Sep 16:40                                             esc back
+────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────
+  ▪ Mention to Anna: CI runner b  yesterday │  Mention to Anna:
+  ▪ Draft reply to tender Q3: "W     2 days │  - CI runner budget
+  ▪ nordic ltd PO 4471, due 30 d     2 days │  - Friday demo slot
+  ▪ rsync -av --delete ~/work na  last week │  - ask about the retro format
+                                            │
+  +  new note                             a │  Also: the tender deadline moved to the 12th, check with legal first.
+                                            │
+                                            │  Draft:
+                                            │  Hi Anna, two things before Friday. The CI runner budget needs a decision
+                                            │  this week, and I would like the demo slot after lunch rather than before.
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ NOTE  type to edit  esc back to the list                       in the list:   ⏎ open  a new  x delete  n back to today
+

@@ -1,0 +1,38 @@
+== 120×36 · floating window
+
+
+ ‹ Today · Fri 5 Sep › [ ] day g go to date                       ● 2 in review   4 notes n   / search   : commands   ?
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Today Fri 5 Sep                           6 open · 2 done   Backlog                                     12 · 3 waiting
+───────────────────────────────────────────────────────────┬────────────────────────────────────────────────────────────
+ FOCUS ─────────────────────────────────────────────────── │ [ ] Migrate CI to the new runners             [due 12 Sep]
+ [ ] Ship invoice export                     [↻ every Fri] │ [ ] Write the Q4 planning doc                 [due 30 Sep]
+ [ ] Reply to the tender questions                         │ [ ] Clean out the garage
+                                                           │     …
+ PLAN ──────────────────────────────────────────────────── │
+ [ ] Fix the flaky migration test┌─ Repeat Ship invoice export ───────────────────────┐────────────────────────────────
+ [ ] Write standup notes         │                                                    │                  every work day
+                                 │ 1     Every work day                       Mon–Fri │                    every Friday
+                                 │ 2     Every day                                    │                1st of the month
+                                 │ 3     Every week on         Mo Tu We Th [Fr] Sa Su │                  every Mon, Thu
+                                 │ 4     Every month on the         [ 1st ] · or last │
+                                 │ 5     Every             [ 2 ] weeks from Fri 5 Sep │Edit here: future
+                                 │ 0     Stop repeating                   copies stay │xisting copies stay.
+                                 │                                                    │R on the header opens.
+                                 │ Next: Fri 12 Sep · Fri 19 Sep · Fri 26 Sep         │
+                                 │────────────────────────────────────────────────────│
+                                 │ ⏎ save esc cancel h/l adjust                       │
+                                 │                                                    │
+                                 └────────────────────────────────────────────────────┘
+                                                           │
+                                                           │
+                                                           │
+                                                           │
+                                                           │
+                                                           │
+                                                           │
+                                                           │
+                                                           │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ TODAY  J/K reorder  space done  f focus  a add  e edit  b to backlog  m move to day…  R repeat  x delete  tab h/l pane
+

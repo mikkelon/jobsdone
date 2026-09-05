@@ -1,72 +1,57 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>08 History</title>
+<html><head><meta charset="utf-8"><title>History</title>
 <link rel="stylesheet" href="wf.css"><script src="themes.js"></script><script src="wf.js" defer></script></head>
 <body>
 <div class="stage">
 <div class="desktop">
-  <div class="bar"><span class="ws"><span class="on">1</span><span>2</span><span>3</span></span><span class="mid">Friday 14:30</span><span>bar stand-in</span></div>
-  <div class="tiles">
-    <main class="app">
-      <div class="strip">
-        <span class="nav">‹</span><span class="date">Mon 1 Sep</span><span class="nav">›</span>
-        <span class="nav">4 days ago</span>
-        <span class="nav"><kbd>.</kbd> back to today</span>
-        <i class="callout" style="left:420px;top:4px">1</i>
-        <span class="spacer"></span><span class="ind alert"><b>2</b> in review</span><span class="ind"><b>4</b> notes</span><span class="ind"><kbd>/</kbd></span><span class="ind"><kbd>:</kbd></span><span class="ind"><kbd>?</kbd></span>
-      </div>
-      <div class="panes">
-        <section class="pane focus">
-          <header><span class="title">Mon 1 Sep</span><span>past day</span><span class="right">5 planned · 3 done · 2 open</span><i class="callout" style="right:-8px;top:4px">2</i></header>
-          <div class="body">
-            <div class="group">Focus</div>
-            <div class="row focus-item done"><i class="chk"></i><span class="t">Send the contract draft</span><span class="meta">11:20</span></div>
-            <div class="group">Plan</div>
-            <div class="row done"><i class="chk"></i><span class="t">Weekly planning</span><span class="meta">09:05</span></div>
-            <div class="row cursor"><i class="chk"></i><span class="t">Call the accountant about VAT</span><span class="meta"><span class="chip over">on the pile</span></span><i class="callout" style="left:300px;top:4px">3</i></div>
-            <div class="row done"><i class="chk"></i><span class="t">Reply to Anna</span><span class="meta">15:48</span></div>
-            <div class="row"><i class="chk"></i><span class="t">Write standup notes</span><span class="meta"><span class="chip rep">↻</span> <span class="chip over">on the pile</span></span></div>
-            <div class="row add"><span class="plus">+</span><span class="t">add a task to this day</span><kbd>a</kbd></div>
-          </div>
-        </section>
-        <section class="pane">
-          <header><span class="title">Days</span><span class="right"><kbd>g</kbd> go to date</span><i class="callout" style="right:-8px;top:4px">4</i></header>
-          <div class="body">
-            <div class="group">This week</div>
-            <div class="row"><span class="t">Fri 5 Sep · today</span><span class="meta">2 / 8 done</span></div>
-            <div class="row"><span class="t">Thu 4 Sep</span><span class="meta">4 / 5 · 1 open</span></div>
-            <div class="row"><span class="t">Wed 3 Sep</span><span class="meta">6 / 6</span></div>
-            <div class="row"><span class="t">Tue 2 Sep</span><span class="meta">3 / 3</span></div>
-            <div class="row cursor"><span class="t">Mon 1 Sep</span><span class="meta">3 / 5 · 2 open</span></div>
-            <div class="group">Last week</div>
-            <div class="row"><span class="t">Fri 29 Aug</span><span class="meta">5 / 5</span></div>
-            <div class="row"><span class="t">Thu 28 Aug</span><span class="meta">4 / 4</span></div>
-            <div class="row"><span class="t">Wed 27 Aug</span><span class="meta">2 / 2</span></div>
-            <div class="row"><span class="t">Tue 26 Aug</span><span class="meta">7 / 7</span></div>
-            <div class="row"><span class="t">Mon 25 Aug</span><span class="meta">3 / 4 · 1 open</span></div>
-            <div class="group">Earlier</div>
-            <div class="row"><span class="t">Fri 22 Aug</span><span class="meta">1 / 2 · 1 open</span></div>
-            <div class="row"><span class="t">…</span><span class="meta">days with nothing planned are skipped</span></div>
-          </div>
-        </section>
-      </div>
-      <div class="hints">
-        <span class="ctx">Past day</span>
-        <span><kbd>[</kbd><kbd>]</kbd>day</span><span><kbd>.</kbd>today</span><span><kbd>g</kbd>go to date</span><span><kbd>space</kbd>close</span><span><kbd>t</kbd>to today</span><span><kbd>b</kbd>to backlog</span><span><kbd>m</kbd>move…</span><span><kbd>/</kbd>search history</span>
-      </div>
-    </main>
-  </div>
+<div class="shot"><div class="lbl">120×36 · floating window</div><pre class="tui" style="width:120ch">                                                                                                                        
+ <span class="d">‹</span> <span class="b">Mon 1 Sep</span> <span class="d">›</span> <span class="d">4 days ago</span> <span class="d">. back to today</span>       <span class="n">1</span>                                 <span class="R b">● 2 in review</span>   <span class="d">4 notes n</span>   <span class="d">/</span>   <span class="d">:</span>   <span class="d">?</span> 
+<span class="d">────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>
+ <span class="A b">Mon 1 Sep</span> <span class="d">past day</span>  <span class="d">8 planned · 3 done · 2 open · 3 moved</span>   <span class="b">Days</span>                                        <span class="n">4</span> <span class="d">g go to date</span> 
+<span class="d">───────────────────────────────────────────────────────────┬────────────────────────────────────────────────────────────</span>
+ <span class="d">FOCUS</span> <span class="d">─</span><span class="n">2</span><span class="d">─────────────────────────────────────────────────</span> <span class="d">│</span> <span class="d">THIS WEEK</span> <span class="d">────────────────────────────────────────────────</span> 
+ <span class="G">[x]</span> <span class="d">Send the contract draft</span>                         <span class="d">11:20</span> <span class="d">│</span>     Fri 5 Sep · today                                <span class="d">2 / 8</span> 
+                                                           <span class="d">│</span>     Thu 4 Sep                               <span class="d">4 / 5 · 1 open</span> 
+ <span class="d">PLAN</span> <span class="d">────────────────────────────────────────────────────</span> <span class="d">│</span>     Wed 3 Sep                                        <span class="d">6 / 6</span> 
+ <span class="G">[x]</span> <span class="d">Weekly planning</span>                                 <span class="d">09:05</span> <span class="d">│</span>     Tue 2 Sep                                        <span class="d">3 / 3</span> 
+<span class="c"> [ ] Call the accountant about VAT  </span><span class="n">3</span><span class="c">        </span><span class="R c">[on the pile]</span><span class="c"> </span><span class="d">│</span><span class="c">     Mon 1 Sep                               </span><span class="d c">3 / 5 · 2 open</span><span class="c"> </span>
+ <span class="G">[x]</span> <span class="d">Reply to Anna</span>                                   <span class="d">15:48</span> <span class="d">│</span>                                                            
+ [ ] Write standup notes                <span class="d">[↻]</span>  <span class="R">[on the pile]</span> <span class="d">│</span> <span class="d">LAST WEEK</span> <span class="d">────────────────────────────────────────────────</span> 
+ <span class="d"> +  add a task to this day</span>                              <span class="k">a</span> <span class="d">│</span>     Fri 29 Aug                                       <span class="d">5 / 5</span> 
+                                                           <span class="d">│</span>     Thu 28 Aug                                       <span class="d">4 / 4</span> 
+ <span class="d">MOVED 3</span> <span class="d">─</span><span class="n">5</span><span class="d">───────────────────────────────────────────────</span> <span class="d">│</span>     Wed 27 Aug                                       <span class="d">2 / 2</span> 
+ <span class="d">[→]</span> Prepare slides for Monday                    <span class="d">to today</span> <span class="d">│</span>     Tue 26 Aug                                       <span class="d">7 / 7</span> 
+ <span class="d">[→]</span> Book the venue                           <span class="d">to Wed 3 Sep</span> <span class="d">│</span>     Mon 25 Aug                              <span class="d">3 / 4 · 1 open</span> 
+ <span class="d">[→]</span> Order new office chair                     <span class="d">to backlog</span> <span class="d">│</span>                                                            
+                                                           <span class="d">│</span> <span class="d">EARLIER</span> <span class="d">──────────────────────────────────────────────────</span> 
+                                                           <span class="d">│</span>     Fri 22 Aug                              <span class="d">1 / 2 · 1 open</span> 
+                                                           <span class="d">│</span>     …                <span class="d">days with nothing planned are skipped</span> 
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+<span class="d">────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>
+ <span class="b">PAST DAY</span>  <span class="k">[ ]</span> <span class="d">day</span>  <span class="k">.</span> <span class="d">today</span>  <span class="k">g</span> <span class="d">go to date</span>  <span class="k">space</span> <span class="d">close</span>  <span class="k">t</span> <span class="d">to today</span>  <span class="k">b</span> <span class="d">to backlog</span>  <span class="k">m</span> <span class="d">move…</span>  <span class="k">⏎</span> <span class="d">follow moved</span>               
+                                                                                                                        </pre></div>
 </div>
 <aside class="notes">
-  <h2>History: browsing past days</h2>
-  <p>History is not a separate screen: it is the same day view stepped backwards. Past days are read as they were, and the two panes stay in place.</p>
-  <ol>
-    <li>Stepping back with <kbd>[</kbd> changes the day pane. The strip says how far back you are and offers one key home.</li>
-    <li>A past day shows what was planned and what got closed, with close times. Focus marking is kept, so "what did I decide mattered that day" is visible.</li>
-    <li>Unfinished tasks on a past day are the review pile, seen from the other side. They can be dealt with here too (close, pull to today, backlog) with the same keys.</li>
-    <li>When browsing the past, the backlog pane gives way to a day list: a quick scan of done counts, and a way to jump. Days with nothing planned are skipped. <kbd>l</kbd> back on the day pane restores the backlog.</li>
-  </ol>
-  <div class="flow"><b>Future days</b><kbd>]</kbd> from today steps forward. A future day shows already-moved tasks and scheduled copies that will be created, greyed, so "what is planned for Monday" is answerable. Adding to a future day is allowed.</div>
-  <p>Searching closed tasks across all history is screen 09.</p>
+<h2>History: browsing past days</h2>
+<p>History is not a separate screen: it is the same day view stepped backwards. Past days are read as they were, and the two panes stay in place.</p>
+<ol>
+<li>Stepping back with <kbd>[</kbd> changes the day pane. The status line says how far back you are and offers one key home.</li>
+<li>A past day shows what was planned and what got closed, with close times. Focus marking is kept.</li>
+<li>Unfinished tasks on a past day are the review pile seen from the other side, and can be dealt with here with the same keys.</li>
+<li>While browsing the past, the backlog pane gives way to a day list with done counts. Days with nothing planned are skipped. <kbd>l</kbd> then <kbd>.</kbd> restores the backlog.</li>
+<li>Tasks moved off this day get their own group under the plan, like Done. An arrow in the box says "not here any more", and the right side says where: today, another day, or the backlog. Normal weight, because they are not finished; only Done is dim. Each row is a pointer, not a copy: <kbd>⏎</kbd> jumps there. "On the pile" stays reserved for tasks still open on this day.</li>
+</ol>
+<div class="flow"><b>Future days</b><kbd>]</kbd> from today steps forward. A future day shows already-moved tasks and the recurring copies that will be created, dimmed. Adding to a future day is allowed.</div>
 </aside>
 </div>
 </body></html>

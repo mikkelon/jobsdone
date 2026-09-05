@@ -1,0 +1,46 @@
+== 80×44 · half-width tile, beside an editor
+
+
+ ‹ Today · Fri 5 Sep ›                                          ● 2   /   :   ?
+────────────────────────────────────────────────────────────────────────────────
+  TODAY 6   BACKLOG 12   NOTES 4
+────────────────────────────────────────────────────────────────────────────────
+ FOCUS ────────────────────────────────────────────────────────────────────────
+ [ ] Ship invoice export                                                    [↻]
+ [ ] Reply to the tender questions
+
+ PLAN ─────────────────────────────────────────────────────────────────────────
+ [ ] Fix the flaky migration test
+ [ ] Book dentist                                                           [◷]
+ [ ] Write standup notes                                                    [↻]
+ [ ] Review Anna's PR
+  +  add a task                                                               a
+
+ DONE 2 ───────────────────────────────────────────────────────────────────────
+ [x] Morning review
+ [x] Pay electricity bill
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+────────────────────────────────────────────────────────────────────────────────
+ TODAY  space done  f focus  a add  b backlog  x del                     ? more
+

@@ -1,0 +1,38 @@
+== 120×36 · floating window
+
+
+ MORNING REVIEW step 2 of 2 · due & reminders                                       4 surfaced today   esc skip for now
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                 MIGRATE CI TO THE NEW RUNNERS
+───────────────────────────────────────────────────────────────────────────────┬────────────────────────────────────────
+ DUE 2 ─────────────────────────────────────────────────────────────────────── │  t     Pull onto today        to plan
+ [ ] Migrate CI to the new runners                   [due 3 Sep · 2 days over] │  k     Keep in backlog       tomorrow
+ [ ] Submit the expense report                                     [due today] │  d     Change due date…
+                                                                               │  w     Mark waiting            no nag
+ REMINDERS 2 ───────────────────────────────────────────────────────────────── │  space Done
+ [ ] Book dentist                                                    [◷ today] │
+ [ ] Feedback on the proposal                             [waiting]  [◷ today] │  0 of 4 decided
+                                                                               │  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
+                                                                               │
+ ALSO STARTING TODAY 2 ─────────────────────────────────────────────────────── │
+ [ ] Ship invoice export                        on today's plan  [↻ every Fri] │
+ [ ] Write standup notes                        on today's plan  [↻ work days] │
+                                                                               │
+                                                                               │
+                                                                               │
+                                                                               │
+                                                                               │
+                                                                               │
+                                                                               │
+                                                                               │
+                                                                               │
+                                                                               │
+                                                                               │
+                                                                               │
+                                                                               │
+                                                                               │ ┌────────────────────────────────────┐
+                                                                               │ │ Start the day ⏎                    │
+                                                                               │ └────────────────────────────────────┘
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ SURFACED  t today  k keep  d due…  r remind…  w waiting  space done                          ⏎ start the day  esc skip
+

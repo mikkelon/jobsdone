@@ -1,0 +1,38 @@
+== 120×36 · floating window
+
+
+ MORNING REVIEW step 1 of 2 · the pile                                   7 unfinished from past days   esc skip for now
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+                                                                                 FIX THE FLAKY MIGRATION TEST
+───────────────────────────────────────────────────────────────────────────────┬────────────────────────────────────────
+ YESTERDAY · THU 4 SEP 3 ───────────────────────────────────────────────────── │  d     Done              was finished
+ [x] Send the invoice to Nordic Ltd                                   ✓ closed │  t     Move to today      end of plan
+ [x] Prepare slides for Monday                                         → today │  b     Back to backlog
+ [ ] Fix the flaky migration test                                    was focus │  m     Move to a day…
+                                                                               │  x     Delete                 undo: u
+ MON 1 SEP 2 ───────────────────────────────────────────────────────────────── │
+ [ ] Call the accountant about VAT                                             │  2 of 7 handled
+ [ ] Write standup notes                                         [↻ work days] │  ██████████░░░░░░░░░░░░░░░░░░░░░░░░░░
+                                                                               │  j/k any order · u undo last
+ FRI 22 AUG · 2 WEEKS AGO 1 ────────────────────────────────────────────────── │
+ [ ] Order new office chair                                                    │
+                                                                               │
+ TUE 12 AUG · 3 WEEKS AGO 1 ────────────────────────────────────────────────── │
+ [ ] Book the team dinner                                   6 days on the pile │
+                                                                               │
+                                                                               │
+                                                                               │
+                                                                               │
+                                                                               │
+                                                                               │
+                                                                               │
+                                                                               │
+                                                                               │
+                                                                               │
+                                                                               │
+                                                                               │ ┌────────────────────────────────────┐
+                                                                               │ │ Continue, 5 left on the pile ⏎     │
+                                                                               │ └────────────────────────────────────┘
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ REVIEW  d done  t today  b backlog  m move…  x delete  u undo  e edit                            ⏎ next step  esc skip
+

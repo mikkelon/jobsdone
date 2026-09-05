@@ -1,75 +1,58 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>11 Palette & help</title>
+<html><head><meta charset="utf-8"><title>Command palette &amp; help</title>
 <link rel="stylesheet" href="wf.css"><script src="themes.js"></script><script src="wf.js" defer></script></head>
 <body>
 <div class="stage">
 <div class="desktop">
-  <div class="sheet" style="grid-template-columns:1fr">
-    <div class="panel" style="min-height:440px">
-      <div class="lbl">A · Command palette (<kbd>:</kbd>) — every action, searchable</div>
-      <section class="pane focus" style="position:relative">
-        <div class="body">
-          <div class="group">Plan</div>
-          <div class="row cursor"><i class="chk"></i><span class="t">Book dentist</span></div>
-          <div class="row"><i class="chk"></i><span class="t">Write standup notes</span></div>
-        </div>
-        <div class="scrim"><div class="card" style="width:420px">
-          <div class="search"><span class="glyph">:</span><div class="input"><span>wa</span><span class="caret"></span></div></div>
-          <div class="sect">For "Book dentist"</div>
-          <div class="list" style="padding-top:0">
-            <div class="item sel"><span class="t">Mark <b>wa</b>iting</span><span class="meta"><kbd>w</kbd></span></div>
-            <div class="item"><span class="t">Move to a d<b>a</b>y…</span><span class="meta"><kbd>m</kbd></span></div>
-          </div>
-          <div class="sect">App</div>
-          <div class="list" style="padding-top:0">
-            <div class="item"><span class="t">Show <b>wa</b>iting only</span><span class="meta"></span></div>
-            <div class="item"><span class="t">Open morning review</span><span class="meta">2 on the pile</span></div>
-            <div class="item"><span class="t">Repeating schedules</span><span class="meta"><kbd>R</kbd></span></div>
-            <div class="item"><span class="t">Go to date…</span><span class="meta"><kbd>g</kbd></span></div>
-          </div>
-          <div class="foot"><span><kbd>⏎</kbd> run</span><span><kbd>esc</kbd> close</span><span>keys shown on the right teach the shortcut</span></div>
-        </div></div>
-      </section>
-    </div>
-    <div class="panel" style="min-height:300px">
-      <div class="lbl">B · Help overlay (<kbd>?</kbd>) — the full key map, by context</div>
-      <section class="pane focus" style="position:relative">
-        <div class="scrim center" style="padding:0"><div class="card" style="width:92%">
-          <div class="head"><b>Keys</b><span class="right"><kbd>?</kbd> or <kbd>esc</kbd> close</span></div>
-          <div class="body" style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 18px;font-size:11px">
-            <div><div class="sect" style="padding-left:0">Everywhere</div>
-              <div><kbd>j</kbd><kbd>k</kbd> move · <kbd>h</kbd><kbd>l</kbd><kbd>tab</kbd> pane</div>
-              <div><kbd>a</kbd> add · <kbd>e</kbd> edit · <kbd>x</kbd> delete · <kbd>u</kbd> undo</div>
-              <div><kbd>space</kbd> done / reopen</div>
-              <div><kbd>/</kbd> search · <kbd>:</kbd> commands · <kbd>?</kbd> help</div>
-              <div><kbd>n</kbd> notes drawer · <kbd>q</kbd> quit</div>
-            </div>
-            <div><div class="sect" style="padding-left:0">Day</div>
-              <div><kbd>J</kbd><kbd>K</kbd> reorder · <kbd>f</kbd> focus</div>
-              <div><kbd>b</kbd> to backlog · <kbd>m</kbd> move to day…</div>
-              <div><kbd>[</kbd><kbd>]</kbd> prev/next day · <kbd>.</kbd> today · <kbd>g</kbd> go to date</div>
-              <div><kbd>R</kbd> repeat schedule</div>
-            </div>
-            <div><div class="sect" style="padding-left:0">Backlog</div>
-              <div><kbd>t</kbd> to today · <kbd>m</kbd> move to day…</div>
-              <div><kbd>d</kbd> due by · <kbd>r</kbd> remind on · <kbd>w</kbd> waiting</div>
-              <div><kbd>R</kbd> repeat schedule</div>
-              <div class="sect" style="padding-left:0">Review</div>
-              <div><kbd>d</kbd> done · <kbd>t</kbd> today · <kbd>b</kbd> backlog · <kbd>k</kbd> keep · <kbd>⏎</kbd> next</div>
-            </div>
-          </div>
-        </div></div>
-      </section>
-    </div>
-  </div>
+<div class="shot"><div class="lbl">A · Command palette (:) over the home screen</div><pre class="tui" style="width:120ch">                                                                                                                        
+ <span class="d">PLAN</span> <span class="d">─────────────────────────────────────────────────────</span>                                                             
+<span class="c"> [ ] Book dentist                                           </span>                                                            
+ [ ] Write standup notes      <span class="A">┌──────────────────────────────────────────────────────────┐</span>                              
+                              <span class="A">│</span> <span class="b">:</span> <span class="i"> wa</span><span class="i b">▏</span><span class="i">                                                </span>   <span class="A">│</span>                              
+                              <span class="A">│</span><span class="d">──────────────────────────────────────────────────────────</span><span class="A">│</span>                              
+                              <span class="A">│</span> <span class="d">FOR &quot;BOOK DENTIST&quot;</span>                                       <span class="A">│</span>                              
+                              <span class="A">│</span><span class="c"> Mark waiting                                           </span><span class="k c">w</span><span class="c"> </span><span class="A">│</span>                              
+                              <span class="A">│</span> Move to a day…                                         <span class="k">m</span> <span class="A">│</span>                              
+                              <span class="A">│</span>                                                          <span class="A">│</span>                              
+                              <span class="A">│</span> <span class="d">APP</span>                                                      <span class="A">│</span>                              
+                              <span class="A">│</span> Show waiting only                                        <span class="A">│</span>                              
+                              <span class="A">│</span> Open morning review                        <span class="d">2 on the pile</span> <span class="A">│</span>                              
+                              <span class="A">│</span> Repeating schedules                                    <span class="k">R</span> <span class="A">│</span>                              
+                              <span class="A">│</span> Go to date…                                            <span class="k">g</span> <span class="A">│</span>                              
+                              <span class="A">│</span>                                                          <span class="A">│</span>                              
+                              <span class="A">│</span><span class="d">──────────────────────────────────────────────────────────</span><span class="A">│</span>                              
+                              <span class="A">│</span> <span class="k">⏎</span> <span class="d">run</span> <span class="k">esc</span> <span class="d">close</span> <span class="d">· right column: the direct key, for next time</span>                           
+                              <span class="A">│</span>                                                          <span class="A">│</span>                              
+                              <span class="A">└──────────────────────────────────────────────────────────┘</span>                              
+                                                                                                                        
+<span class="d">────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>
+ <span class="b">COMMANDS</span>  <span class="k">type</span> <span class="d">to filter</span>  <span class="k">↑/↓</span> <span class="d">move</span>                                                                                     
+                                                                                                                        </pre></div>
+<div class="shot"><div class="lbl">B · Help overlay (?), the full key map</div><pre class="tui" style="width:120ch">                                                                                                                        
+                                                                                                                        
+  <span class="A">┌─</span><span class="A b"> Keys </span><span class="A">──────────────────────────────────────────────────────────────────────────────────────────</span><span class="d"> ? or esc close </span><span class="A">─┐</span>  
+  <span class="A">│</span>                                                                                                                  <span class="A">│</span>  
+  <span class="A">│</span>  <span class="d">EVERYWHERE</span>                              <span class="d">DAY</span>                                   <span class="d">BACKLOG</span>                           <span class="A">│</span>  
+  <span class="A">│</span>  <span class="k">j/k</span> move<span class="d"> · </span><span class="k">h/l tab</span> pane                 <span class="k">J/K</span> reorder<span class="d"> · </span><span class="k">f</span> focus                 <span class="k">t</span> to today<span class="d"> · </span><span class="k">m</span> move to day…       <span class="A">│</span>  
+  <span class="A">│</span>  <span class="k">a</span> add<span class="d"> · </span><span class="k">e</span> edit<span class="d"> · </span><span class="k">x</span> delete<span class="d"> · </span><span class="k">u</span> undo      <span class="k">b</span> to backlog<span class="d"> · </span><span class="k">m</span> move to day…         <span class="k">d</span> due by<span class="d"> · </span><span class="k">r</span> remind on<span class="d"> · </span><span class="k">w</span> waiting<span class="A">│</span>  
+  <span class="A">│</span>  <span class="k">space</span> done / reopen                     <span class="k">[ ]</span> prev/next day<span class="d"> · </span><span class="k">.</span> today           <span class="k">R</span> repeat schedule                 <span class="A">│</span>  
+  <span class="A">│</span>  <span class="k">/</span> search<span class="d"> · </span><span class="k">:</span> commands<span class="d"> · </span><span class="k">?</span> help          <span class="k">g</span> go to date<span class="d"> · </span><span class="k">R</span> repeat                                                 <span class="A">│</span>  
+  <span class="A">│</span>  <span class="k">n</span> notes page<span class="d"> · </span><span class="k">q</span> quit                                                         <span class="d">REVIEW</span>                            <span class="A">│</span>  
+  <span class="A">│</span>                                                                                <span class="k">d</span> done<span class="d"> · </span><span class="k">t</span> today<span class="d"> · </span><span class="k">b</span> backlog      <span class="A">│</span>  
+  <span class="A">│</span>                                                                                <span class="k">k</span> keep<span class="d"> · </span><span class="k">⏎</span> next step              <span class="A">│</span>  
+  <span class="A">│</span>                                                                                                                  <span class="A">│</span>  
+  <span class="A">│</span>                                                                                                                  <span class="A">│</span>  
+  <span class="A">└──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘</span>  
+                                                                                                                        
+                                                                                                                        </pre></div>
 </div>
 <aside class="notes">
-  <h2>Command palette and help</h2>
-  <p>Two escape hatches so nobody has to memorise the key map before the app is usable.</p>
-  <p><b>A</b> The palette is the Omarchy launcher shape: centred card, fuzzy filter, selected row in accent. Actions that apply to the cursor task come first, app-level ones after. Each row shows its direct key, so the palette teaches itself out of use.</p>
-  <p><b>B</b> Help is a static overlay of the same keys the hint bar shows, grouped by context. It is the whole map; there are no hidden keys.</p>
-  <div class="flow"><b>Key conventions</b>Lowercase acts on the cursor row. Uppercase reorders or opens schedule editing. Punctuation navigates (<kbd>[</kbd> <kbd>]</kbd> <kbd>.</kbd> <kbd>/</kbd> <kbd>:</kbd> <kbd>?</kbd>). Enter confirms, Escape backs out one level, <kbd>u</kbd> undoes the last change.</div>
-  <p>There is no settings screen. Theme, font and size come from Omarchy; the app has nothing of its own to configure.</p>
+<h2>Command palette and help</h2>
+<p>Two escape hatches so nobody has to memorise the key map before the app is usable.</p>
+<p><b>A</b> The palette is the Omarchy launcher shape: a centred box with a fuzzy filter and the selected row highlighted. Actions for the cursor task come first, app-level ones after. Inside the palette you type to filter, move with ↑/↓ and run with Enter; letters type, as in every text field. The key in the right column is not for pressing here: it is the direct key for next time, on the home screen, so the palette teaches itself out of use.</p>
+<p><b>B</b> Help is a static overlay of the same keys the hint bar shows, grouped by context. It is the whole map; there are no hidden keys.</p>
+<div class="flow"><b>Key conventions</b>Lowercase acts on the cursor row. Uppercase reorders or opens schedule editing. Punctuation navigates. Enter confirms, Escape backs out one level, <kbd>u</kbd> undoes.</div>
+<p>There is no settings screen. Colours and font come from the terminal, which Omarchy themes; the app has nothing of its own to configure.</p>
 </aside>
 </div>
 </body></html>

@@ -1,71 +1,58 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>01 Morning review: pile</title>
+<html><head><meta charset="utf-8"><title>Morning review: the pile</title>
 <link rel="stylesheet" href="wf.css"><script src="themes.js"></script><script src="wf.js" defer></script></head>
 <body>
 <div class="stage">
 <div class="desktop">
-  <div class="bar"><span class="ws"><span class="on">1</span><span>2</span><span>3</span></span><span class="mid">Friday 08:04</span><span>bar stand-in</span></div>
-  <div class="tiles">
-    <main class="app">
-      <div class="strip">
-        <span class="date">Morning review</span><span class="nav">step 1 of 2 · the pile</span>
-        <span class="spacer"></span>
-        <span class="ind"><b>7</b> unfinished from past days</span>
-        <span class="ind"><kbd>esc</kbd> skip for now</span>
-        <i class="callout" style="right:350px;top:4px">1</i>
-      </div>
-      <div class="review">
-        <div class="list">
-          <div class="body">
-            <div class="group">Yesterday · Thu 4 Sep <span class="n">3</span><i class="callout" style="left:230px;top:4px">2</i></div>
-            <div class="row handled"><i class="chk"></i><span class="t">Send the invoice to Nordic Ltd</span><span class="result">✓ closed</span></div>
-            <div class="row handled"><i class="chk"></i><span class="t">Prepare slides for Monday</span><span class="result">→ today</span></div>
-            <div class="row cursor focus-item"><i class="chk"></i><span class="t">Fix the flaky migration test</span><span class="meta">was focus</span><i class="callout" style="right:-8px;top:4px">3</i></div>
-            <div class="group">Mon 1 Sep <span class="n">2</span></div>
-            <div class="row"><i class="chk"></i><span class="t">Call the accountant about VAT</span></div>
-            <div class="row"><i class="chk"></i><span class="t">Write standup notes</span><span class="meta"><span class="chip rep">↻ work days</span></span></div>
-            <div class="group">Fri 22 Aug · 2 weeks ago <span class="n">1</span></div>
-            <div class="row"><i class="chk"></i><span class="t">Order new office chair</span></div>
-            <div class="group">Tue 12 Aug · 3 weeks ago <span class="n">1</span></div>
-            <div class="row"><i class="chk"></i><span class="t">Book the team dinner</span><span class="meta">6 days on the pile</span></div>
-          </div>
-        </div>
-        <div class="side">
-          <header class="group" style="margin-top:0">Fix the flaky migration test</header>
-          <div class="actions">
-            <div class="item"><kbd>d</kbd><span>Done</span><span class="d">it was actually finished</span></div>
-            <div class="item"><kbd>t</kbd><span>Move to today</span><span class="d">goes to end of plan</span></div>
-            <div class="item"><kbd>b</kbd><span>Back to backlog</span><span class="d">no day</span></div>
-            <div class="item"><kbd>m</kbd><span>Move to a day…</span><span class="d">day picker</span></div>
-            <div class="item"><kbd>x</kbd><span>Delete</span><span class="d">undo with <kbd>u</kbd></span></div>
-            <i class="callout" style="right:10px;top:-6px">4</i>
-          </div>
-          <div class="progress">2 of 7 handled · <kbd>j</kbd><kbd>k</kbd> pick any order · <kbd>u</kbd> undo last<div class="track"><div class="fill" style="width:28%"></div></div><i class="callout" style="right:10px;top:8px">5</i></div>
-          <div class="spacer" style="flex:1"></div>
-          <div class="bigbtn">Continue to surfaced tasks with 5 left on the pile <kbd>⏎</kbd></div>
-          <i class="callout" style="right:10px;bottom:52px">6</i>
-        </div>
-      </div>
-      <div class="hints">
-        <span class="ctx">Review</span>
-        <span><kbd>d</kbd>done</span><span><kbd>t</kbd>today</span><span><kbd>b</kbd>backlog</span><span><kbd>m</kbd>move…</span><span><kbd>x</kbd>delete</span><span><kbd>u</kbd>undo</span><span><kbd>e</kbd>edit title</span>
-        <span class="spacer"></span><span><kbd>⏎</kbd>next step</span><span><kbd>esc</kbd>skip</span>
-      </div>
-    </main>
-  </div>
+<div class="shot"><div class="lbl">120×36 · floating window</div><pre class="tui" style="width:120ch">                                                                                                                        
+ <span class="b">MORNING REVIEW</span> <span class="d">step 1 of 2 · the pile</span>        <span class="n">1</span>                          <span class="d">7 unfinished from past days</span>   <span class="d">esc skip for now</span> 
+<span class="d">────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>
+                                                                                 <span class="b">FIX THE FLAKY MIGRATION TEST</span>          <span class="n">4</span>
+<span class="d">───────────────────────────────────────────────────────────────────────────────┬────────────────────────────────────────</span>
+ <span class="d">YESTERDAY · THU 4 SEP 3</span> <span class="d">──</span><span class="n">2</span><span class="d">──────────────────────────────────────────────────</span> <span class="d">│</span>  <span class="k">d</span>     Done              <span class="d">was finished</span>  
+ <span class="d">[x]</span> <span class="d">Send the invoice to Nordic Ltd</span>                                   <span class="d">✓ closed</span> <span class="d">│</span>  <span class="k">t</span>     Move to today      <span class="d">end of plan</span>  
+ <span class="d">[x]</span> <span class="d">Prepare slides for Monday</span>                                         <span class="d">→ today</span> <span class="d">│</span>  <span class="k">b</span>     Back to backlog                 
+<span class="c"> </span><span class="b c">[ ]</span><span class="c"> </span><span class="b c">Fix the flaky migration test</span><span class="c"> </span><span class="n">3</span><span class="c">                                  </span><span class="d c">was focus</span><span class="c"> </span><span class="d">│</span>  <span class="k">m</span>     Move to a day…                  
+                                                                               <span class="d">│</span>  <span class="k">x</span>     Delete                 <span class="d">undo: u</span>  
+ <span class="d">MON 1 SEP 2</span> <span class="d">─────────────────────────────────────────────────────────────────</span> <span class="d">│</span>                                        
+ [ ] Call the accountant about VAT                                             <span class="d">│</span>  <span class="d">2 of 7 handled</span>                       <span class="n">5</span>
+ [ ] Write standup notes                                         <span class="d">[↻ work days]</span> <span class="d">│</span>  <span class="A">██████████</span><span class="d">░░░░░░░░░░░░░░░░░░░░░░░░░░</span>  
+                                                                               <span class="d">│</span>  <span class="d">j/k any order · u undo last</span>           
+ <span class="d">FRI 22 AUG · 2 WEEKS AGO 1</span> <span class="d">──────────────────────────────────────────────────</span> <span class="d">│</span>                                        
+ [ ] Order new office chair                                                    <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+ <span class="d">TUE 12 AUG · 3 WEEKS AGO 1</span> <span class="d">──────────────────────────────────────────────────</span> <span class="d">│</span>                                        
+ [ ] Book the team dinner                                   <span class="d">6 days on the pile</span> <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                       <span class="n">6</span>
+                                                                               <span class="d">│</span> <span class="d">┌────────────────────────────────────┐</span> 
+                                                                               <span class="d">│</span> <span class="d">│</span> Continue, 5 left on the pile ⏎     <span class="d">│</span> 
+                                                                               <span class="d">│</span> <span class="d">└────────────────────────────────────┘</span> 
+<span class="d">────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>
+ <span class="b">REVIEW</span>  <span class="k">d</span> <span class="d">done</span>  <span class="k">t</span> <span class="d">today</span>  <span class="k">b</span> <span class="d">backlog</span>  <span class="k">m</span> <span class="d">move…</span>  <span class="k">x</span> <span class="d">delete</span>  <span class="k">u</span> <span class="d">undo</span>  <span class="k">e</span> <span class="d">edit</span>                            <span class="k">⏎</span> <span class="d">next step</span>  <span class="k">esc</span> <span class="d">skip</span> 
+                                                                                                                        </pre></div>
 </div>
 <aside class="notes">
-  <h2>Morning review, step 1: the pile</h2>
-  <p>Shown on the first open of a work day when the pile is non-empty. Full window, replacing the panes: the review is a ritual, not a sidebar. If the pile is empty the step is skipped silently.</p>
-  <ol>
-    <li>The strip becomes a step indicator. Escape exits without handling anything; the pile stays and the main screen shows "in review" as an alert until it is dealt with.</li>
-    <li>Grouped by the day the task was planned for, newest first. Old groups are labelled relatively ("3 weeks ago") so age is obvious without arithmetic. Nothing is carried over automatically, however old.</li>
-    <li>Cursor row. Handled rows stay in place, struck through, showing what happened, so the list does not jump. Order of handling is free.</li>
-    <li>The four outcomes from PRODUCT.md plus "move to a day" (a superset of "move onto today"). Same keys as everywhere else in the app.</li>
-    <li>Progress and undo. Undo covers the last handled task; deletes never confirm.</li>
-    <li>Leaving with items still on the pile is allowed. They are not nagged about again until the next morning, but the alert count stays visible.</li>
-  </ol>
-  <div class="flow"><b>Recurring copies on the pile</b>"Write standup notes" is an unfinished copy from Monday. It is handled like any other task; the schedule keeps producing new copies regardless.</div>
+<h2>Morning review, step 1: the pile</h2>
+<p>Shown once per day, on the first open of a work day, when the pile is non-empty. Full window: the review is a ritual, not a sidebar. Later opens that day go straight to Today. An empty pile skips the step.</p>
+<ol>
+<li>The status line becomes a step indicator. Escape (or closing the window) leaves the pile intact; the home screen then shows the red count until it is dealt with.</li>
+<li>Grouped by the day the task was planned for, newest first, with relative age on old groups. Nothing is carried over automatically.</li>
+<li>Cursor row. Handled rows stay in place, checked and dimmed, showing what happened, so the list never jumps.</li>
+<li>The outcomes from PRODUCT.md plus "move to a day". Same keys as everywhere else.</li>
+<li>Progress and undo. Deletes never confirm.</li>
+<li>Leaving with items still on the pile is allowed.</li>
+</ol>
+<div class="flow"><b>Recurring copies on the pile</b>"Write standup notes" is an unfinished copy from Monday. It is handled like any other task; the schedule keeps producing new copies regardless.</div>
 </aside>
 </div>
 </body></html>

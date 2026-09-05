@@ -1,0 +1,75 @@
+== A · Empty day
+
+
+ Today Sat 6 Sep                            nothing planned
+────────────────────────────────────────────────────────────
+
+
+              Nothing planned.
+      a add a task · l then t pull from the backlog
+
+
+
+
+
+== B · Empty backlog
+
+
+ Backlog                                                  0
+────────────────────────────────────────────────────────────
+
+
+              Backlog is empty.
+        a add · b on a day task sends it here
+
+
+
+
+
+== C · Nothing to review: the review is skipped, not shown
+
+
+ Today · Fri 5 Sep                              0 in review
+────────────────────────────────────────────────────────────
+
+ Opens straight to Today. Count is 0, not an alert.
+
+
+
+== D · Past day with nothing planned
+
+
+ Sun 31 Aug past day                    nothing was planned
+────────────────────────────────────────────────────────────
+
+
+          Nothing was planned on this day.
+        [ keeps stepping back · g pick a date
+
+
+
+
+
+== E · Search with no match
+
+
+  ┌──────────────────────────────────────────────────────┐
+  │ /  tax return▏                             0 matches │
+  │──────────────────────────────────────────────────────│
+  │ Nothing matches, open or closed.                     │
+  │──────────────────────────────────────────────────────│
+  │ ⏎ add "tax return" to today esc close                │
+  └──────────────────────────────────────────────────────┘
+
+
+
+== F · No notes
+
+
+ Notes                                                    0
+────────────────────────────────────────────────────────────
+
+  +  new note                                             a
+
+
+

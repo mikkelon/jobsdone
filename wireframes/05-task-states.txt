@@ -1,0 +1,87 @@
+== A · Quick add (a)
+
+
+ PLAN ─────────────────────────────────────────────────────────────────────────
+ [ ] Review Anna's PR
+  +   Call the landlord about the leak▏
+     ⏎ add & keep typing · esc stop · the text is the whole task
+
+
+
+
+
+
+
+== B · Edit title in place (e)
+
+
+ PLAN ─────────────────────────────────────────────────────────────────────────
+ [ ]  Fix the flaky migration test (CI only)▏
+ [ ] Book dentist
+
+     On a recurring copy, ⏎ asks:  1 this copy   2 this and future copies
+
+
+
+
+
+
+== C · Reorder (J/K, or drag)
+
+
+ PLAN ─────────────────────────────────────────────────────────────────────────
+ [ ] Fix the flaky migration test
+ [ ] Review Anna's PR                                                 moving ▲▼
+ [ ] Book dentist
+ [ ] Write standup notes
+
+     Order is remembered per day. Focus items reorder within Focus.
+
+
+
+
+== D · Focus (f) and close (space)
+
+
+ FOCUS ────────────────────────────────────────────────────────────────────────
+ [ ] Ship invoice export
+ [ ] Book dentist                                                   just marked
+
+ PLAN ─────────────────────────────────────────────────────────────────────────
+ [ ] Fix the flaky migration test
+
+ DONE 1 ───────────────────────────────────────────────────────────────────────
+ [x] Review Anna's PR                                                     10:41
+     space on a done task reopens it at the end of the plan.
+
+
+
+== E · Move to a day… (m), the only popup here
+
+
+ [ ] Clean out the garage
+      ┌─ Move Clean out the garage ────────────────────┐
+      │ t     Today                          Fri 5 Sep │
+      │ 1     Tomorrow                       Sat 6 Sep │
+      │ 2     Next work day                  Mon 8 Sep │
+      │ 3     Next Monday                    Mon 8 Sep │
+      │ g     Pick a date…                    calendar │
+      │ b     Backlog                           no day │
+      │                                                │
+      │ no text field here: g opens the date card for typing
+      │                                                │
+      └────────────────────────────────────────────────┘
+
+
+
+== F · Delete (x): no confirm, undo in the hint bar
+
+
+ PLAN ─────────────────────────────────────────────────────────────────────────
+ [ ] Fix the flaky migration test
+ [ ] Write standup notes
+ [ ] Review Anna's PR
+
+────────────────────────────────────────────────────────────────────────────────
+ TODAY  Deleted "Book dentist"  u  undo
+

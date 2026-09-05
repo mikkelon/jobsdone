@@ -1,83 +1,56 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>06 Due, remind, waiting</title>
+<html><head><meta charset="utf-8"><title>Due, remind, waiting</title>
 <link rel="stylesheet" href="wf.css"><script src="themes.js"></script><script src="wf.js" defer></script></head>
 <body>
 <div class="stage">
 <div class="desktop">
-  <div class="bar"><span class="ws"><span class="on">1</span><span>2</span><span>3</span></span><span class="mid">Friday 11:02</span><span>bar stand-in</span></div>
-  <div class="tiles">
-    <main class="app">
-      <div class="strip">
-        <span class="nav">‹</span><span class="date">Today · Fri 5 Sep</span><span class="nav">›</span>
-        <span class="spacer"></span><span class="ind"><b>4</b> notes</span><span class="ind"><kbd>/</kbd></span><span class="ind"><kbd>:</kbd></span><span class="ind"><kbd>?</kbd></span>
-      </div>
-      <div class="panes">
-        <section class="pane">
-          <header><span class="title">Today</span><span>Fri 5 Sep</span><span class="right">6 open · 2 done</span></header>
-          <div class="body">
-            <div class="group">Focus</div>
-            <div class="row focus-item"><i class="chk"></i><span class="t">Ship invoice export</span></div>
-            <div class="row focus-item"><i class="chk"></i><span class="t">Reply to the tender questions</span></div>
-            <div class="group">Plan</div>
-            <div class="row"><i class="chk"></i><span class="t">Fix the flaky migration test</span></div>
-            <div class="row"><i class="chk"></i><span class="t">Book dentist</span></div>
-          </div>
-        </section>
-        <section class="pane focus">
-          <header><span class="title">Backlog</span><span class="right">12 · 3 waiting</span></header>
-          <div class="body">
-            <div class="row"><i class="chk"></i><span class="t">Migrate CI to the new runners</span><span class="meta"><span class="chip due">due 12 Sep</span></span></div>
-            <div class="row cursor"><i class="chk"></i><span class="t">Write the Q4 planning doc</span><span class="meta"><span class="chip due">due 30 Sep</span></span><i class="callout" style="right:-8px;top:4px">1</i></div>
-            <div class="row"><i class="chk"></i><span class="t">Clean out the garage</span></div>
-            <div class="row"><i class="chk"></i><span class="t">Renew passport</span><span class="meta"><span class="chip rem">◷ 1 Oct</span></span></div>
-            <div class="row"><i class="chk"></i><span class="t">Try the new keyboard layout</span></div>
-            <div class="group">Waiting <span class="n">3</span></div>
-            <div class="row waiting"><i class="chk"></i><span class="t">Quote from the electrician</span><span class="meta"><span class="chip wait">waiting</span></span><i class="callout" style="right:-8px;top:4px">4</i></div>
-            <div class="row waiting"><i class="chk"></i><span class="t">Feedback on the proposal</span><span class="meta"><span class="chip wait">waiting</span> <span class="chip rem">◷ 15 Sep</span></span></div>
-          </div>
-        </section>
-      </div>
-      <div class="scrim left"><div class="card">
-        <div class="head"><b>Due by</b> Write the Q4 planning doc<span class="right"><kbd>r</kbd> switch to remind on</span><i class="callout" style="right:-8px;top:4px">2</i></div>
-        <div class="search"><div class="input"><span>30 sep</span><span class="caret"></span></div><span class="meta" style="color:var(--muted);font-size:11px">Tue 30 Sep</span></div>
-        <div class="list">
-          <div class="item"><kbd>1</kbd><span class="t">Tomorrow</span><span class="meta">Sat 6 Sep</span></div>
-          <div class="item"><kbd>2</kbd><span class="t">Next Monday</span><span class="meta">Mon 8 Sep</span></div>
-          <div class="item"><kbd>3</kbd><span class="t">In a week</span><span class="meta">Fri 12 Sep</span></div>
-          <div class="item"><kbd>4</kbd><span class="t">End of month</span><span class="meta">Tue 30 Sep</span></div>
-          <div class="item"><kbd>0</kbd><span class="t">Clear date</span><span class="meta">no due date</span></div>
-        </div>
-        <div class="body" style="padding-top:0">
-          <div class="cal">
-            <span class="h">Mo</span><span class="h">Tu</span><span class="h">We</span><span class="h">Th</span><span class="h">Fr</span><span class="h">Sa</span><span class="h">Su</span>
-            <span class="d">1</span><span class="d">2</span><span class="d">3</span><span class="d">4</span><span class="d today">5</span><span class="d">6</span><span class="d">7</span>
-            <span class="d">8</span><span class="d">9</span><span class="d">10</span><span class="d">11</span><span class="d">12</span><span class="d">13</span><span class="d">14</span>
-            <span class="d">15</span><span class="d">16</span><span class="d">17</span><span class="d">18</span><span class="d">19</span><span class="d">20</span><span class="d">21</span>
-            <span class="d">22</span><span class="d">23</span><span class="d">24</span><span class="d">25</span><span class="d">26</span><span class="d">27</span><span class="d">28</span>
-            <span class="d">29</span><span class="d sel">30</span><span class="d o">1</span><span class="d o">2</span><span class="d o">3</span><span class="d o">4</span><span class="d o">5</span>
-          </div>
-          <i class="callout" style="right:8px;top:12px">3</i>
-        </div>
-        <div class="foot"><span><kbd>⏎</kbd> set</span><span><kbd>esc</kbd> cancel</span><span><kbd>h</kbd><kbd>l</kbd> day</span><span><kbd>j</kbd><kbd>k</kbd> week</span><span><kbd>&lt;</kbd><kbd>&gt;</kbd> month</span></div>
-      </div></div>
-      <div class="hints">
-        <span class="ctx">Backlog</span>
-        <span><kbd>t</kbd>to today</span><span><kbd>m</kbd>move…</span><span><kbd>d</kbd>due by</span><span><kbd>r</kbd>remind on</span><span><kbd>w</kbd>waiting</span><span><kbd>R</kbd>repeat</span><span><kbd>a</kbd>add</span><span><kbd>e</kbd>edit</span><span><kbd>x</kbd>delete</span>
-        <span class="spacer"></span><span><kbd>tab</kbd><kbd>h</kbd><kbd>l</kbd>pane</span>
-      </div>
-    </main>
-  </div>
+<div class="shot"><div class="lbl">120×36 · floating window</div><pre class="tui" style="width:120ch">                                                                                                                        
+ <span class="d">‹</span> <span class="b">Today · Fri 5 Sep</span> <span class="d">›</span> <span class="d">[ ] day</span> <span class="d">g go to date</span>                       <span class="R b">● 2 in review</span>   <span class="d">4 notes n</span>   <span class="d">/ search</span>   <span class="d">: commands</span>   <span class="d">?</span> 
+<span class="d">────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>
+ <span class="b">Today</span> <span class="d">Fri 5 Sep</span>                           <span class="d">6 open · 2 done</span>   <span class="A b">Backlog</span>                                     <span class="d">12 · 3 waiting</span> 
+<span class="d">───────────────────────────────────────────────────────────┬────────────────────────────────────────────────────────────</span>
+ <span class="d">FOCUS</span> <span class="d">───────────────────────────────────────────────────</span> <span class="d">│</span> [ ] Migrate CI to the new runners             <span class="Y">[due 12 Sep]</span> 
+ <span class="b">[ ]</span> <span class="b">Ship invoice export</span>         <span class="A">┌─</span><span class="A b"> Due by </span><span class="d">Write the Q4 planning doc alt-r remind on </span><span class="A">─┐</span><span class="c">doc  </span><span class="n">1</span><span class="c">              </span><span class="Y c">[due 30 Sep]</span><span class="c"> </span>
+ <span class="b">[ ]</span> <span class="b">Reply to the tender question</span><span class="A">│</span>                                                  <span class="n">2</span> <span class="A">│</span>                                 
+                                 <span class="A">│</span> <span class="i"> 30 sep</span><span class="i b">▏</span><span class="i">                    </span>  <span class="d">Tue 30 Sep</span>           <span class="A">│</span>                       <span class="C">[◷ 1 Oct]</span> 
+ <span class="d">PLAN</span> <span class="d">───────────────────────────</span><span class="A">│</span>                                                    <span class="A">│</span>ayout                            
+ [ ] Fix the flaky migration test<span class="A">│</span> <span class="k">alt-1</span> Tomorrow                           <span class="d">Sat 6 Sep</span> <span class="A">│</span>in docs                          
+ [ ] Book dentist                <span class="A">│</span> <span class="k">alt-2</span> Next Monday                        <span class="d">Mon 8 Sep</span> <span class="A">│</span>tions                            
+ [ ] Write standup notes         <span class="A">│</span> <span class="k">alt-3</span> In a week                         <span class="d">Fri 12 Sep</span> <span class="A">│</span>                                 
+ [ ] Review Anna&#x27;s PR            <span class="A">│</span> <span class="k">alt-4</span> End of month                      <span class="d">Tue 30 Sep</span> <span class="A">│</span>udget                            
+ <span class="d"> +  add a task</span>                  <span class="A">│</span> <span class="k">alt-0</span> Clear date                       <span class="d">no due date</span> <span class="A">│</span>                               <span class="k">a</span> 
+                                 <span class="A">│</span>                                                    <span class="A">│</span>                                 
+ <span class="d">DONE 2</span> <span class="d">─────────────────────────</span><span class="A">│</span> <span class="d">       September 2026</span>                            <span class="n">3</span> <span class="A">│</span><span class="d">────────────────────────────────</span> 
+ <span class="G">[x]</span> <span class="d">Morning review</span>              <span class="A">│</span> <span class="d"> Mo Tu We Th Fr Sa Su</span>                              <span class="A">│</span><span class="d">cian</span> <span class="n">4</span>                 <span class="M">[waiting]</span> 
+ <span class="G">[x]</span> <span class="d">Pay electricity bill</span>        <span class="A">│</span>   1  2  3  4 <span class="b"> 5</span>  6  7                              <span class="A">│</span><span class="d">al</span>         <span class="M">[waiting]</span>  <span class="C">[◷ 15 Sep]</span> 
+                                 <span class="A">│</span>   8  9 10 11 12 13 14                              <span class="A">│</span><span class="d">er</span>                     <span class="M">[waiting]</span> 
+                                 <span class="A">│</span>  15 16 17 18 19 20 21                              <span class="A">│</span>                                 
+                                 <span class="A">│</span>  22 23 24 25 26 27 28                              <span class="A">│</span>                                 
+                                 <span class="A">│</span>  29 <span class="A b r">30</span> <span class="d"> 1  2  3  4  5</span>                              <span class="A">│</span>                                 
+                                 <span class="A">│</span>                                                    <span class="A">│</span>                                 
+                                 <span class="A">│</span><span class="d">────────────────────────────────────────────────────</span><span class="A">│</span>                                 
+                                 <span class="A">│</span> <span class="k">⏎</span> <span class="d">set</span> <span class="k">esc</span> <span class="d">cancel</span> <span class="k">tab</span> <span class="d">calendar</span> <span class="k">h/l/j/k</span> <span class="k">&lt;/&gt;</span> <span class="d">month</span>    <span class="A">│</span>                                 
+                                 <span class="A">└────────────────────────────────────────────────────┘</span>                                 
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+<span class="d">────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>
+ <span class="b">BACKLOG</span>  <span class="k">t</span> <span class="d">to today</span>  <span class="k">m</span> <span class="d">move…</span>  <span class="k">d</span> <span class="d">due by</span>  <span class="k">r</span> <span class="d">remind on</span>  <span class="k">w</span> <span class="d">waiting</span>  <span class="k">R</span> <span class="d">repeat</span>  <span class="k">a</span> <span class="d">add</span>  <span class="k">e</span> <span class="d">edit</span>  <span class="k">x</span> <span class="d">delete</span>         <span class="k">tab h/l</span> <span class="d">pane</span> 
+                                                                                                                        </pre></div>
 </div>
 <aside class="notes">
-  <h2>Dates on backlog tasks, and waiting</h2>
-  <ol>
-    <li><kbd>d</kbd> on a backlog row opens the date card for "due by". <kbd>r</kbd> opens the same card for "remind on". A task can carry both; they are shown as separate chips.</li>
-    <li>One card, two modes; the header says which. Switching mode keeps the typed date.</li>
-    <li>Three ways in: typed text ("30 sep", "mon", "+3"), the numbered quick picks, or the calendar. Clearing is a pick, not a separate action.</li>
-    <li><kbd>w</kbd> toggles waiting and moves the row into the Waiting group at once. No reason text: the product treats it as a flag. Waiting tasks keep their dates but only reminders surface them, never the due nag.</li>
-  </ol>
-  <div class="flow"><b>Due vs remind, in the review</b>Due: surfaces every morning from the date on, with "n days over". Remind: surfaces once, on the date. Both keep the task in the backlog until <kbd>t</kbd> pulls it.</div>
-  <p>Dates are only offered in the backlog. A task on a day already has a date: its day. Moving a dated backlog task to a day keeps the chips, so the deadline stays visible.</p>
+<h2>Dates on backlog tasks, and waiting</h2>
+<ol>
+<li><kbd>d</kbd> on a backlog row opens the date card for "due by"; <kbd>r</kbd> opens it for "remind on". A task can carry both, shown as separate chips.</li>
+<li>One card, two modes; the title says which. Switching keeps the typed date.</li>
+<li>Three ways in: typed text ("30 sep", "mon", "+3"), quick picks on Alt plus a digit, or the calendar. The text field has focus, so digits and letters type; <kbd>tab</kbd> moves focus to the calendar, where <kbd>h/l/j/k</kbd> work as keys again. Clearing is a pick, not a separate action.</li>
+<li><kbd>w</kbd> toggles waiting and moves the row under Waiting. No reason text; it is a flag. Waiting tasks keep their dates but only reminders surface them.</li>
+</ol>
+<div class="flow"><b>Due vs remind, in the review</b>Due: surfaces every morning from the date on. Remind: surfaces once, on the date. Both keep the task in the backlog until <kbd>t</kbd> pulls it.</div>
+<p>Dates are only offered in the backlog; a task on a day already has a date. Moving a dated backlog task to a day keeps the chips.</p>
 </aside>
 </div>
 </body></html>

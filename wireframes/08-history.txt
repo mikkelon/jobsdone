@@ -1,0 +1,38 @@
+== 120×36 · floating window
+
+
+ ‹ Mon 1 Sep › 4 days ago . back to today                                         ● 2 in review   4 notes n   /   :   ?
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Mon 1 Sep past day  8 planned · 3 done · 2 open · 3 moved   Days                                          g go to date
+───────────────────────────────────────────────────────────┬────────────────────────────────────────────────────────────
+ FOCUS ─────────────────────────────────────────────────── │ THIS WEEK ────────────────────────────────────────────────
+ [x] Send the contract draft                         11:20 │     Fri 5 Sep · today                                2 / 8
+                                                           │     Thu 4 Sep                               4 / 5 · 1 open
+ PLAN ──────────────────────────────────────────────────── │     Wed 3 Sep                                        6 / 6
+ [x] Weekly planning                                 09:05 │     Tue 2 Sep                                        3 / 3
+ [ ] Call the accountant about VAT           [on the pile] │     Mon 1 Sep                               3 / 5 · 2 open
+ [x] Reply to Anna                                   15:48 │
+ [ ] Write standup notes                [↻]  [on the pile] │ LAST WEEK ────────────────────────────────────────────────
+  +  add a task to this day                              a │     Fri 29 Aug                                       5 / 5
+                                                           │     Thu 28 Aug                                       4 / 4
+ MOVED 3 ───────────────────────────────────────────────── │     Wed 27 Aug                                       2 / 2
+ [→] Prepare slides for Monday                    to today │     Tue 26 Aug                                       7 / 7
+ [→] Book the venue                           to Wed 3 Sep │     Mon 25 Aug                              3 / 4 · 1 open
+ [→] Order new office chair                     to backlog │
+                                                           │ EARLIER ──────────────────────────────────────────────────
+                                                           │     Fri 22 Aug                              1 / 2 · 1 open
+                                                           │     …                days with nothing planned are skipped
+                                                           │
+                                                           │
+                                                           │
+                                                           │
+                                                           │
+                                                           │
+                                                           │
+                                                           │
+                                                           │
+                                                           │
+                                                           │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ PAST DAY  [ ] day  . today  g go to date  space close  t to today  b to backlog  m move…  ⏎ follow moved
+

@@ -1,0 +1,46 @@
+== A · Command palette (:) over the home screen
+
+
+ PLAN ─────────────────────────────────────────────────────
+ [ ] Book dentist
+ [ ] Write standup notes      ┌──────────────────────────────────────────────────────────┐
+                              │ :  wa▏                                                   │
+                              │──────────────────────────────────────────────────────────│
+                              │ FOR "BOOK DENTIST"                                       │
+                              │ Mark waiting                                           w │
+                              │ Move to a day…                                         m │
+                              │                                                          │
+                              │ APP                                                      │
+                              │ Show waiting only                                        │
+                              │ Open morning review                        2 on the pile │
+                              │ Repeating schedules                                    R │
+                              │ Go to date…                                            g │
+                              │                                                          │
+                              │──────────────────────────────────────────────────────────│
+                              │ ⏎ run esc close · right column: the direct key, for next time
+                              │                                                          │
+                              └──────────────────────────────────────────────────────────┘
+
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ COMMANDS  type to filter  ↑/↓ move
+
+
+== B · Help overlay (?), the full key map
+
+
+
+  ┌─ Keys ────────────────────────────────────────────────────────────────────────────────────────── ? or esc close ─┐
+  │                                                                                                                  │
+  │  EVERYWHERE                              DAY                                   BACKLOG                           │
+  │  j/k move · h/l tab pane                 J/K reorder · f focus                 t to today · m move to day…       │
+  │  a add · e edit · x delete · u undo      b to backlog · m move to day…         d due by · r remind on · w waiting│
+  │  space done / reopen                     [ ] prev/next day · . today           R repeat schedule                 │
+  │  / search · : commands · ? help          g go to date · R repeat                                                 │
+  │  n notes page · q quit                                                         REVIEW                            │
+  │                                                                                d done · t today · b backlog      │
+  │                                                                                k keep · ⏎ next step              │
+  │                                                                                                                  │
+  │                                                                                                                  │
+  └──────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
+
+

@@ -1,70 +1,56 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>09 Search</title>
+<html><head><meta charset="utf-8"><title>Search</title>
 <link rel="stylesheet" href="wf.css"><script src="themes.js"></script><script src="wf.js" defer></script></head>
 <body>
 <div class="stage">
 <div class="desktop">
-  <div class="bar"><span class="ws"><span class="on">1</span><span>2</span><span>3</span></span><span class="mid">Friday 14:36</span><span>bar stand-in</span></div>
-  <div class="tiles">
-    <main class="app">
-      <div class="strip">
-        <span class="nav">‹</span><span class="date">Today · Fri 5 Sep</span><span class="nav">›</span>
-        <span class="spacer"></span><span class="ind alert"><b>2</b> in review</span><span class="ind"><b>4</b> notes</span><span class="ind"><kbd>/</kbd></span><span class="ind"><kbd>:</kbd></span><span class="ind"><kbd>?</kbd></span>
-      </div>
-      <div class="panes">
-        <section class="pane focus">
-          <header><span class="title">Today</span><span>Fri 5 Sep</span><span class="right">6 open · 2 done</span></header>
-          <div class="body">
-            <div class="group">Focus</div>
-            <div class="row focus-item"><i class="chk"></i><span class="t">Ship invoice export</span></div>
-            <div class="row focus-item"><i class="chk"></i><span class="t">Reply to the tender questions</span></div>
-            <div class="group">Plan</div>
-            <div class="row"><i class="chk"></i><span class="t">Fix the flaky migration test</span></div>
-            <div class="row"><i class="chk"></i><span class="t">Book dentist</span></div>
-          </div>
-        </section>
-        <section class="pane">
-          <header><span class="title">Backlog</span><span class="right">12 · 3 waiting</span></header>
-          <div class="body">
-            <div class="row"><i class="chk"></i><span class="t">Migrate CI to the new runners</span></div>
-            <div class="row"><i class="chk"></i><span class="t">Write the Q4 planning doc</span></div>
-            <div class="row"><i class="chk"></i><span class="t">Clean out the garage</span></div>
-          </div>
-        </section>
-      </div>
-      <div class="scrim"><div class="card" style="width:560px">
-        <div class="search"><span class="glyph">/</span><div class="input"><span>invoice</span><span class="caret"></span></div><span style="font-size:11px;color:var(--muted)">9 matches</span><i class="callout" style="right:-8px;top:4px">1</i></div>
-        <div class="sect">Open<i class="callout" style="left:60px;top:2px">2</i></div>
-        <div class="list" style="padding-top:0">
-          <div class="item"><span class="glyph">☐</span><span class="t">Ship <b>invoice</b> export</span><span class="meta">today · focus</span></div>
-          <div class="item"><span class="glyph">☐</span><span class="t">Chase the unpaid <b>invoice</b>s</span><span class="meta">backlog · waiting</span></div>
-        </div>
-        <div class="sect">Closed<i class="callout" style="left:70px;top:2px">3</i></div>
-        <div class="list" style="padding-top:0">
-          <div class="item sel"><span class="glyph">✓</span><span class="t">Send the <b>invoice</b> to Nordic Ltd</span><span class="meta">Thu 4 Sep</span></div>
-          <div class="item"><span class="glyph">✓</span><span class="t">Ship <b>invoice</b> export</span><span class="meta">Fri 29 Aug · ↻</span></div>
-          <div class="item"><span class="glyph">✓</span><span class="t">Ship <b>invoice</b> export</span><span class="meta">Fri 22 Aug · ↻</span></div>
-          <div class="item"><span class="glyph">✓</span><span class="t">Fix <b>invoice</b> PDF font</span><span class="meta">Tue 19 Aug</span></div>
-          <div class="item"><span class="glyph">✓</span><span class="t">Set up <b>invoice</b> numbering</span><span class="meta">Mon 4 Aug</span></div>
-          <div class="item"><span class="glyph">✓</span><span class="t"><b>Invoice</b> template v2</span><span class="meta">Fri 18 Jul</span></div>
-          <div class="item"><span class="glyph">✓</span><span class="t">Ask Anna about <b>invoice</b> terms</span><span class="meta">Wed 2 Jul</span></div>
-        </div>
-        <div class="foot"><span><kbd>⏎</kbd> go to that day</span><span><kbd>t</kbd> re-add to today as a new task</span><span><kbd>esc</kbd> close</span><i class="callout" style="right:8px;top:6px">4</i></div>
-      </div></div>
-      <div class="hints"><span class="ctx">Search</span><span>type to filter · <kbd>j</kbd><kbd>k</kbd> move</span></div>
-    </main>
-  </div>
+<div class="shot"><div class="lbl">120×36 · floating window</div><pre class="tui" style="width:120ch">                                                                                                                        
+ <span class="d">‹</span> <span class="b">Today · Fri 5 Sep</span> <span class="d">›</span> <span class="d">[ ] day</span> <span class="d">g go to date</span>                       <span class="R b">● 2 in review</span>   <span class="d">4 notes n</span>   <span class="d">/ search</span>   <span class="d">: commands</span>   <span class="d">?</span> 
+<span class="d">────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>
+ <span class="A b">Today</span> <span class="d">Fri 5 Sep</span>                           <span class="d">6 open · 2 done</span>   <span class="b">Backlog</span>                                     <span class="d">12 · 3 waiting</span> 
+<span class="d">───────────────────────────────────────────────────────────┬────────────────────────────────────────────────────────────</span>
+ <span class="d">FOCUS</span> <span class="d">─────────────</span><span class="A">┌──────────────────────────────────────────────────────────────────────────────┐</span>       <span class="Y">[due 12 Sep]</span> 
+ <span class="b">[ ]</span> <span class="b">Ship invoice ex</span><span class="A">│</span> <span class="b">/</span> <span class="i"> invoice</span><span class="i b">▏</span><span class="i">                                                   </span>     <span class="d">9 matches</span> <span class="n">1</span>       <span class="Y">[due 30 Sep]</span> 
+ <span class="b">[ ]</span> <span class="b">Reply to the te</span><span class="A">│</span><span class="d">──────────────────────────────────────────────────────────────────────────────</span><span class="A">│</span>                    
+                    <span class="A">│</span> <span class="d">OPEN</span>  <span class="n">2</span>                                                                      <span class="A">│</span>          <span class="C">[◷ 1 Oct]</span> 
+ <span class="d">PLAN</span> <span class="d">──────────────</span><span class="A">│</span> [ ] Ship invoice export                                        <span class="d">today · focus</span> <span class="A">│</span>                    
+ [ ] Fix the flaky m<span class="A">│</span> [ ] Chase the unpaid invoices                              <span class="d">backlog · waiting</span> <span class="A">│</span>                    
+ [ ] Book dentist   <span class="A">│</span>                                                                              <span class="A">│</span>                    
+ [ ] Write standup n<span class="A">│</span> <span class="d">CLOSED</span>  <span class="n">3</span>                                                                    <span class="A">│</span>                    
+ [ ] Review Anna&#x27;s P<span class="A">│</span><span class="c"> </span><span class="G c">[x]</span><span class="c"> Send the invoice to Nordic Ltd                                 </span><span class="d c">Thu 4 Sep</span><span class="c"> </span><span class="A">│</span>                    
+ <span class="d"> +  add a task</span>     <span class="A">│</span> <span class="G">[x]</span> Ship invoice export                                       <span class="d">Fri 29 Aug · ↻</span> <span class="A">│</span>                  <span class="k">a</span> 
+                    <span class="A">│</span> <span class="G">[x]</span> Ship invoice export                                       <span class="d">Fri 22 Aug · ↻</span> <span class="A">│</span>                    
+ <span class="d">DONE 2</span> <span class="d">────────────</span><span class="A">│</span> <span class="G">[x]</span> Fix invoice PDF font                                          <span class="d">Tue 19 Aug</span> <span class="A">│</span><span class="d">───────────────────</span> 
+ <span class="G">[x]</span> <span class="d">Morning review</span> <span class="A">│</span> <span class="G">[x]</span> Set up invoice numbering                                       <span class="d">Mon 4 Aug</span> <span class="A">│</span>          <span class="M">[waiting]</span> 
+ <span class="G">[x]</span> <span class="d">Pay electricity</span><span class="A">│</span> <span class="G">[x]</span> Invoice template v2                                           <span class="d">Fri 18 Jul</span> <span class="A">│</span><span class="M">aiting]</span>  <span class="C">[◷ 15 Sep]</span> 
+                    <span class="A">│</span> <span class="G">[x]</span> Ask Anna about invoice terms                                   <span class="d">Wed 2 Jul</span> <span class="A">│</span>          <span class="M">[waiting]</span> 
+                    <span class="A">│</span>                                                                              <span class="A">│</span>                    
+                    <span class="A">│</span><span class="d">──────────────────────────────────────────────────────────────────────────────</span><span class="A">│</span>                    
+                    <span class="A">│</span> <span class="k">⏎</span> <span class="d">go to that day</span> <span class="k">alt-t</span> <span class="d">re-add to today as a new task</span> <span class="k">esc</span> <span class="d">close</span>               <span class="n">4</span>                    
+                    <span class="A">│</span>                                                                              <span class="A">│</span>                    
+                    <span class="A">└──────────────────────────────────────────────────────────────────────────────┘</span>                    
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+                                                           <span class="d">│</span>                                                            
+<span class="d">────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>
+ <span class="b">SEARCH</span>  <span class="k">type</span> <span class="d">to filter</span>  <span class="k">↑/↓</span> <span class="d">move</span>                                                                                       
+                                                                                                                        </pre></div>
 </div>
 <aside class="notes">
-  <h2>Search across history</h2>
-  <p><kbd>/</kbd> opens a launcher-style card, the same shape Omarchy uses for its menus. Filtering is instant, by title, across everything the app has ever stored.</p>
-  <ol>
-    <li>One input, no filters or operators. Match count keeps it honest.</li>
-    <li>Open tasks first (today, other days, backlog) with their place, because the most common search is "did I already add this".</li>
-    <li>Closed tasks are the history search from PRODUCT.md: every closed copy, with the day it was closed on. Recurring copies show up once per closed copy, marked with the repeat glyph.</li>
-    <li>Enter jumps to that day in the day pane (screen 08). <kbd>t</kbd> is the shortcut for "I need to do this again": it creates a fresh task on today with the same title.</li>
-  </ol>
-  <div class="flow"><b>Empty result</b>The card stays open with "nothing matches" and an <kbd>a</kbd> hint to add the typed text as a new task on today. See screen 12.</div>
+<h2>Search across history</h2>
+<p><kbd>/</kbd> opens a launcher-style box, the same shape Omarchy's menus have. Filtering is instant, by title, across everything the app has ever stored.</p>
+<ol>
+<li>One input, no operators. The match count keeps it honest.</li>
+<li>Open tasks first, with their place, because the most common search is "did I already add this".</li>
+<li>Closed tasks are the history search: every closed copy with the day it was closed on. Recurring copies appear once per closed copy.</li>
+<li>Enter jumps to that day. <kbd>alt-t</kbd> is "I need to do this again": a fresh task on today with the same title. While the box has focus, plain letters type; the few extra actions use Alt.</li>
+</ol>
+<div class="flow"><b>Empty result</b>The box stays open with "nothing matches", and Enter adds the typed text as a task on today (screen 12).</div>
 </aside>
 </div>
 </body></html>

@@ -1,68 +1,58 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>02 Morning review: surfaced</title>
+<html><head><meta charset="utf-8"><title>Morning review: surfaced</title>
 <link rel="stylesheet" href="wf.css"><script src="themes.js"></script><script src="wf.js" defer></script></head>
 <body>
 <div class="stage">
 <div class="desktop">
-  <div class="bar"><span class="ws"><span class="on">1</span><span>2</span><span>3</span></span><span class="mid">Friday 08:09</span><span>bar stand-in</span></div>
-  <div class="tiles">
-    <main class="app">
-      <div class="strip">
-        <span class="date">Morning review</span><span class="nav">step 2 of 2 · due &amp; reminders</span>
-        <span class="spacer"></span>
-        <span class="ind"><b>4</b> surfaced today</span>
-        <span class="ind"><kbd>esc</kbd> skip for now</span>
-      </div>
-      <div class="review">
-        <div class="list">
-          <div class="body">
-            <div class="group">Due <span class="n">2</span><i class="callout" style="left:80px;top:4px">1</i></div>
-            <div class="row cursor"><i class="chk"></i><span class="t">Migrate CI to the new runners</span><span class="meta"><span class="chip over">due 3 Sep · 2 days over</span></span></div>
-            <div class="row"><i class="chk"></i><span class="t">Submit the expense report</span><span class="meta"><span class="chip due">due today</span></span></div>
-            <div class="group">Reminders <span class="n">2</span><i class="callout" style="left:130px;top:4px">2</i></div>
-            <div class="row"><i class="chk"></i><span class="t">Book dentist</span><span class="meta"><span class="chip rem">◷ today</span></span></div>
-            <div class="row waiting"><i class="chk"></i><span class="t">Feedback on the proposal</span><span class="meta"><span class="chip wait">waiting</span> <span class="chip rem">◷ today</span></span><i class="callout" style="right:-8px;top:4px">3</i></div>
-            <div class="group" style="margin-top:22px">Also starting today <span class="n">2</span><i class="callout" style="left:210px;top:4px">4</i></div>
-            <div class="row"><i class="chk"></i><span class="t">Ship invoice export</span><span class="meta"><span class="chip rep">↻ every Fri</span> <span class="glyph">on today's plan</span></span></div>
-            <div class="row"><i class="chk"></i><span class="t">Write standup notes</span><span class="meta"><span class="chip rep">↻ work days</span> <span class="glyph">on today's plan</span></span></div>
-          </div>
-        </div>
-        <div class="side">
-          <header class="group" style="margin-top:0">Migrate CI to the new runners</header>
-          <div class="actions">
-            <div class="item"><kbd>t</kbd><span>Pull onto today</span><span class="d">leaves backlog</span></div>
-            <div class="item"><kbd>k</kbd><span>Keep in backlog</span><span class="d">surfaces again tomorrow</span></div>
-            <div class="item"><kbd>d</kbd><span>Change due date…</span><span class="d">push it out</span></div>
-            <div class="item"><kbd>w</kbd><span>Mark waiting</span><span class="d">stops nagging</span></div>
-            <div class="item"><kbd>space</kbd><span>Done</span><span class="d">already finished</span></div>
-            <i class="callout" style="right:10px;top:-6px">5</i>
-          </div>
-          <div class="progress">0 of 4 decided<div class="track"><div class="fill" style="width:0"></div></div></div>
-          <div class="spacer" style="flex:1"></div>
-          <div class="bigbtn primary">Start the day <kbd>⏎</kbd></div>
-          <i class="callout" style="right:10px;bottom:52px">6</i>
-        </div>
-      </div>
-      <div class="hints">
-        <span class="ctx">Surfaced</span>
-        <span><kbd>t</kbd>today</span><span><kbd>k</kbd>keep</span><span><kbd>d</kbd>due…</span><span><kbd>r</kbd>remind…</span><span><kbd>w</kbd>waiting</span><span><kbd>space</kbd>done</span>
-        <span class="spacer"></span><span><kbd>⏎</kbd>start the day</span><span><kbd>esc</kbd>skip</span>
-      </div>
-    </main>
-  </div>
+<div class="shot"><div class="lbl">120×36 · floating window</div><pre class="tui" style="width:120ch">                                                                                                                        
+ <span class="b">MORNING REVIEW</span> <span class="d">step 2 of 2 · due &amp; reminders</span>                                       <span class="d">4 surfaced today</span>   <span class="d">esc skip for now</span> 
+<span class="d">────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>
+                                                                                 <span class="b">MIGRATE CI TO THE NEW RUNNERS</span>         <span class="n">5</span>
+<span class="d">───────────────────────────────────────────────────────────────────────────────┬────────────────────────────────────────</span>
+ <span class="d">DUE 2</span> <span class="d">──</span><span class="n">1</span><span class="d">────────────────────────────────────────────────────────────────────</span> <span class="d">│</span>  <span class="k">t</span>     Pull onto today        <span class="d">to plan</span>  
+<span class="c"> [ ] Migrate CI to the new runners                   </span><span class="R c">[due 3 Sep · 2 days over]</span><span class="c"> </span><span class="d">│</span>  <span class="k">k</span>     Keep in backlog       <span class="d">tomorrow</span>  
+ [ ] Submit the expense report                                     <span class="Y">[due today]</span> <span class="d">│</span>  <span class="k">d</span>     Change due date…                
+                                                                               <span class="d">│</span>  <span class="k">w</span>     Mark waiting            <span class="d">no nag</span>  
+ <span class="d">REMINDERS 2</span> <span class="d">──</span><span class="n">2</span><span class="d">──────────────────────────────────────────────────────────────</span> <span class="d">│</span>  <span class="k">space</span> Done                            
+ [ ] Book dentist                                                    <span class="C">[◷ today]</span> <span class="d">│</span>                                        
+ <span class="d">[ ]</span> <span class="d">Feedback on the proposal</span>   <span class="n">3</span>                         <span class="M">[waiting]</span>  <span class="C">[◷ today]</span> <span class="d">│</span>  <span class="d">0 of 4 decided</span>                        
+                                                                               <span class="d">│</span>  <span class="d">░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░</span>  
+                                                                               <span class="d">│</span>                                        
+ <span class="d">ALSO STARTING TODAY 2</span> <span class="d">──</span><span class="n">4</span><span class="d">────────────────────────────────────────────────────</span> <span class="d">│</span>                                        
+ [ ] Ship invoice export                        <span class="d">on today&#x27;s plan</span>  <span class="d">[↻ every Fri]</span> <span class="d">│</span>                                        
+ [ ] Write standup notes                        <span class="d">on today&#x27;s plan</span>  <span class="d">[↻ work days]</span> <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                       <span class="n">6</span>
+                                                                               <span class="d">│</span> <span class="A">┌────────────────────────────────────┐</span> 
+                                                                               <span class="d">│</span> <span class="A">│</span> <span class="A b">Start the day ⏎</span>                    <span class="A">│</span> 
+                                                                               <span class="d">│</span> <span class="A">└────────────────────────────────────┘</span> 
+<span class="d">────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>
+ <span class="b">SURFACED</span>  <span class="k">t</span> <span class="d">today</span>  <span class="k">k</span> <span class="d">keep</span>  <span class="k">d</span> <span class="d">due…</span>  <span class="k">r</span> <span class="d">remind…</span>  <span class="k">w</span> <span class="d">waiting</span>  <span class="k">space</span> <span class="d">done</span>                          <span class="k">⏎</span> <span class="d">start the day</span>  <span class="k">esc</span> <span class="d">skip</span> 
+                                                                                                                        </pre></div>
 </div>
 <aside class="notes">
-  <h2>Morning review, step 2: surfaced</h2>
-  <p>Backlog tasks whose date has arrived. Surfacing is a prompt, not a move: a task stays in the backlog until pulled with <kbd>t</kbd>. If nothing surfaced, this step is skipped.</p>
-  <ol>
-    <li>Due-by tasks: shown from the due date until closed or re-dated. Overdue ones say how far over they are.</li>
-    <li>Remind-on tasks: shown on that date only. "Keep" on a reminder means it will not be seen again unless the date is changed.</li>
-    <li>Waiting tasks are not nagged about, so a waiting task with a reminder is shown but dimmed, and never appears in the due group.</li>
-    <li>Recurring copies created for today are listed for information only. They are already on the plan; no action needed here. This is the one place the app explains what it did on its own.</li>
-    <li>Decisions are optional. Nothing here blocks starting the day.</li>
-    <li>Primary action ends the review and lands on Today (screen 03).</li>
-  </ol>
-  <div class="flow"><b>When both steps are empty</b>The app opens straight to Today. The review is never an empty ceremony.</div>
+<h2>Morning review, step 2: surfaced</h2>
+<p>Backlog tasks whose date has arrived. Surfacing is a prompt, not a move: a task stays in the backlog until pulled with <kbd>t</kbd>. If nothing surfaced, the step is skipped.</p>
+<ol>
+<li>Due-by tasks: shown from the due date on, every morning, until closed or re-dated. Overdue ones say how far over.</li>
+<li>Remind-on tasks: shown on that date only.</li>
+<li>Waiting tasks are not nagged about: shown dimmed for a reminder, never in the due group.</li>
+<li>Recurring copies created for today, for information only. They are already on the plan. The one place the app says what it did on its own.</li>
+<li>Decisions are optional; nothing blocks starting the day.</li>
+<li>Primary action ends the review and lands on Today.</li>
+</ol>
+<div class="flow"><b>When both steps are empty</b>The app opens straight to Today. The review is never an empty ceremony.</div>
 </aside>
 </div>
 </body></html>
