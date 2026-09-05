@@ -58,15 +58,23 @@ fn every_context() -> Vec<KeyContext> {
         },
         KeyContext::Review {
             step: ReviewStep::Pile,
+            asks: true,
             text_field: false,
         },
         KeyContext::Review {
             step: ReviewStep::Surfaced,
+            asks: true,
             text_field: false,
         },
         KeyContext::Review {
             step: ReviewStep::Pile,
+            asks: true,
             text_field: true,
+        },
+        KeyContext::Review {
+            step: ReviewStep::Surfaced,
+            asks: false,
+            text_field: false,
         },
         writing(Field::Adding),
         writing(Field::Renaming),
@@ -147,6 +155,7 @@ fn every_key_the_review_panel_offers_is_a_key_of_that_step() {
     for step in [ReviewStep::Pile, ReviewStep::Surfaced] {
         let context = KeyContext::Review {
             step,
+            asks: true,
             text_field: false,
         };
         for decision in decisions(step) {
@@ -162,10 +171,49 @@ fn every_key_the_review_panel_offers_is_a_key_of_that_step() {
     }
 }
 
+/// A step whose rows are all information asks nothing, so an outcome
+/// there would answer for a row nobody was asked about (DESIGN.md
+/// section 5).
+#[test]
+fn the_step_that_asks_nothing_offers_no_outcome() {
+    let context = KeyContext::Review {
+        step: ReviewStep::Surfaced,
+        asks: false,
+        text_field: false,
+    };
+
+    let named: Vec<&str> = bindings(context)
+        .iter()
+        .filter(|binding| binding.bar.slot(binding.label).is_some())
+        .map(|binding| binding.label)
+        .collect();
+    assert_eq!(named, ["start the day", "skip"]);
+
+    for outcome in [
+        KeyCode::Char('t'),
+        KeyCode::Char('k'),
+        KeyCode::Char('d'),
+        KeyCode::Char('w'),
+        KeyCode::Char(' '),
+    ] {
+        assert_eq!(
+            action_for(&press(outcome), context),
+            None,
+            "{outcome:?} answers a step that asked nothing"
+        );
+    }
+    assert_eq!(
+        action_for(&press(KeyCode::Enter), context),
+        Some(Action::Confirm),
+        "and the one thing to press is still there"
+    );
+}
+
 #[test]
 fn a_title_typed_on_a_review_row_saves_with_enter() {
     let context = KeyContext::Review {
         step: ReviewStep::Pile,
+        asks: true,
         text_field: true,
     };
 
@@ -274,6 +322,7 @@ fn a_key_means_what_its_context_says() {
             &typing('d'),
             KeyContext::Review {
                 step: ReviewStep::Pile,
+                asks: true,
                 text_field: false
             }
         ),
@@ -553,10 +602,12 @@ fn ctrl_c_quits_from_every_context() {
 fn keep_is_the_surfaced_steps_word_and_not_the_piles() {
     let pile = KeyContext::Review {
         step: ReviewStep::Pile,
+        asks: true,
         text_field: false,
     };
     let surfaced = KeyContext::Review {
         step: ReviewStep::Surfaced,
+        asks: true,
         text_field: false,
     };
     assert_eq!(action_for(&typing('k'), pile), None);

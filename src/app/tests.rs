@@ -387,6 +387,7 @@ fn the_launch_opens_the_review_over_the_pile_and_writes_the_gate() {
         app.key_context(),
         KeyContext::Review {
             step: ReviewStep::Pile,
+            asks: true,
             text_field: false
         }
     );
@@ -619,6 +620,7 @@ fn a_title_is_edited_in_place_in_the_review() {
         app.page_context(),
         KeyContext::Review {
             step: ReviewStep::Pile,
+            asks: true,
             text_field: true
         }
     );
@@ -975,6 +977,73 @@ fn j_and_k_reorder_within_a_group() {
 
     app.update(Action::MoveDown);
     assert_eq!(titles(&app, List::Day), ["One", "Three", "Two"]);
+}
+
+/// The cursor is one row id per list, so a day pane that has been on
+/// another day holds an id today has not got. The row that answers for
+/// it must not change under the reorder it asked for.
+#[test]
+fn a_reorder_follows_its_task_after_the_day_pane_has_been_elsewhere() {
+    let mut app = started();
+    let alpha = add(&mut app, "Alpha");
+    add(&mut app, "Beta");
+
+    // A task added on tomorrow leaves the day cursor on a row today
+    // does not hold, so today answers with its first row instead.
+    app.update(Action::NextDay);
+    add(&mut app, "Gamma");
+    app.update(Action::PrevDay);
+    assert_eq!(cursor(&app, List::Day), Some(alpha));
+
+    app.update(Action::MoveDown);
+    assert_eq!(titles(&app, List::Day), ["Beta", "Alpha"]);
+    assert_eq!(
+        cursor(&app, List::Day),
+        Some(alpha),
+        "the cursor goes with it"
+    );
+
+    app.update(Action::MoveUp);
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Alpha", "Beta"],
+        "and the way back is the key that came"
+    );
+}
+
+/// The same with a schedule's copy in the plan, which is the shape the
+/// acceptance test found it in.
+#[test]
+fn a_reorder_follows_its_task_past_a_copy_of_a_schedule() {
+    let (mut app, _copy) = with_a_recurring_copy();
+    let dentist = add(&mut app, "Book dentist");
+    app.update(Action::MoveUp);
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Book dentist", "Write standup notes"]
+    );
+
+    app.update(Action::NextDay);
+    add(&mut app, "Collect the parcel");
+    app.update(Action::PrevDay);
+
+    app.update(Action::MoveDown);
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Write standup notes", "Book dentist"]
+    );
+    assert_eq!(
+        cursor(&app, List::Day),
+        Some(dentist),
+        "the cursor goes with it"
+    );
+
+    app.update(Action::MoveUp);
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Book dentist", "Write standup notes"],
+        "and the way back is the key that came"
+    );
 }
 
 #[test]
@@ -1575,6 +1644,79 @@ fn undo_walks_back_through_the_day() {
 
     app.update(Action::Undo);
     assert_eq!(hint(&app), "There is nothing to undo.");
+}
+
+/// Closing steps the cursor on, so `space` `u` `space` closed two
+/// different tasks until the undo brought the cursor back with the task
+/// (DESIGN.md section 4).
+#[test]
+fn undo_puts_the_cursor_on_the_task_it_brought_back() {
+    let mut app = started();
+    let invoice = add(&mut app, "Ship invoice export");
+    let dentist = add(&mut app, "Book dentist");
+    app.update(Action::Up);
+    assert_eq!(cursor(&app, List::Day), Some(invoice));
+
+    app.update(Action::Close);
+    assert_eq!(
+        cursor(&app, List::Day),
+        Some(dentist),
+        "the close steps the cursor on"
+    );
+
+    app.update(Action::Undo);
+    assert_eq!(cursor(&app, List::Day), Some(invoice));
+
+    app.update(Action::Close);
+    assert!(
+        app.model().task(dentist).is_some_and(Task::is_open),
+        "and the second space closes the same task, not the next one"
+    );
+}
+
+#[test]
+fn undo_puts_the_cursor_on_the_task_it_restored() {
+    let mut app = started();
+    let invoice = add(&mut app, "Ship invoice export");
+    add(&mut app, "Book dentist");
+    app.update(Action::Up);
+
+    app.update(Action::Delete);
+    assert_ne!(cursor(&app, List::Day), Some(invoice));
+
+    app.update(Action::Undo);
+    assert_eq!(cursor(&app, List::Day), Some(invoice));
+}
+
+#[test]
+fn undo_of_a_move_takes_the_keyboard_to_the_pane_the_task_went_back_to() {
+    let mut app = started();
+    let invoice = add(&mut app, "Ship invoice export");
+    add(&mut app, "Book dentist");
+    app.update(Action::Up);
+    app.update(Action::ToBacklog);
+    app.update(Action::PaneRight);
+    assert_eq!(app.focused(), List::Backlog);
+
+    app.update(Action::Undo);
+    assert_eq!(app.focused(), List::Day);
+    assert_eq!(cursor(&app, List::Day), Some(invoice));
+}
+
+/// "On a list that is on screen" is the whole of it: the notes page has
+/// neither pane, so the cursor is left where the close put it.
+#[test]
+fn undo_from_another_page_leaves_the_cursor_where_it_was() {
+    let mut app = started();
+    add(&mut app, "Ship invoice export");
+    let dentist = add(&mut app, "Book dentist");
+    app.update(Action::Up);
+    app.update(Action::Close);
+    app.update(Action::NotesPage);
+
+    app.update(Action::Undo);
+    assert_eq!(app.page(), Page::Notes);
+    assert_eq!(cursor(&app, List::Day), Some(dentist));
 }
 
 // ---- stepping through the days ---------------------------------------

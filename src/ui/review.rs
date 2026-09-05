@@ -9,8 +9,8 @@
 use jiff::civil::Date;
 
 use super::{
-    Canvas, Column, Kind, Look, NARROW, Rows, accent, bold, cursor, day_label, dim, group_rule,
-    place_label, plain, row_area, scroll_to, task_row, title_field,
+    Canvas, Column, HEADER_GAP, Kind, Look, NARROW, Rows, accent, bold, clip, count, cursor,
+    day_label, dim, group_rule, place_label, plain, row_area, scroll_to, task_row, title_field,
 };
 use crate::app::{App, Decided, Editor, Layout, List, ListArea, Rect as Cells, Review, RowId};
 use crate::domain::{Place, Row};
@@ -23,8 +23,7 @@ const PANEL: u16 = 40;
 pub(super) fn status(canvas: &mut Canvas, review: &Review, y: u16, narrow: bool) {
     let (at, of) = review.steps();
     let (handled, total) = review.progress();
-    let step = format!("step {at} of {of} · {}", subtitle(review.step()));
-    let left = vec![("MORNING REVIEW".to_owned(), bold()), (step, dim())];
+    let name = "MORNING REVIEW";
 
     // A narrow window has no panel to carry the progress, so the status
     // line does.
@@ -41,6 +40,22 @@ pub(super) fn status(canvas: &mut Canvas, review: &Review, y: u16, narrow: bool)
             ("esc skip for now".to_owned(), dim()),
         ]
     };
+
+    // The step keeps the gap clear of what the right end says, so the two
+    // are never read as one word (DESIGN.md section 6). A line too tight
+    // for the name of the step drops it whole rather than cutting a word
+    // in half; the count of the steps is the part that has to be there.
+    let gaps = 3 * (right.len().saturating_sub(1)) as u16;
+    let taken: u16 = right.iter().map(|(text, _)| count(text)).sum();
+    let room = (canvas.width() - 1).saturating_sub(1 + count(name) + 1 + taken + gaps + HEADER_GAP);
+    let steps = format!("step {at} of {of}");
+    let step = format!("{steps} · {}", subtitle(review.step()));
+    let step = if count(&step) <= room { step } else { steps };
+    let left = vec![
+        (name.to_owned(), bold()),
+        (clip(&step, room).to_owned(), dim()),
+    ];
+
     canvas.segments(1, y, &left, 1);
     canvas.rsegments(canvas.width() - 1, y, &right, 3);
 }
@@ -351,6 +366,7 @@ fn panel(canvas: &mut Canvas, review: &Review, column: Column) {
 
 const KEYS_OF_THE_PILE: crate::input::KeyContext = crate::input::KeyContext::Review {
     step: ReviewStep::Pile,
+    asks: true,
     text_field: false,
 };
 

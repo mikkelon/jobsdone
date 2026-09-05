@@ -1062,12 +1062,59 @@ impl App {
             return;
         }
         self.take_the_last_decision_back(&undone.change);
+        if let Some(task) = undone.task {
+            self.follow_the_undo(task);
+        }
         match undone.dropped {
             Some(why) => self.say(
                 format!("{} could not be undone: {why}", undone.label),
                 false,
             ),
             None => self.say(format!("Undone: {}", undone.label), false),
+        }
+    }
+
+    /// Where the cursor is after `u`: on the task the undo brought back
+    /// or changed, when the list holding it is on screen (DESIGN.md
+    /// section 4). Closing steps the cursor on, so without this the key
+    /// that takes a close back leaves the cursor on the row after it.
+    fn follow_the_undo(&mut self, task: Id) {
+        let Some(place) = self.model.live_task(task).map(|task| task.place()) else {
+            return;
+        };
+        let list = match place {
+            Place::Day(day) if day == self.showing => List::Day,
+            Place::Day(_) => return,
+            Place::Backlog => List::Backlog,
+        };
+        if !self.on_screen(list) {
+            return;
+        }
+        self.set_cursor(list, RowId::Task(task));
+        self.pane = match list {
+            List::Day => Pane::Day,
+            _ => Pane::Backlog,
+        };
+    }
+
+    /// Whether a list is drawn now. The review takes the whole window, a
+    /// narrow one draws only the pane the keyboard is on, and the backlog
+    /// is only ever beside today (DESIGN.md sections 5 and 6).
+    fn on_screen(&self, list: List) -> bool {
+        if self.review.is_some() {
+            return list == List::Review;
+        }
+        if self.layout.narrow {
+            return list == self.focused();
+        }
+        match self.page {
+            Page::Home => match list {
+                List::Day => true,
+                List::Backlog => !self.browsing(),
+                List::Days => self.browsing(),
+                List::Notes | List::Review => false,
+            },
+            Page::Notes => list == List::Notes,
         }
     }
 
@@ -1156,6 +1203,11 @@ impl App {
             self.say("There is no task here yet.", false);
             return None;
         };
+        // The cursor answers with the first row when the row it was left
+        // on is not in the list, and a reorder changes which row that is.
+        // Acting on a row settles the cursor there, so the answer cannot
+        // move under the key that asked for it (ARCHITECTURE.md rule 6).
+        self.set_cursor(list, id);
         if self.group_of(list, id) == Some(Group::Moved) {
             self.say("That row only points at the task; it has moved.", false);
             return None;
@@ -1945,6 +1997,8 @@ impl App {
             self.say("There is no note here yet.", false);
             return None;
         };
+        // Settled for the same reason a task is.
+        self.set_cursor(List::Notes, RowId::Note(id));
         Some(id)
     }
 
@@ -2180,6 +2234,10 @@ impl App {
         if let Some(review) = &self.review {
             return KeyContext::Review {
                 step: review.step,
+                // A step of copies that only started this morning asks
+                // nothing, and a key that would answer it acts on the
+                // wrong thing (DESIGN.md section 5).
+                asks: review.progress().1 > 0,
                 text_field: self.editor.is_some(),
             };
         }

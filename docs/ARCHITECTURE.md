@@ -183,10 +183,12 @@ adds it here first, the way a new dependency is added to section 2 first.
   does not choose the number, so the application passes it in.
 - `undo(&Model, now) -> Result<Undone, Rejected>`: pops the top entry and
   returns its inverse's change with nothing pushed. `Undone` carries the
-  change, the entry's label, and, when the inverse no longer applied, the
-  `Rejected` saying why the entry was dropped instead: DOMAIN.md section
-  11 wants both a write and a sentence, which a `Result` cannot hold.
-  `Err` is only "there is nothing to undo".
+  change, the entry's label, the task the inverse was about where it was
+  about one, because the cursor goes to it (DESIGN.md section 4), and,
+  when the inverse no longer applied, the `Rejected` saying why the entry
+  was dropped instead: DOMAIN.md section 11 wants both a write and a
+  sentence, which a `Result` cannot hold. `Err` is only "there is nothing
+  to undo".
 - `generate_copies(&Model, now: &Zoned) -> Change` and
   `start_review(&Model, today) -> Option<Change>`: the two system
   operations. Neither touches the undo stack. Generation takes an instant
@@ -224,8 +226,9 @@ adds it here first, the way a new dependency is added to section 2 first.
   the mouse actions `MouseDown`, `MouseUp`, `MouseDrag`, `Scroll` with
   cell coordinates, and in text fields `Insert(char)` and the editing
   keys.
-- `KeyContext`: `Home { pane, day }`, `Notes { pane }`, `Review { step }`,
-  `Popup { kind }`, each with a text-field overlay, and
+- `KeyContext`: `Home { pane, day }`, `Notes { pane }`,
+  `Review { step, asks }`, `Popup { kind }`, each with a text-field
+  overlay, and
   `KeyContext::text_field()` to read it. Home's overlay is a
   `Option<Field>` rather than a bool, because the hint bar has to say
   which field it is: adding keeps the field open after Enter and
@@ -233,7 +236,11 @@ adds it here first, the way a new dependency is added to section 2 first.
   is on, because history is the same page stepped to another day and its
   keys differ there: `t` puts a task from a day that has passed onto
   today, and the pane beside it is the list of days rather than the
-  backlog (DESIGN.md section 6). When the overlay is set,
+  backlog (DESIGN.md section 6). The review carries `asks`, whether the
+  step on screen asks a decision about any of its rows, because a step of
+  copies that only started this morning asks none: its keys are the
+  navigation, Enter and Escape, and no outcome that would act on a row
+  nobody is being asked about (DESIGN.md section 5). When the overlay is set,
   printable keys become `Insert` and only `Enter`, `Escape`, `Tab`, `Up`,
   `Down`, the editing keys and the `Alt` shortcuts keep a name. The
   editing keys belong to the field rather than to the table, so they are

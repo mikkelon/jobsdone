@@ -1928,6 +1928,23 @@ fn every_command_has_an_inverse_that_puts_the_model_back() {
     }
 }
 
+/// The cursor goes to the task an undo was about (DESIGN.md section 4),
+/// so `undo` has to name it. A command about a note names none.
+#[test]
+fn undo_names_the_task_the_inverse_was_about() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let id = world.add("Book the venue", day("2026-09-07"));
+
+    world.must(Command::Close { task: id });
+    assert_eq!(world.undo().task, Some(id));
+
+    world.must(Command::DeleteTask { task: id });
+    assert_eq!(world.undo().task, Some(id));
+
+    world.must(Command::CreateNote);
+    assert_eq!(world.undo().task, None);
+}
+
 #[test]
 fn undoing_a_move_drops_only_the_placement_the_move_wrote() {
     let mut world = World::at("2026-09-07T09:00:00");
