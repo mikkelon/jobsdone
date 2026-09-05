@@ -2322,18 +2322,22 @@ impl App {
     }
 
     /// The commands the palette offers: the rows of the key table for the
-    /// page beneath it, narrowed by what has been typed.
+    /// page beneath it, narrowed by what has been typed, and the ones
+    /// that act on the cursor row first, because that is the order the
+    /// palette's two sections are in.
     pub fn palette_rows(&self) -> Vec<&'static Binding> {
         let typed = self.popup.as_ref().map(|popup| popup.text.to_lowercase());
         let typed = typed.unwrap_or_default();
         let wanted = typed.trim();
-        input::bindings(self.page_context())
+        let mut rows: Vec<&'static Binding> = input::bindings(self.page_context())
             .iter()
             .filter(|binding| !binding.keys.is_empty())
             .filter(|binding| {
                 binding.label.to_lowercase().contains(wanted) || binding.shown == wanted
             })
-            .collect()
+            .collect();
+        rows.sort_by_key(|binding| !binding.acts_on_the_row());
+        rows
     }
 
     /// What the search box has found.

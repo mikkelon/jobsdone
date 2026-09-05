@@ -1916,3 +1916,32 @@ fn a_day_with_nothing_left_open_keeps_the_add_line_and_loses_the_label() {
         "the group that has something: {text}"
     );
 }
+
+/// Wireframe 11 groups the palette by what a key acts on, and the row's
+/// own title is what says which row that is: the program had one section
+/// under the page's name (F10).
+#[test]
+fn the_palette_names_the_row_it_is_about_and_the_app_apart() {
+    let mut app = app();
+    app.update(Action::Commands);
+    let drawn = look(&app, 120, 36);
+    let text = drawn.join("\n");
+
+    assert!(text.contains("FOR \"SHIP INVOICE EXPORT\""), "{text}");
+    assert!(text.contains("APP"), "{text}");
+    let for_the_row = drawn.iter().position(|row| row.contains("FOR \""));
+    let for_the_app = drawn.iter().position(|row| row.contains(" APP "));
+    assert!(for_the_row < for_the_app, "the row's section comes first");
+
+    // Filtering keeps the heading of whichever section still has a row.
+    for typed in "dele".chars() {
+        app.update(Action::Insert(typed));
+    }
+    let text = look(&app, 120, 36).join("\n");
+    assert!(text.contains("FOR \"SHIP INVOICE EXPORT\""), "{text}");
+    assert!(text.contains("Delete"), "{text}");
+    assert!(
+        !text.contains("APP"),
+        "and drops the one that has none: {text}"
+    );
+}

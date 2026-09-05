@@ -274,6 +274,38 @@ pub struct Binding {
     pub narrow: Bar,
 }
 
+impl Binding {
+    /// Whether the row does something to the row the cursor is on, rather
+    /// than to the page or the program. The command palette is in two
+    /// sections along this line, the row's and the app's (wireframe 11).
+    ///
+    /// `Add` is the app's: it puts a new row in the pane rather than
+    /// touching the one under the cursor. `Confirm` is the row's in every
+    /// page table, where it opens a note, follows a moved task or goes to
+    /// a day.
+    pub fn acts_on_the_row(&self) -> bool {
+        self.keys.first().is_some_and(|(_, action)| {
+            matches!(
+                action,
+                Action::Close
+                    | Action::Focus
+                    | Action::Edit
+                    | Action::Delete
+                    | Action::ToToday
+                    | Action::ToBacklog
+                    | Action::MoveToDay
+                    | Action::DueBy
+                    | Action::RemindOn
+                    | Action::Waiting
+                    | Action::Repeat
+                    | Action::MoveUp
+                    | Action::MoveDown
+                    | Action::Confirm
+            )
+        })
+    }
+}
+
 // ---- the key table ---------------------------------------------------
 //
 // One table per context. The order of the rows is the order of the hint

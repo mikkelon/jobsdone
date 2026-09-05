@@ -132,10 +132,13 @@ Conventions, so the map is guessable:
 - One collision, and its resolution: in the review `k` is "keep", so the
   cursor moves there with `j` and the arrow keys and `k` does not move it.
   Everywhere else `j` and `k` move.
-- The command palette lists every action with its direct key beside it.
-  Inside the palette you filter and press Enter; the key shown is for next
-  time, outside the palette, so it teaches the map and then stops being
-  needed. Help is the whole map on one overlay. There are no hidden keys.
+- The command palette lists every action with its direct key beside it,
+  in two sections: what the key would do to the row the cursor is on,
+  under that row's own title, and then what it does to the app. A pane
+  with no row under the cursor names the page instead. Inside the palette
+  you filter and press Enter; the key shown is for next time, outside the
+  palette, so it teaches the map and then stops being needed. Help is the
+  whole map on one overlay. There are no hidden keys.
 
 ## 5. The day is home; the review is a mode, not a place
 

@@ -95,25 +95,55 @@ const PALETTE_WIDTH: u16 = 60;
 fn palette(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     let commands = app.palette_rows();
     let width = PALETTE_WIDTH.min(canvas.width().saturating_sub(4));
-    // Two borders, the input, its rule, the group label, the footer's
-    // rule, and the footer.
-    let around = 7;
+
+    // Two sections, as wireframe 11 draws them: what a key would do to the
+    // row the cursor is on, then what it does to the app. The rows come
+    // in that order, so the headings fall where the kind changes.
+    let mut lines: Vec<Command> = Vec::new();
+    let mut section = None;
+    for command in &commands {
+        let on_row = command.acts_on_the_row();
+        if section != Some(on_row) {
+            if section.is_some() {
+                lines.push(Command::Blank);
+            }
+            lines.push(Command::Heading(if on_row {
+                about_the_row(app)
+            } else {
+                "APP".to_owned()
+            }));
+            section = Some(on_row);
+        }
+        lines.push(Command::Row(command));
+    }
+
+    // Two borders, the input, its rule, the footer's rule, and the footer.
+    let around = 6;
     let room = (rows.bottom - rows.top + 1).saturating_sub(around) as usize;
-    let shown = commands.len().min(room);
+    let shown = lines.len().min(room);
     let height = shown as u16 + around;
     let (x, y) = place(canvas, rows, width, height);
 
     frame(canvas, x, y, width, height);
     input(canvas, x, y + 1, width, ":", popup);
     divide(canvas, x, y + 2, width);
-    canvas.put(x + 2, y + 3, input::name(app.page_context()), dim());
 
-    for (at, command) in commands.iter().take(shown).enumerate() {
-        let row = y + 4 + at as u16;
-        canvas.put(x + 2, row, &sentence(command.label), plain());
-        canvas.rput(x + width - 2, row, command.shown, accent());
-        if at == popup.selected {
-            canvas.restyle(x + 1, row, width - 2, cursor());
+    let mut command_at = 0;
+    for (at, line) in lines.iter().take(shown).enumerate() {
+        let row = y + 3 + at as u16;
+        match line {
+            Command::Blank => {}
+            Command::Heading(text) => {
+                canvas.put(x + 2, row, super::clip(text, width - 4), dim());
+            }
+            Command::Row(command) => {
+                canvas.put(x + 2, row, &sentence(command.label), plain());
+                canvas.rput(x + width - 2, row, command.shown, accent());
+                if command_at == popup.selected {
+                    canvas.restyle(x + 1, row, width - 2, cursor());
+                }
+                command_at += 1;
+            }
         }
     }
 
@@ -129,6 +159,33 @@ fn palette(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
             ("esc", "close · the key on the right is for next time"),
         ],
     );
+}
+
+/// One drawn line of the palette.
+enum Command<'a> {
+    Heading(String),
+    Row(&'a Binding),
+    Blank,
+}
+
+/// What the palette's first section is about: the row the cursor is on,
+/// which is what a key in that section would act on. A pane with no row
+/// under the cursor falls back to the name the hint bar gives the page.
+fn about_the_row(app: &App) -> String {
+    let title = match app.cursor(app.focused()) {
+        Some(RowId::Task(id)) => app.model().task(id).map(|task| task.title.clone()),
+        Some(RowId::Schedule(id)) => app.model().schedule(id).map(|it| it.title.clone()),
+        Some(RowId::Note(id)) => app
+            .model()
+            .note(id)
+            .map(|note| note.body.lines().next().unwrap_or_default().to_owned()),
+        Some(RowId::Day(day)) => Some(day_label(day)),
+        None => None,
+    };
+    match title {
+        Some(title) => format!("FOR \"{}\"", title.to_uppercase()),
+        None => input::name(app.page_context()).to_owned(),
+    }
 }
 
 /// A label the hint bar writes in lower case reads as a command with a
