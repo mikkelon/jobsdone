@@ -14,7 +14,7 @@ produces the deliverable. This document stays high level on purpose.
 - A phase is finished when its deliverable is in the repository and the
   "Done when" line holds. Do not begin the next phase before that.
 - Product and design questions that come up during a phase are settled by
-  editing PRODUCT.md or DESIGN.md, not by deciding silently in code.
+  editing PRODUCT.md, DESIGN.md, STACK.md, DOMAIN.md or ARCHITECTURE.md, not by deciding silently in code.
 - Phases 1 to 3 produce documents. Everything from phase 4 on produces
   code, and each code phase leaves the program runnable and tested.
 - The code base is modular from the first commit. `ARCHITECTURE.md`

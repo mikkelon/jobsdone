@@ -24,6 +24,8 @@ half width. Both must feel right, and the floating case comes first.
   more rows. Under 100 columns the two panes collapse to tabs.
 - Hyprland does the windowing: a window rule on the app's class floats and
   sizes it. The app never positions or resizes itself.
+- Several windows may be open at once, a tile left running and a floating
+  one opened elsewhere. All of them show the same data within a moment.
 
 ## 2. It is a peer of btop and lazygit
 
