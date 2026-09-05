@@ -122,7 +122,7 @@ cmd_resize() {
 
 cmd_stop() {
     if running; then
-        tmux send-keys -t "$SESSION:" q 2>/dev/null || true
+        tmux send-keys -t "$SESSION:" Escape Escape q 2>/dev/null || true
         sleep 0.3
         tmux kill-session -t "=$SESSION" 2>/dev/null || true
         echo "stopped"
