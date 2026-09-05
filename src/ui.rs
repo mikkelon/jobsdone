@@ -23,6 +23,7 @@ use crate::domain::{
 use crate::input::{self, Field, NotesPane, Pane, Shown, Side};
 
 mod popup;
+mod review;
 #[cfg(test)]
 mod tests;
 
@@ -327,7 +328,11 @@ pub fn draw(app: &App, frame: &mut Frame) -> Layout {
         narrow,
         ..Layout::default()
     };
-    if narrow {
+    // The review is a mode over the page and takes the whole window
+    // (DESIGN.md section 5).
+    if app.review().is_some() {
+        review::draw(&mut canvas, app, &rows, &mut layout);
+    } else if narrow {
         tab_row(&mut canvas, app, rows.headers);
         one_pane(&mut canvas, app, &rows, &mut layout);
     } else {
@@ -347,6 +352,10 @@ fn quiet(text: &str) -> (String, Style) {
 ///
 /// A narrow window keeps the indicators and drops the words around them.
 fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
+    if let Some(under_way) = app.review() {
+        review::status(canvas, under_way, y, narrow);
+        return;
+    }
     let review = app.review_count();
     // Red only while there is something on the pile: a zero is a count,
     // not an alert.
@@ -611,11 +620,15 @@ impl Column {
 /// the day the pane is showing, whether the pane has room for words, and
 /// whether this row is the one being carried up or down.
 #[derive(Clone, Copy)]
-struct Look {
+struct Look<'a> {
     kind: Kind,
     today: Date,
     narrow: bool,
     moving: bool,
+    /// The words at the right of the row when the caller knows them and
+    /// the drawing cannot work them out, which is the review saying what
+    /// it did. They stand in for everything else the right holds.
+    note: Option<&'a str>,
 }
 
 /// How a row is drawn, which is what its group says rather than anything
@@ -626,6 +639,9 @@ enum Kind {
     Done,
     Waiting,
     Moved,
+    /// A row the review has answered: checked and dim, whatever the
+    /// answer was, with what it was in the words beside it.
+    Handled,
 }
 
 /// The rows of one group of a pane.
@@ -952,6 +968,9 @@ fn pane(
         List::Backlog => backlog_pane(app, adding),
         List::Days => days_pane(app),
         List::Notes => notes_pane(app),
+        // The review draws its own rows and is never a pane beside
+        // another one.
+        List::Review => return,
     };
 
     // A narrow window puts the tab row where the pane headers would be.
@@ -1055,6 +1074,7 @@ fn pane(
                             today,
                             narrow,
                             moving: app.moving() == Some(row.task),
+                            note: None,
                         },
                     ),
                 }
@@ -1129,6 +1149,7 @@ fn mark_of(row: &domain::Row, kind: Kind) -> (&'static str, Style, Style) {
         Kind::Done => ("[x]", Style::new().fg(Color::Green), dim()),
         Kind::Waiting => ("[ ]", dim(), dim()),
         Kind::Moved => ("[→]", dim(), plain()),
+        Kind::Handled => ("[x]", dim(), dim()),
     }
 }
 
@@ -1141,7 +1162,8 @@ struct Chip {
 }
 
 /// The chips of a row, in the order they are drawn from the left.
-fn chips_of(row: &domain::Row, kind: Kind, today: Date) -> Vec<Chip> {
+fn chips_of(row: &domain::Row, look: Look) -> Vec<Chip> {
+    let Look { kind, today, .. } = look;
     let mut chips = Vec::new();
     if kind == Kind::Waiting || row.waiting {
         chips.push(Chip {
@@ -1176,8 +1198,10 @@ fn chips_of(row: &domain::Row, kind: Kind, today: Date) -> Vec<Chip> {
         });
     }
     // A task still open on a day that has passed. Red, because the cost
-    // of leaving it there is the point (DESIGN.md section 3).
-    if row.on_the_pile {
+    // of leaving it there is the point (DESIGN.md section 3). Not in the
+    // review, whose whole list is the pile: a chip on every row of it
+    // would say nothing.
+    if row.on_the_pile && look.note.is_none() {
         chips.push(Chip {
             text: "on the pile".to_owned(),
             short: "pile",
@@ -1228,6 +1252,7 @@ fn task_row(canvas: &mut Canvas, column: Column, y: u16, row: &domain::Row, look
         today,
         narrow,
         moving,
+        note,
     } = look;
     let (mark, mark_style, title_style) = mark_of(row, kind);
     canvas.put(x + 1, y, mark, mark_style);
@@ -1236,8 +1261,9 @@ fn task_row(canvas: &mut Canvas, column: Column, y: u16, row: &domain::Row, look
     // closed, then the chips, then whatever text is left.
     let mut edge = x + width - 1;
     // A moved row says where the task is now and nothing else: what
-    // became of it there belongs to the day it is on.
-    let closed = if kind == Kind::Moved {
+    // became of it there belongs to the day it is on. Nor does a row the
+    // caller has given its own words, which are the whole of its right.
+    let closed = if kind == Kind::Moved || note.is_some() {
         String::new()
     } else {
         closed_label(row, today)
@@ -1245,14 +1271,18 @@ fn task_row(canvas: &mut Canvas, column: Column, y: u16, row: &domain::Row, look
     if !closed.is_empty() && !narrow {
         edge = canvas.rput(edge, y, &closed, dim()) - count(&closed) - 2;
     }
-    for chip in chips_of(row, kind, today).iter().rev() {
+    for chip in chips_of(row, look).iter().rev() {
         let text = if narrow { chip.short } else { &chip.text };
         edge = canvas.rput(edge, y, &format!("[{text}]"), chip.style) - count(text) - 4;
     }
-    // A narrow pane drops the row's words but keeps a moved row's pointer,
-    // which is the whole content of the row.
-    let meta = meta_of(row, kind, today, moving);
-    if !meta.is_empty() && (!narrow || kind == Kind::Moved) {
+    let meta = match note {
+        Some(note) => note.to_owned(),
+        None => meta_of(row, kind, today, moving),
+    };
+    // A narrow pane drops the row's words, except where they are the
+    // content of the row: where a moved task went, and what the review
+    // did to a row it has answered.
+    if !meta.is_empty() && (!narrow || kind == Kind::Moved || note.is_some()) {
         edge = canvas
             .rput(edge, y, &meta, dim())
             .saturating_sub(count(&meta) + 1);

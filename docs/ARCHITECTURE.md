@@ -197,6 +197,12 @@ adds it here first, the way a new dependency is added to section 2 first.
   `pile`, `surfaced`, `search`, `day_list`, `notes`, `next_dates`,
   `working_day`, and `previous_review`, the lower bound of the reminder
   window.
+- `pile_again(&Model, today, &Pile) -> Pile` and
+  `surfaced_again(&Model, today, &Surfaced) -> Surfaced`: the same two
+  views again, from the value a review opened with rather than from the
+  model. A review keeps the rows it opened with while the tasks in them
+  change under its decisions (DOMAIN.md section 13), so the days and the
+  ids come from the old value and everything else from the model.
 - `Weekday::of(date)` and `Weekday::ALL`, so a card can open on the
   weekday of a day and lay the seven of them out without a second
   mapping of jiff's weekdays or a second idea of where a week starts.
@@ -252,6 +258,12 @@ adds it here first, the way a new dependency is added to section 2 first.
   - `bar` and `narrow`: where the hint bar puts the row when the window
     has two panes and when it has collapsed to tabs, as a `Bar` of `Off`,
     `Left`, `Right`, or `Short(Side, name)` where the bar is tight.
+- `Decision` and `decisions(ReviewStep) -> &[Decision]`: the rows of the
+  panel beside the review, each a key, the action it means, the name the
+  panel gives it and the few words on what it does to the task. The
+  panel says more than the hint bar has room for, so the names are its
+  own; the keys are rows of the step's table and a test holds the two
+  together.
 - `name(KeyContext) -> &str`: what the hint bar calls the context, the
   `TODAY` or `BACKLOG` that opens the bar.
 
@@ -277,12 +289,18 @@ adds it here first, the way a new dependency is added to section 2 first.
 - Read access to the model and the application state for `ui`:
   `today`, `showing` and `shown`, the day the day pane is on and which
   side of today it is, `browsing`, `model`, the views `day`, `backlog`,
-  `days`, `notes` and `review_count`, `page`, `pane`, `notes_pane`, `focused`, `popup`,
-  `editor`, `message`, `cursor`, `palette_rows`, `search_results`,
-  `move_choices`, `date_choices`, `repeat_preview`, `draft` and `layout`.
-  `Page` is `Home` or `Notes`; `List` is `Day`, `Backlog`, `Days` or
-  `Notes`, one cursor each, held by id, `Days` being the list the backlog
-  pane becomes while the day pane is on another day; `Popup` carries the kind, the text typed into
+  `days`, `notes` and `review_count`, `page`, `pane`, `notes_pane`,
+  `focused`, `popup`, `review`, `editor`, `message`, `cursor`,
+  `palette_rows`, `search_results`, `move_choices`, `date_choices`,
+  `repeat_preview`, `draft` and `layout`.
+  `Page` is `Home` or `Notes`, and the review is neither: it is a mode
+  over the page, `Review`, which the window draws instead of the panes
+  while it is there. It holds the step on screen, the `Pile` and
+  `Surfaced` each step opened with, and the `Decided` made for each row,
+  and it answers `step`, `steps`, `pile`, `surfaced`, `decision` and
+  `progress`. `List` is `Day`, `Backlog`, `Days`, `Notes` or `Review`,
+  one cursor each, held by id, `Days` being the list the backlog pane
+  becomes while the day pane is on another day; `Popup` carries the kind, the text typed into
   it, the caret, the selected row, the row it is about, and the `Card` it
   is building before Enter turns it into a command, which for the date
   card is the day it is on and which of its two controls has the

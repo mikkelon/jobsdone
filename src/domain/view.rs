@@ -287,9 +287,7 @@ pub fn pile(model: &Model, today: Date) -> Pile {
         .into_iter()
         .map(|day| PileDay {
             day,
-            age: day
-                .until(today)
-                .map_or(0, |span| i64::from(span.get_days())),
+            age: age_of(day, today),
             rows: model
                 .place(Place::Day(day))
                 .into_iter()
@@ -350,6 +348,54 @@ pub fn previous_review(model: &Model, today: Date) -> Option<Date> {
         Some(on) if on < today => Some(on),
         Some(_) => model.meta_date(REVIEW_BEFORE),
         None => None,
+    }
+}
+
+/// The pile a review is working down: the same days and the same tasks
+/// it opened with, every row drawn as the task is now.
+///
+/// A task the review has closed, moved or deleted has left the pile
+/// itself, and its row stays in the day it was on, so that the list
+/// never moves under the person's hand (DOMAIN.md section 13). That is
+/// also why a deleted task keeps its row here and nowhere else: the
+/// review has to be able to say what it did to it.
+pub fn pile_again(model: &Model, today: Date, opened: &Pile) -> Pile {
+    let days: Vec<PileDay> = opened
+        .days
+        .iter()
+        .map(|opened| PileDay {
+            day: opened.day,
+            age: age_of(opened.day, today),
+            rows: opened
+                .rows
+                .iter()
+                .filter_map(|row| model.task(row.task))
+                .map(|task| row_of(model, task, today, Some(opened.day)))
+                .collect(),
+        })
+        .collect();
+
+    let total = days.iter().map(|day| day.rows.len()).sum();
+    Pile { days, total }
+}
+
+/// The surfaced set a review is working down, drawn again the same way.
+/// A row is drawn on the day the task is on now, so a task pulled onto
+/// today says where it went.
+pub fn surfaced_again(model: &Model, today: Date, opened: &Surfaced) -> Surfaced {
+    let again = |rows: &[Row]| -> Vec<Row> {
+        rows.iter()
+            .filter_map(|row| model.task(row.task))
+            .map(|task| row_of(model, task, today, task.day))
+            .collect()
+    };
+
+    let (due, reminders) = (again(&opened.due), again(&opened.reminders));
+    Surfaced {
+        total: due.len() + reminders.len(),
+        due,
+        reminders,
+        also_starting_today: again(&opened.also_starting_today),
     }
 }
 
@@ -500,6 +546,12 @@ fn row_of(model: &Model, task: &Task, today: Date, on: Option<Date>) -> Row {
             .as_ref()
             .is_some_and(|at| Some(working_day(at)) == task.day),
     }
+}
+
+/// How many days ago a day was, which the screen renders relatively.
+fn age_of(day: Date, today: Date) -> i64 {
+    day.until(today)
+        .map_or(0, |span| i64::from(span.get_days()))
 }
 
 fn due_key(row: &Row) -> (bool, Option<Date>) {

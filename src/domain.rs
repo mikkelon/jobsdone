@@ -30,7 +30,7 @@ pub use self::system::{generate_copies, start_review};
 pub use self::view::{
     BacklogView, DayCounts, DayList, DayListRow, DayStretch, DayView, DueChip, NoteRow, NotesView,
     Pile, PileDay, Row, ScheduleRow, SearchResults, Stretch, Surfaced, backlog_view, day_list,
-    day_view, notes, pile, previous_review, search, surfaced,
+    day_view, notes, pile, pile_again, previous_review, search, surfaced, surfaced_again,
 };
 
 /// The hour a day begins, so 01:30 on Saturday belongs to Friday. A

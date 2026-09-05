@@ -13,10 +13,10 @@
  [ ] Book dentist                                                    [◷ today] │
  [ ] Feedback on the proposal                             [waiting]  [◷ today] │  0 of 4 decided
                                                                                │  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
-                                                                               │
  ALSO STARTING TODAY 2 ─────────────────────────────────────────────────────── │
  [ ] Ship invoice export                        on today's plan  [↻ every Fri] │
  [ ] Write standup notes                        on today's plan  [↻ work days] │
+                                                                               │
                                                                                │
                                                                                │
                                                                                │
