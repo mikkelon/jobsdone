@@ -1,18 +1,24 @@
 //! Application state, the launch sequence, reloading, turning actions
 //! into commands, and the screen layout.
 
-use jiff::Zoned;
 use jiff::civil::Date;
+use jiff::{Span, Zoned};
 use tracing::warn;
 
 use crate::domain::{
-    self, BacklogView, Change, Command, DayView, Id, Model, NotesView, Place, Rule, SearchResults,
-    Store, StoreError, Weekday, Write,
+    self, BacklogView, Change, Command, DayView, Id, Model, MonthDay, NotesView, Place, Rule,
+    SearchResults, Store, StoreError, Weekday, Write,
 };
 use crate::input::{self, Action, Binding, Field, KeyContext, NotesPane, Pane, PopupKind};
 
 #[cfg(test)]
 mod tests;
+
+/// The most weeks apart the repeat card offers, which is a year.
+const WEEKS_APART: usize = 52;
+
+/// How many of the next dates the repeat card previews.
+const PREVIEW: usize = 3;
 
 /// The length the undo stack is held to. The domain does not choose the
 /// number (DOMAIN.md section 11); a hundred is more than a day's work and
@@ -42,6 +48,44 @@ pub enum List {
     Notes,
 }
 
+/// Which row of a list the cursor is on.
+///
+/// A pane draws tasks and, under the backlog's groups, the schedules
+/// that make tasks; the notes page draws notes. An id alone would not
+/// say which of them a row is, and the three number from one apiece.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RowId {
+    Task(Id),
+    Schedule(Id),
+    Note(Id),
+}
+
+impl RowId {
+    /// The task the row is, if it is one.
+    pub fn task(self) -> Option<Id> {
+        match self {
+            RowId::Task(id) => Some(id),
+            _ => None,
+        }
+    }
+
+    /// The schedule the row is, if it is one.
+    pub fn schedule(self) -> Option<Id> {
+        match self {
+            RowId::Schedule(id) => Some(id),
+            _ => None,
+        }
+    }
+
+    /// The note the row is, if it is one.
+    pub fn note(self) -> Option<Id> {
+        match self {
+            RowId::Note(id) => Some(id),
+            _ => None,
+        }
+    }
+}
+
 /// Which group of a pane a row is in.
 ///
 /// The domain decides what is in each group; the application needs the
@@ -56,6 +100,9 @@ pub enum Group {
     Moved,
     Ordinary,
     Waiting,
+    /// The schedules the backlog pane lists under its two groups
+    /// (DOMAIN.md section 7). A row here is a schedule, not a task.
+    Schedules,
     Notes,
 }
 
@@ -119,9 +166,96 @@ pub struct Popup {
     /// Which row of its list is selected. A popup lists commands, results
     /// and days, not model rows, so an index is what it means.
     pub selected: usize,
-    /// The task the popup is about, held by id so that a reload cannot
-    /// turn it into another one.
-    pub target: Option<Id>,
+    /// The row the popup is about, held by id so that a reload cannot
+    /// turn it into another one. The repeat card is about a schedule as
+    /// readily as about a task.
+    pub target: Option<RowId>,
+    /// What a card is building before Enter turns it into a command.
+    pub card: Card,
+}
+
+impl Popup {
+    /// The date card's draft, if that is what this popup is.
+    pub fn date(&self) -> Option<&DateDraft> {
+        match &self.card {
+            Card::Date(draft) => Some(draft),
+            _ => None,
+        }
+    }
+
+    /// The repeat card's draft, if that is what this popup is.
+    pub fn repeat(&self) -> Option<&RepeatDraft> {
+        match &self.card {
+            Card::Repeat(draft) => Some(draft),
+            _ => None,
+        }
+    }
+
+    /// The task the popup is about, if the row it is about is one.
+    pub fn task(&self) -> Option<Id> {
+        self.target.and_then(RowId::task)
+    }
+}
+
+/// A card is a form, so it holds what it has been told until Enter turns
+/// it into a command. Uncommitted state, like the note being typed beside
+/// it (ARCHITECTURE.md rule 8).
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Card {
+    /// A popup that answers with a key or a row, and builds nothing.
+    None,
+    Date(DateDraft),
+    Repeat(RepeatDraft),
+}
+
+/// Which date the card is setting. One card, three things to set, and the
+/// title says which (wireframe 06).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DateKind {
+    Due,
+    Remind,
+    /// The day the move card was asked to pick.
+    Move,
+}
+
+/// The date card: the day it is on, however that day was arrived at, and
+/// which of its two controls has the keyboard.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct DateDraft {
+    pub kind: DateKind,
+    /// What the calendar marks and what Enter applies. Typing a date the
+    /// domain can read moves it, and so do the calendar keys.
+    pub on: Date,
+    /// Whether `tab` has moved the keyboard into the calendar, where
+    /// single keys work again (DESIGN.md section 4).
+    pub in_calendar: bool,
+}
+
+/// One row of the date card: its key and name from the key table, and the
+/// day it means. No day is the pick that takes the date off.
+#[derive(Clone, Copy, Debug)]
+pub struct DateChoice {
+    pub key: &'static str,
+    pub label: &'static str,
+    pub date: Option<Date>,
+}
+
+/// The repeat card: the parameters of every shape, kept while another
+/// shape is looked at, so that stepping through the rows loses nothing.
+/// Which shape is selected is the popup's selected row.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct RepeatDraft {
+    /// The weekdays the weekly shape repeats on, and which of the seven
+    /// `h` and `l` are on.
+    pub weekdays: Vec<Weekday>,
+    pub weekday: usize,
+    pub month_day: MonthDay,
+    /// How many weeks apart, and the date they are counted from.
+    pub weeks: u32,
+    pub from: Date,
+    /// The date the preview of the next dates counts on from, which is
+    /// how far the schedule has already been generated.
+    pub after: Date,
 }
 
 /// Where the move card sends a task.
@@ -172,7 +306,7 @@ pub struct ListArea {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RowArea {
     pub list: List,
-    pub id: Id,
+    pub id: RowId,
     pub area: Rect,
 }
 
@@ -206,9 +340,9 @@ impl Layout {
 /// The cursor of each list, by id.
 #[derive(Clone, Copy, Debug, Default)]
 struct Cursors {
-    day: Option<Id>,
-    backlog: Option<Id>,
-    notes: Option<Id>,
+    day: Option<RowId>,
+    backlog: Option<RowId>,
+    notes: Option<RowId>,
 }
 
 /// The views the screen is drawn from, recomputed whenever the model or
@@ -244,7 +378,7 @@ pub struct App {
     /// section 18).
     moving: Option<Id>,
     /// The row the mouse took hold of, while it holds it.
-    dragging: Option<(List, Id)>,
+    dragging: Option<(List, RowId)>,
     layout: Layout,
     /// Where the clock comes from. The application is the only module
     /// that reads it (ARCHITECTURE.md section 3), which is also what
@@ -256,8 +390,9 @@ pub struct App {
 }
 
 impl App {
-    /// Loads the model and runs the launch sequence. Phase 8 adds the
-    /// generation of recurring copies to it and phase 9 the review gate.
+    /// Loads the model and runs the launch sequence: the recurring copies
+    /// for every scheduled date since the last launch, and then, in phase
+    /// 9, the review gate.
     pub fn new(store: Box<dyn Store>, now: &Zoned) -> Result<App, StoreError> {
         let model = store.load()?;
         let version = store.version()?;
@@ -282,9 +417,36 @@ impl App {
             #[cfg(test)]
             clock: now.clone(),
         };
+        app.generate(now);
         app.refresh();
         app.rest_the_cursors();
         Ok(app)
+    }
+
+    /// The copies for every scheduled date since the last launch.
+    ///
+    /// Recurring schedules are the one thing in the program that creates
+    /// tasks on their own (DESIGN.md section 7). Generation is not a user
+    /// action: it pushes nothing on the undo stack, and a second window
+    /// making the same copy at the same moment loses the race, which is
+    /// the failure DOMAIN.md section 10 says to ignore.
+    fn generate(&mut self, now: &Zoned) {
+        let change = domain::generate_copies(&self.model, now);
+        if change.writes.is_empty() {
+            return;
+        }
+        match self.store.commit(&change) {
+            Ok(()) => self.model.apply(&change),
+            Err(StoreError::Conflict) => {
+                self.reload_if_stale();
+            }
+            Err(StoreError::Other(why)) => {
+                warn!(%why, "the recurring copies could not be made");
+            }
+        }
+        if let Ok(version) = self.store.version() {
+            self.version = version;
+        }
     }
 
     /// The single entry point for every event, ticks included.
@@ -304,9 +466,15 @@ impl App {
             Action::Tick | Action::FocusGained => {
                 // The clock is read here and nowhere else, so the date
                 // rolling over while the window is open is just a tick.
-                let today = domain::working_day(&self.now());
+                let now = self.now();
+                let today = domain::working_day(&now);
                 let rolled = today != self.today;
                 self.today = today;
+                // A window left open past 05:00 has reached a new day
+                // without a launch, and today's copies are owed to it.
+                if rolled {
+                    self.generate(&now);
+                }
                 if self.reload_if_stale() || rolled {
                     self.refresh();
                 }
@@ -318,11 +486,21 @@ impl App {
             }
             Action::Resize => {}
 
-            Action::Down => self.step(true),
-            Action::Up => self.step(false),
+            // In the date card's calendar the four keys walk the month
+            // rather than a list of rows.
+            Action::Down => {
+                if !self.walk_the_calendar(Span::new().days(7)) {
+                    self.step(true);
+                }
+            }
+            Action::Up => {
+                if !self.walk_the_calendar(Span::new().days(-7)) {
+                    self.step(false);
+                }
+            }
             Action::PaneLeft => self.shift_pane(false, false),
             Action::PaneRight => self.shift_pane(true, false),
-            Action::NextPane => self.shift_pane(true, true),
+            Action::NextPane => self.next_control(),
             Action::NotesPage => self.turn_the_page(),
 
             Action::Commands => self.open(PopupKind::Palette, None),
@@ -340,11 +518,14 @@ impl App {
             Action::MoveUp => self.reorder(false),
             Action::ToToday => self.move_it(MoveTarget::Day(self.today)),
             Action::ToBacklog => self.move_it(MoveTarget::Backlog),
-            Action::Tomorrow => self.move_it(self.target_for(Action::Tomorrow)),
-            Action::NextWorkDay => self.move_it(self.target_for(Action::NextWorkDay)),
-            Action::NextMonday => self.move_it(self.target_for(Action::NextMonday)),
+            Action::Tomorrow
+            | Action::NextWorkDay
+            | Action::NextMonday
+            | Action::InAWeek
+            | Action::EndOfMonth => self.quick_pick(action),
+            Action::ClearDate => self.take_the_date(None),
             Action::MoveToDay => self.open_the_move_card(),
-            Action::GoToDate => self.not_yet("The date card is not built yet."),
+            Action::GoToDate => self.pick_a_date(),
             Action::ThisCopy => self.answer_the_question(false),
             Action::ThisAndFuture => self.answer_the_question(true),
             Action::Undo => self.undo(),
@@ -353,18 +534,38 @@ impl App {
                 self.not_yet("Stepping through days is not built yet.");
             }
             Action::Today => {}
-            Action::DueBy | Action::RemindOn => {
-                self.not_yet("Due dates and reminders are not built yet.");
+            Action::DueBy => self.open_the_date_card(DateKind::Due),
+            Action::RemindOn => self.open_the_date_card(DateKind::Remind),
+            Action::PrevMonth => {
+                self.walk_the_calendar(Span::new().months(-1));
             }
-            Action::Waiting => self.not_yet("Waiting is not built yet."),
-            Action::Repeat => self.not_yet("The repeat card is not built yet."),
+            Action::NextMonth => {
+                self.walk_the_calendar(Span::new().months(1));
+            }
+            Action::Waiting => self.wait_on_someone(),
+            Action::Repeat => self.open_the_repeat_card(),
+            Action::EveryWorkDay
+            | Action::EveryDay
+            | Action::EveryWeek
+            | Action::EveryMonth
+            | Action::EveryFewWeeks
+            | Action::StopRepeat => self.choose_the_shape(action),
+            Action::Pick => self.pick_a_weekday(),
             Action::Keep => {}
 
             Action::Insert(typed) => self.type_in(typed),
             Action::Backspace => self.rub_out(),
             Action::DeleteForward => self.rub_forward(),
-            Action::Left => self.move_caret(false),
-            Action::Right => self.move_caret(true),
+            Action::Left => {
+                if !self.walk_the_calendar(Span::new().days(-1)) && !self.adjust(false) {
+                    self.move_caret(false);
+                }
+            }
+            Action::Right => {
+                if !self.walk_the_calendar(Span::new().days(1)) && !self.adjust(true) {
+                    self.move_caret(true);
+                }
+            }
             Action::LineStart => self.jump_to_the_edge(false),
             Action::LineEnd => self.jump_to_the_edge(true),
 
@@ -517,9 +718,11 @@ impl App {
     /// order the cursor moves in, each with the group it is in. The
     /// groups and their order are the domain's (DOMAIN.md sections 6
     /// and 7).
-    fn rows_of(&self, list: List) -> Vec<(Id, Group)> {
+    fn rows_of(&self, list: List) -> Vec<(RowId, Group)> {
         let tasks = |rows: &[domain::Row], group| {
-            rows.iter().map(|row| (row.task, group)).collect::<Vec<_>>()
+            rows.iter()
+                .map(|row| (RowId::Task(row.task), group))
+                .collect::<Vec<_>>()
         };
         match list {
             List::Day => {
@@ -537,6 +740,11 @@ impl App {
                 [
                     tasks(&backlog.ordinary, Group::Ordinary),
                     tasks(&backlog.waiting, Group::Waiting),
+                    backlog
+                        .schedules
+                        .iter()
+                        .map(|row| (RowId::Schedule(row.schedule), Group::Schedules))
+                        .collect(),
                 ]
                 .concat()
             }
@@ -545,12 +753,12 @@ impl App {
                 .notes
                 .rows
                 .iter()
-                .map(|row| (row.note, Group::Notes))
+                .map(|row| (RowId::Note(row.note), Group::Notes))
                 .collect(),
         }
     }
 
-    fn group_of(&self, list: List, id: Id) -> Option<Group> {
+    fn group_of(&self, list: List, id: RowId) -> Option<Group> {
         self.rows_of(list)
             .into_iter()
             .find(|(row, _)| *row == id)
@@ -572,17 +780,21 @@ impl App {
             self.say("That row only points at the task; it has moved.", false);
             return None;
         }
-        Some(id)
+        let Some(task) = id.task() else {
+            self.say("That row is a repeat schedule, not a task.", false);
+            return None;
+        };
+        Some(task)
     }
 
     /// The row the cursor lands on when the one it is on leaves the list:
     /// the next of its group, then the one before it, then whatever is
     /// nearest.
-    fn neighbour_of(&self, list: List, id: Id) -> Option<Id> {
+    fn neighbour_of(&self, list: List, id: RowId) -> Option<RowId> {
         let rows = self.rows_of(list);
         let at = rows.iter().position(|(row, _)| *row == id)?;
         let group = rows[at].1;
-        let same = |(row, other): &&(Id, Group)| *other == group && *row != id;
+        let same = |(row, other): &&(RowId, Group)| *other == group && *row != id;
 
         rows[at + 1..]
             .iter()
@@ -608,7 +820,7 @@ impl App {
         let next = if closed {
             None
         } else {
-            self.neighbour_of(list, id)
+            self.neighbour_of(list, RowId::Task(id))
         };
 
         let command = if closed {
@@ -635,6 +847,33 @@ impl App {
         self.run(Command::SetFocus { task: id, focus });
     }
 
+    /// `w`: blocked on someone or something else. Waiting is a backlog
+    /// state, so on a day task the domain moves the task to the backlog
+    /// with the flag, and the cursor steps on as it does for any move
+    /// (DOMAIN.md section 9).
+    fn wait_on_someone(&mut self) {
+        let Some(id) = self.task_at_cursor() else {
+            return;
+        };
+        let Some(task) = self.model.live_task(id) else {
+            return;
+        };
+        let waiting = !task.waiting;
+        let leaves = waiting && task.day.is_some();
+        let list = self.focused();
+        let next = leaves
+            .then(|| self.neighbour_of(list, RowId::Task(id)))
+            .flatten();
+
+        if self
+            .run(Command::SetWaiting { task: id, waiting })
+            .is_some()
+            && let Some(next) = next
+        {
+            self.set_cursor(list, next);
+        }
+    }
+
     /// `x`: no confirm, and `u` in the hint bar until the next key.
     fn delete(&mut self) {
         if self.page == Page::Notes {
@@ -645,7 +884,7 @@ impl App {
             return;
         };
         let list = self.focused();
-        let next = self.neighbour_of(list, id);
+        let next = self.neighbour_of(list, RowId::Task(id));
         if self.run(Command::DeleteTask { task: id }).is_some()
             && let Some(next) = next
         {
@@ -661,7 +900,7 @@ impl App {
             return;
         };
         let list = self.focused();
-        let Some(group) = self.group_of(list, id) else {
+        let Some(group) = self.group_of(list, RowId::Task(id)) else {
             return;
         };
         if !group.is_ordered_by_hand() {
@@ -673,7 +912,7 @@ impl App {
             .rows_of(list)
             .into_iter()
             .filter(|(_, other)| *other == group)
-            .map(|(row, _)| row)
+            .filter_map(|(row, _)| row.task())
             .collect();
         let Some(at) = siblings.iter().position(|row| *row == id) else {
             return;
@@ -706,21 +945,26 @@ impl App {
     /// the cursor is on.
     fn move_it(&mut self, target: MoveTarget) {
         if target == MoveTarget::Pick {
-            self.not_yet("The date card is not built yet.");
+            self.pick_a_date();
             return;
         }
         let carded = self.take_the_card();
         let Some(id) = carded.or_else(|| self.task_at_cursor()) else {
             return;
         };
-        let list = self.focused();
-        let next = self.neighbour_of(list, id);
-
         let place = match target {
             MoveTarget::Day(day) => Place::Day(day),
             MoveTarget::Backlog => Place::Backlog,
             MoveTarget::Pick => return,
         };
+        self.move_task(id, place);
+    }
+
+    /// A task to a place, wherever the key came from. The row leaves its
+    /// group, so the cursor steps to the next one (DESIGN.md section 4).
+    fn move_task(&mut self, id: Id, place: Place) {
+        let list = self.focused();
+        let next = self.neighbour_of(list, RowId::Task(id));
         if self.run(Command::Move { task: id, place }).is_some()
             && let Some(next) = next
         {
@@ -734,7 +978,7 @@ impl App {
         if open.kind != PopupKind::Move {
             return None;
         }
-        let target = open.target;
+        let target = open.task();
         self.popup = None;
         target
     }
@@ -743,34 +987,50 @@ impl App {
         let Some(id) = self.task_at_cursor() else {
             return;
         };
-        self.open(PopupKind::Move, Some(id));
+        self.open(PopupKind::Move, Some(RowId::Task(id)));
     }
 
-    /// The day each row of the move card means. "Next work day" is the
-    /// work-days rule's own definition of one (DOMAIN.md section 10).
-    fn target_for(&self, action: Action) -> MoveTarget {
-        // A day the calendar cannot reach, which is only ever the last
-        // day it has, is offered as the date card rather than as some
-        // other day the row does not name.
-        let next = |rule: Rule| {
-            domain::next_dates(&rule, self.today, 1)
-                .first()
-                .copied()
-                .map_or(MoveTarget::Pick, MoveTarget::Day)
-        };
+    /// The day a quick pick on either card means. "Next work day" and
+    /// "next Monday" are the rules' own definitions of those days
+    /// (DOMAIN.md section 10); the rest are arithmetic.
+    fn day_for(&self, action: Action) -> Option<Date> {
+        let next = |rule: Rule| domain::next_dates(&rule, self.today, 1).first().copied();
         match action {
-            Action::ToToday => MoveTarget::Day(self.today),
-            Action::Tomorrow => self
-                .today
-                .tomorrow()
-                .map_or(MoveTarget::Pick, MoveTarget::Day),
+            Action::ToToday => Some(self.today),
+            Action::Tomorrow => self.today.tomorrow().ok(),
             Action::NextWorkDay => next(Rule::Workdays),
             Action::NextMonday => next(Rule::Weekly {
                 weekdays: vec![Weekday::Mon],
             }),
-            Action::ToBacklog => MoveTarget::Backlog,
-            _ => MoveTarget::Pick,
+            Action::InAWeek => self.today.checked_add(Span::new().days(7)).ok(),
+            Action::EndOfMonth => Some(self.today.last_of_month()),
+            _ => None,
         }
+    }
+
+    /// The day each row of the move card sends a task to.
+    fn target_for(&self, action: Action) -> MoveTarget {
+        // A day the calendar cannot reach, which is only ever the last
+        // day it has, is offered as the date card rather than as some
+        // other day the row does not name.
+        match action {
+            Action::ToBacklog => MoveTarget::Backlog,
+            _ => self
+                .day_for(action)
+                .map_or(MoveTarget::Pick, MoveTarget::Day),
+        }
+    }
+
+    /// A quick pick, on whichever card is open: a day to move a task to,
+    /// or a day to write on it.
+    fn quick_pick(&mut self, action: Action) {
+        if self.popup.as_ref().and_then(Popup::date).is_some() {
+            if let Some(date) = self.day_for(action) {
+                self.take_the_date(Some(date));
+            }
+            return;
+        }
+        self.move_it(self.target_for(action));
     }
 
     /// The rows of the move card: the keys and names from the key table,
@@ -801,11 +1061,403 @@ impl App {
         .collect()
     }
 
+    // ---- the date card -----------------------------------------------
+
+    /// `d` and `r`: the card that puts a date on a backlog task. Pressed
+    /// again inside the card they switch which date is being set, keeping
+    /// the day and the text, because it is one card with two modes
+    /// (wireframe 06).
+    fn open_the_date_card(&mut self, kind: DateKind) {
+        if let Some(popup) = &mut self.popup {
+            if let Card::Date(draft) = &mut popup.card {
+                // The move card's day is not a date the task carries.
+                if draft.kind != DateKind::Move {
+                    draft.kind = kind;
+                }
+            }
+            return;
+        }
+        let Some(id) = self.task_at_cursor() else {
+            return;
+        };
+        let Some(task) = self.model.live_task(id) else {
+            return;
+        };
+        // The card opens on the date the task already has, so a date is
+        // adjusted rather than looked up again.
+        let on = match kind {
+            DateKind::Due => task.due_on,
+            DateKind::Remind => task.remind_on,
+            DateKind::Move => task.day,
+        }
+        .unwrap_or(self.today);
+        self.open_card(PopupKind::Date, Some(RowId::Task(id)), kind, on);
+    }
+
+    /// `g`: on the move card, the calendar for the day it could not
+    /// name. On the page itself, going to another day is phase 10's.
+    fn pick_a_date(&mut self) {
+        let Some(task) = self.take_the_card() else {
+            self.not_yet("Stepping through days is not built yet.");
+            return;
+        };
+        let on = self
+            .model
+            .live_task(task)
+            .and_then(|task| task.day)
+            .unwrap_or(self.today);
+        self.open_card(PopupKind::Date, Some(RowId::Task(task)), DateKind::Move, on);
+    }
+
+    fn open_card(&mut self, kind: PopupKind, target: Option<RowId>, date: DateKind, on: Date) {
+        self.open(kind, target);
+        if let Some(popup) = &mut self.popup {
+            popup.card = Card::Date(DateDraft {
+                kind: date,
+                on,
+                in_calendar: false,
+            });
+        }
+    }
+
+    /// The rows of the date card: the keys and names from the key table,
+    /// and the day each one means. The move card's date has no "clear":
+    /// a task with no day is in the backlog, which is a place, not a
+    /// missing date.
+    pub fn date_choices(&self) -> Vec<DateChoice> {
+        let clears = self
+            .popup
+            .as_ref()
+            .and_then(Popup::date)
+            .is_some_and(|draft| draft.kind != DateKind::Move);
+        input::bindings(KeyContext::Popup {
+            kind: PopupKind::Date,
+            text_field: true,
+        })
+        .iter()
+        .filter_map(|binding| {
+            let (key, action) = *binding.keys.first()?;
+            let date = match action {
+                Action::Tomorrow | Action::NextMonday | Action::InAWeek | Action::EndOfMonth => {
+                    Some(self.day_for(action)?)
+                }
+                Action::ClearDate if clears => None,
+                _ => return None,
+            };
+            Some(DateChoice {
+                key,
+                label: binding.label,
+                date,
+            })
+        })
+        .collect()
+    }
+
+    /// Enter on the date card. What was typed has already moved the day
+    /// the card is on, so the day is the answer; text the domain cannot
+    /// read is refused rather than turned into some other day.
+    fn take_the_typed_date(&mut self) {
+        let Some(popup) = &self.popup else {
+            return;
+        };
+        let typed = popup.text.trim().to_owned();
+        let Some(draft) = popup.date().copied() else {
+            return;
+        };
+        if !typed.is_empty() && domain::parse_date(&typed, self.today).is_none() {
+            self.say("That is not a date I can read.", false);
+            return;
+        }
+        self.take_the_date(Some(draft.on));
+    }
+
+    /// The day the card ended on: a date the task carries, or the day it
+    /// is moved to. Either way the card has said its piece and closes.
+    fn take_the_date(&mut self, date: Option<Date>) {
+        let (Some(task), Some(draft)) = (
+            self.popup.as_ref().and_then(Popup::task),
+            self.popup.as_ref().and_then(Popup::date).copied(),
+        ) else {
+            return;
+        };
+        // Clearing is a date the task carries; the move card's day is a
+        // place, and there is no such thing as moving a task to no day.
+        if draft.kind == DateKind::Move && date.is_none() {
+            return;
+        }
+        self.popup = None;
+        match draft.kind {
+            DateKind::Due => {
+                self.run(Command::SetDue { task, date });
+            }
+            DateKind::Remind => {
+                self.run(Command::SetRemind { task, date });
+            }
+            DateKind::Move => {
+                if let Some(day) = date {
+                    self.move_task(task, Place::Day(day));
+                }
+            }
+        }
+    }
+
+    /// The calendar keys. Says whether the card took the key, because the
+    /// same four actions move a cursor everywhere else.
+    fn walk_the_calendar(&mut self, span: Span) -> bool {
+        let Some(popup) = &mut self.popup else {
+            return false;
+        };
+        let Card::Date(draft) = &mut popup.card else {
+            return false;
+        };
+        if !draft.in_calendar {
+            return false;
+        }
+        if let Ok(date) = draft.on.checked_add(span) {
+            draft.on = date;
+        }
+        // The field and the calendar are two ways to the same day, so
+        // what was typed goes when the calendar is used.
+        popup.text.clear();
+        popup.caret = 0;
+        true
+    }
+
+    /// `tab`: the card's other control if a card is open, and the next
+    /// pane or tab otherwise.
+    fn next_control(&mut self) {
+        if let Some(popup) = &mut self.popup
+            && let Card::Date(draft) = &mut popup.card
+        {
+            draft.in_calendar = !draft.in_calendar;
+            return;
+        }
+        self.shift_pane(true, true);
+    }
+
+    // ---- the repeat card ---------------------------------------------
+
+    /// `R`: the schedule behind a copy, the schedule a row of the backlog
+    /// list is, or a new one for an ordinary task. The card opens on what
+    /// the schedule already is, so a rule is adjusted rather than
+    /// described again.
+    fn open_the_repeat_card(&mut self) {
+        let list = self.focused();
+        let on_a_schedule = self
+            .cursor(list)
+            .filter(|_| self.page == Page::Home)
+            .and_then(RowId::schedule);
+        let target = match on_a_schedule {
+            Some(schedule) => RowId::Schedule(schedule),
+            None => match self.task_at_cursor() {
+                Some(task) => RowId::Task(task),
+                None => return,
+            },
+        };
+
+        // Where "every N weeks" counts from and where the preview picks
+        // up: the schedule's own dates if there is one, else the day the
+        // task is on.
+        let anchor = match target {
+            RowId::Task(task) => self
+                .model
+                .live_task(task)
+                .and_then(|task| task.day)
+                .unwrap_or(self.today),
+            _ => self.today,
+        };
+        let schedule = self
+            .schedule_of(target)
+            .and_then(|id| self.model.schedule(id));
+        let rule = schedule.map(|schedule| schedule.rule.clone());
+        let after = schedule.map_or(anchor, |schedule| schedule.generated_through);
+
+        let draft = RepeatDraft {
+            weekdays: match &rule {
+                Some(Rule::Weekly { weekdays }) => weekdays.clone(),
+                _ => vec![Weekday::of(anchor)],
+            },
+            weekday: Weekday::of(anchor) as usize,
+            month_day: match &rule {
+                Some(Rule::Monthly { day }) => *day,
+                _ => MonthDay::Day(anchor.day() as u8),
+            },
+            weeks: match &rule {
+                Some(Rule::EveryNWeeks { n, .. }) => *n,
+                _ => 2,
+            },
+            from: match &rule {
+                Some(Rule::EveryNWeeks { from, .. }) => *from,
+                _ => anchor,
+            },
+            after,
+        };
+        let selected = rule.as_ref().and_then(shape_of).unwrap_or(0);
+
+        self.open(PopupKind::Repeat, Some(target));
+        if let Some(popup) = &mut self.popup {
+            popup.card = Card::Repeat(draft);
+            popup.selected = selected;
+        }
+    }
+
+    /// The schedule a row is, or the one behind the copy it is.
+    fn schedule_of(&self, row: RowId) -> Option<Id> {
+        match row {
+            RowId::Schedule(id) => Some(id),
+            RowId::Task(id) => self.model.live_task(id).and_then(|task| task.schedule_id),
+            RowId::Note(_) => None,
+        }
+    }
+
+    /// A digit on the repeat card: the shape it names.
+    fn choose_the_shape(&mut self, action: Action) {
+        let Some(at) = repeat_shapes().iter().position(|shape| *shape == action) else {
+            return;
+        };
+        if let Some(popup) = &mut self.popup
+            && popup.kind == PopupKind::Repeat
+        {
+            popup.selected = at;
+        }
+    }
+
+    /// `h` and `l`: whatever the selected shape has to adjust. Says
+    /// whether the card took the key.
+    fn adjust(&mut self, forward: bool) -> bool {
+        let Some(popup) = &mut self.popup else {
+            return false;
+        };
+        let shape = repeat_shapes().get(popup.selected).copied();
+        let Card::Repeat(draft) = &mut popup.card else {
+            return false;
+        };
+        let step = |at: usize, last: usize| {
+            if forward {
+                (at + 1).min(last)
+            } else {
+                at.saturating_sub(1)
+            }
+        };
+        match shape {
+            Some(Action::EveryWeek) => draft.weekday = step(draft.weekday, 6),
+            Some(Action::EveryMonth) => {
+                // The days of a month and then "last", as one row of
+                // choices (DOMAIN.md section 10).
+                let at = match draft.month_day {
+                    MonthDay::Day(day) => day.clamp(1, 31) as usize - 1,
+                    MonthDay::Last => 31,
+                };
+                let at = step(at, 31);
+                draft.month_day = match at {
+                    31 => MonthDay::Last,
+                    at => MonthDay::Day(at as u8 + 1),
+                };
+            }
+            Some(Action::EveryFewWeeks) => {
+                draft.weeks = step(draft.weeks as usize - 1, WEEKS_APART - 1) as u32 + 1;
+            }
+            _ => {}
+        }
+        true
+    }
+
+    /// `space` on the weekly shape: the highlighted weekday joins the
+    /// set, or leaves it.
+    fn pick_a_weekday(&mut self) {
+        let Some(popup) = &mut self.popup else {
+            return;
+        };
+        if repeat_shapes().get(popup.selected) != Some(&Action::EveryWeek) {
+            return;
+        }
+        let Card::Repeat(draft) = &mut popup.card else {
+            return;
+        };
+        let day = Weekday::ALL[draft.weekday.min(6)];
+        match draft.weekdays.iter().position(|other| *other == day) {
+            Some(at) => {
+                draft.weekdays.remove(at);
+            }
+            None => draft.weekdays.push(day),
+        }
+        draft.weekdays.sort();
+    }
+
+    /// The rule the card is describing, or nothing on the row that ends
+    /// the schedule instead of changing it.
+    fn drafted_rule(&self) -> Option<Rule> {
+        let popup = self.popup.as_ref()?;
+        let draft = popup.repeat()?;
+        match repeat_shapes().get(popup.selected)? {
+            Action::EveryWorkDay => Some(Rule::Workdays),
+            Action::EveryDay => Some(Rule::Daily),
+            Action::EveryWeek => Some(Rule::Weekly {
+                weekdays: draft.weekdays.clone(),
+            }),
+            Action::EveryMonth => Some(Rule::Monthly {
+                day: draft.month_day,
+            }),
+            Action::EveryFewWeeks => Some(Rule::EveryNWeeks {
+                n: draft.weeks,
+                from: draft.from,
+            }),
+            _ => None,
+        }
+    }
+
+    /// The next few dates the drafted rule falls on, so that "the 1st"
+    /// and "every 2 weeks" are unambiguous before they are saved
+    /// (DOMAIN.md section 10).
+    pub fn repeat_preview(&self) -> Vec<Date> {
+        let Some(after) = self.popup.as_ref().and_then(Popup::repeat) else {
+            return Vec::new();
+        };
+        match self.drafted_rule() {
+            Some(rule) => domain::next_dates(&rule, after.after.max(self.today), PREVIEW),
+            None => Vec::new(),
+        }
+    }
+
+    /// Enter on the repeat card: the rule of the schedule behind the row,
+    /// a schedule where there was none, or the end of one.
+    fn take_the_rule(&mut self) {
+        let Some(target) = self.popup.as_ref().and_then(|popup| popup.target) else {
+            return;
+        };
+        let schedule = self.schedule_of(target);
+        let command = match (schedule, self.drafted_rule()) {
+            (Some(schedule), Some(rule)) => Command::SetRule { schedule, rule },
+            (Some(schedule), None) => Command::StopSchedule { schedule },
+            (None, Some(rule)) => match target.task() {
+                Some(task) => Command::CreateSchedule { task, rule },
+                None => return,
+            },
+            (None, None) => {
+                self.say("That task does not repeat.", false);
+                return;
+            }
+        };
+        // A stopped schedule leaves the backlog's list, so the cursor
+        // steps on as it does for any row that goes.
+        let list = self.focused();
+        let stopping = matches!(command, Command::StopSchedule { .. });
+        let next = stopping.then(|| self.neighbour_of(list, target)).flatten();
+        // A rule the domain refuses leaves the card open with the reason
+        // in the hint bar, so the shape can be changed and saved again.
+        if self.run(command).is_some() {
+            self.popup = None;
+            if let Some(next) = next {
+                self.set_cursor(list, next);
+            }
+        }
+    }
+
     // ---- the notes page ----------------------------------------------
 
     /// The note a key on the cursor row acts on, or nothing and a reason.
     fn note_at_cursor(&mut self) -> Option<Id> {
-        let Some(id) = self.cursor(List::Notes) else {
+        let Some(id) = self.cursor(List::Notes).and_then(RowId::note) else {
             self.say("There is no note here yet.", false);
             return None;
         };
@@ -820,7 +1472,7 @@ impl App {
         if let Some(change) = self.run(Command::CreateNote)
             && let Some(note) = added_note(&change)
         {
-            self.set_cursor(List::Notes, note);
+            self.set_cursor(List::Notes, RowId::Note(note));
             self.open_the_note();
         }
     }
@@ -882,7 +1534,7 @@ impl App {
         let Some(id) = self.note_at_cursor() else {
             return;
         };
-        let next = self.neighbour_of(List::Notes, id);
+        let next = self.neighbour_of(List::Notes, RowId::Note(id));
         if self.run(Command::DeleteNote { note: id }).is_some()
             && let Some(next) = next
         {
@@ -956,7 +1608,7 @@ impl App {
                 if let Some(change) = self.run(Command::AddTask { title, place })
                     && let Some(added) = added_task(&change)
                 {
-                    self.set_cursor(list, added);
+                    self.set_cursor(list, RowId::Task(added));
                 }
                 if let Some(editor) = &mut self.editor {
                     editor.text.clear();
@@ -971,7 +1623,7 @@ impl App {
                 if copy && !title.is_empty() {
                     // The one deliberate question (DESIGN.md section 8).
                     self.editor = None;
-                    self.open(PopupKind::CopyQuestion, Some(id));
+                    self.open(PopupKind::CopyQuestion, Some(RowId::Task(id)));
                     if let Some(popup) = &mut self.popup {
                         popup.text = title;
                     }
@@ -991,7 +1643,7 @@ impl App {
         let Some(popup) = self.popup.take() else {
             return;
         };
-        let Some(task) = popup.target else {
+        let Some(task) = popup.task() else {
             return;
         };
         let title = popup.text;
@@ -1020,9 +1672,14 @@ impl App {
         match &self.popup {
             Some(popup) => KeyContext::Popup {
                 kind: popup.kind,
-                // The palette and search are typed into; the others are
-                // read and answered with a key.
-                text_field: matches!(popup.kind, PopupKind::Palette | PopupKind::Search),
+                // The palette and search are typed into; the date card
+                // is until `tab` moves the keyboard into its calendar;
+                // the others are read and answered with a key.
+                text_field: match popup.kind {
+                    PopupKind::Palette | PopupKind::Search => true,
+                    PopupKind::Date => popup.date().is_none_or(|draft| !draft.in_calendar),
+                    _ => false,
+                },
             },
             None => self.page_context(),
         }
@@ -1120,7 +1777,7 @@ impl App {
     /// The cursor of a list, re-resolved against what the list holds now:
     /// a row that has gone clamps to the first one (ARCHITECTURE.md rule
     /// 6).
-    pub fn cursor(&self, list: List) -> Option<Id> {
+    pub fn cursor(&self, list: List) -> Option<RowId> {
         let rows = self.rows_of(list);
         let wanted = match list {
             List::Day => self.cursors.day,
@@ -1177,7 +1834,7 @@ impl App {
         };
     }
 
-    fn set_cursor(&mut self, list: List, id: Id) {
+    fn set_cursor(&mut self, list: List, id: RowId) {
         let slot = match list {
             List::Day => &mut self.cursors.day,
             List::Backlog => &mut self.cursors.backlog,
@@ -1207,7 +1864,7 @@ impl App {
         }
 
         let list = self.focused();
-        let ids: Vec<Id> = self.rows_of(list).into_iter().map(|(id, _)| id).collect();
+        let ids: Vec<RowId> = self.rows_of(list).into_iter().map(|(id, _)| id).collect();
         let Some(at) = self
             .cursor(list)
             .and_then(|id| ids.iter().position(|other| *other == id))
@@ -1228,6 +1885,7 @@ impl App {
             Some(PopupKind::Palette) => self.palette_rows().len(),
             Some(PopupKind::Search) => self.search_results().total,
             Some(PopupKind::Move) => self.move_choices().len(),
+            Some(PopupKind::Repeat) => repeat_shapes().len(),
             _ => 0,
         }
     }
@@ -1306,10 +1964,13 @@ impl App {
         if group != self.group_of(list, over.id) || !group.is_some_and(Group::is_ordered_by_hand) {
             return;
         }
-        let Some(position) = self.model.live_task(over.id).map(|task| task.position) else {
+        let (Some(task), Some(under)) = (task.task(), over.id.task()) else {
             return;
         };
-        self.set_cursor(list, task);
+        let Some(position) = self.model.live_task(under).map(|task| task.position) else {
+            return;
+        };
+        self.set_cursor(list, RowId::Task(task));
         self.reorder_to(task, position);
     }
 
@@ -1333,7 +1994,7 @@ impl App {
 
     // ---- popups and their text fields --------------------------------
 
-    fn open(&mut self, kind: PopupKind, target: Option<Id>) {
+    fn open(&mut self, kind: PopupKind, target: Option<RowId>) {
         self.editor = None;
         self.popup = Some(Popup {
             kind,
@@ -1341,6 +2002,7 @@ impl App {
             caret: 0,
             selected: 0,
             target,
+            card: Card::None,
         });
     }
 
@@ -1377,6 +2039,8 @@ impl App {
             PopupKind::Palette => return self.run_the_selected_command(),
             PopupKind::Search => self.take_the_search(),
             PopupKind::Move => self.take_the_chosen_day(),
+            PopupKind::Date => self.take_the_typed_date(),
+            PopupKind::Repeat => self.take_the_rule(),
             // The question has no answer safe enough to be Enter's.
             PopupKind::Help | PopupKind::CopyQuestion => {}
         }
@@ -1433,7 +2097,7 @@ impl App {
             && let Some(added) = added_task(&change)
         {
             self.focus_on(List::Day);
-            self.set_cursor(List::Day, added);
+            self.set_cursor(List::Day, RowId::Task(added));
         }
     }
 
@@ -1441,7 +2105,12 @@ impl App {
     /// into, the field on a row, or the open note.
     fn field(&mut self) -> Option<(&mut String, &mut usize)> {
         if let Some(popup) = &mut self.popup {
-            if !matches!(popup.kind, PopupKind::Palette | PopupKind::Search) {
+            let typed = match popup.kind {
+                PopupKind::Palette | PopupKind::Search => true,
+                PopupKind::Date => !matches!(&popup.card, Card::Date(draft) if draft.in_calendar),
+                _ => false,
+            };
+            if !typed {
                 return None;
             }
             return Some((&mut popup.text, &mut popup.caret));
@@ -1490,10 +2159,22 @@ impl App {
         };
     }
 
-    /// Typing puts the selection of a filtered list back at the top.
-    fn select_the_first(&mut self) {
+    /// What a keystroke changes besides the text: a filtered list starts
+    /// at the top again, and the date card follows what has been typed as
+    /// far as the domain can read it.
+    fn after_typing(&mut self) {
         if let Some(popup) = &mut self.popup {
             popup.selected = 0;
+        }
+        let today = self.today;
+        let Some(popup) = &mut self.popup else {
+            return;
+        };
+        let Some(date) = domain::parse_date(&popup.text, today) else {
+            return;
+        };
+        if let Card::Date(draft) = &mut popup.card {
+            draft.on = date;
         }
     }
 
@@ -1503,7 +2184,7 @@ impl App {
             text.insert(at, typed);
             *caret += 1;
         }
-        self.select_the_first();
+        self.after_typing();
     }
 
     fn rub_out(&mut self) {
@@ -1515,7 +2196,7 @@ impl App {
             text.remove(at);
             *caret -= 1;
         }
-        self.select_the_first();
+        self.after_typing();
     }
 
     fn rub_forward(&mut self) {
@@ -1525,7 +2206,7 @@ impl App {
                 text.remove(at);
             }
         }
-        self.select_the_first();
+        self.after_typing();
     }
 
     fn move_caret(&mut self, forward: bool) {
@@ -1544,6 +2225,47 @@ impl App {
             *caret = at.min(text.chars().count());
         }
     }
+}
+
+/// The rows of the repeat card, in the order the key table puts them,
+/// which is what a row's number means. Both the card and its drawing read
+/// the shapes from here, so neither can invent a row the other lacks.
+pub(crate) fn repeat_shapes() -> Vec<Action> {
+    input::bindings(KeyContext::Popup {
+        kind: PopupKind::Repeat,
+        text_field: false,
+    })
+    .iter()
+    .filter_map(|binding| match binding.keys.first() {
+        Some((_, action)) if is_a_shape(*action) => Some(*action),
+        _ => None,
+    })
+    .collect()
+}
+
+fn is_a_shape(action: Action) -> bool {
+    matches!(
+        action,
+        Action::EveryWorkDay
+            | Action::EveryDay
+            | Action::EveryWeek
+            | Action::EveryMonth
+            | Action::EveryFewWeeks
+            | Action::StopRepeat
+    )
+}
+
+/// Which row of the card a rule is, so that the card opens on the shape
+/// the schedule already has.
+fn shape_of(rule: &Rule) -> Option<usize> {
+    let shape = match rule {
+        Rule::Workdays => Action::EveryWorkDay,
+        Rule::Daily => Action::EveryDay,
+        Rule::Weekly { .. } => Action::EveryWeek,
+        Rule::Monthly { .. } => Action::EveryMonth,
+        Rule::EveryNWeeks { .. } => Action::EveryFewWeeks,
+    };
+    repeat_shapes().iter().position(|other| *other == shape)
 }
 
 /// Where every line of a body starts, in characters. A body has at least

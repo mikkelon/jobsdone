@@ -55,6 +55,9 @@ fn every_context() -> Vec<KeyContext> {
         popup(PopupKind::Help),
         popup(PopupKind::Move),
         popup(PopupKind::CopyQuestion),
+        field(PopupKind::Date),
+        popup(PopupKind::Date),
+        popup(PopupKind::Repeat),
     ]
 }
 
@@ -147,6 +150,8 @@ fn event_for(name: &str) -> Event {
         "esc" => KeyCode::Esc,
         "up" => KeyCode::Up,
         "down" => KeyCode::Down,
+        "left" => KeyCode::Left,
+        "right" => KeyCode::Right,
         other => {
             let mut letters = other.chars();
             let only = letters.next().expect("a key name");

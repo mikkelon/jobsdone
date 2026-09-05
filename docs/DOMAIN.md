@@ -61,6 +61,28 @@ and the time zone it came from, for example
 9557's addition to RFC 3339; without it the offset alone would not read
 back as the zoned timestamp that was written.
 
+### Reading a typed date
+
+The date card is the one place a date is written rather than picked, and
+what the shapes mean is a rule about dates. `parse_date(text, today)`
+reads, case and spacing aside:
+
+| Typed                          | Means                                        |
+|--------------------------------|----------------------------------------------|
+| `2026-09-30`                   | That date.                                   |
+| `30 sep`, `sep 30`, `30/9`     | Day and month, in either order, any of ` / - . ,` between them. |
+| `30 sep 2027`, `1/10/2027`     | The same with a year.                        |
+| `30`                           | The next month that has a 30th.              |
+| `mon`, `monday`                | The next such weekday, never today.          |
+| `today`, `tomorrow`            | Those days.                                  |
+| `+3`                           | Three days from today.                       |
+
+A month or a weekday is written out or cut to three letters. A date with
+no year is the next one that has not passed, so `1 sep` typed in
+December is next September. Nothing else is guessed: text that is not
+one of these shapes is not a date, and the card says so rather than
+choosing a day.
+
 ## 3. Task
 
 | Field          | Type            | Meaning                                                  |
@@ -196,8 +218,12 @@ is still on D, `moved` = placed − kept:
 Header count: live open backlog tasks, and how many of them are waiting.
 
 Below the two groups the backlog pane lists the live, unstopped
-schedules by title and rule. That list is a view of section 10, not of
-tasks.
+schedules by title and rule (wireframes 03 and 07). That list is a view
+of section 10, not of tasks: the cursor reaches its rows, `R` on one
+opens the repeat card for that schedule, and a key that acts on a task
+answers that the row is not one. It is how a schedule is changed or
+stopped when no copy of it is on a screen, which for a monthly rule is
+most of the month.
 
 ## 8. Due and remind
 

@@ -183,6 +183,9 @@ The app never reorders, carries over, expires, or tidies.
 - Recurring schedules are the one thing that creates tasks by themselves.
   On launch the app creates the copies for every scheduled date since the
   last launch, and the surfaced step lists today's, once, for information.
+  A window left open past 05:00 has reached a new day without a launch, so
+  it does the same then; a day is never short of its copies because a
+  window happened to be open.
 - Notes stay until deleted.
 
 ## 8. Undo instead of confirm
@@ -191,6 +194,11 @@ No action asks "are you sure". Delete, close, move, and review decisions
 apply immediately and offer `u` in the hint bar until the next key. Editing
 is always in place; the only forms are the three small cards (date, repeat,
 move).
+
+A card's picks are answers, not settings. A row of the move card and a
+quick date on the date card apply and close it, the way a key on a row
+does. Only what has to be composed first waits for Enter: a typed date, a
+day walked to in the calendar, a repeat rule.
 
 A field on a row is a mode like any other, so its keys are in the hint
 bar rather than beside it: while a title is being typed the bar says what
@@ -245,8 +253,9 @@ preferences file.
 | Command palette and help    | `wireframes/11-palette-help.html` | panels  |
 | Empty states                | `wireframes/12-empty.html`        | panels  |
 
-User flows A to G (the morning, plan today, work through the day, park with
-a date, wait on someone, recurring task, look back, floating or tiled) are
-drawn on `wireframes/index.html`. Every screen is also saved as plain text
+The user flows are drawn on `wireframes/index.html`: the morning (A), plan
+today (B), work through the day (C), park with a date (D), wait on someone
+(D2), a recurring task (E), look back (F), find something closed (F2), and
+floating or tiled (G). Every screen is also saved as plain text
 next to its HTML, and screenshots, including the home screen in three
 Omarchy themes, are in `wireframes/screenshots/`.

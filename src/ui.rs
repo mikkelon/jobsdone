@@ -16,8 +16,8 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 
-use crate::app::{App, Editor, Layout, List, ListArea, Page, Rect as Cells, RowArea};
-use crate::domain::{self, MonthDay, NoteRow, Place, Rule, Weekday};
+use crate::app::{App, Editor, Layout, List, ListArea, Page, Rect as Cells, RowArea, RowId};
+use crate::domain::{self, MonthDay, NoteRow, Place, Rule, ScheduleRow, Weekday};
 use crate::input::{self, Field, NotesPane, Pane, Side};
 
 mod popup;
@@ -186,6 +186,19 @@ fn place_label(place: Place, today: Date) -> String {
     }
 }
 
+/// `Mo`, the two letters a calendar column has room for.
+fn short_weekday(day: Weekday) -> &'static str {
+    &weekday_name(day)[..2]
+}
+
+/// `1st`, or `last`.
+fn month_day_label(day: MonthDay) -> String {
+    match day {
+        MonthDay::Day(day) => format!("{day}{}", ordinal(day)),
+        MonthDay::Last => "last".to_owned(),
+    }
+}
+
 fn weekday_name(day: Weekday) -> &'static str {
     match day {
         Weekday::Mon => "Mon",
@@ -212,6 +225,31 @@ fn rule_label(rule: &Rule) -> String {
             MonthDay::Last => "last of the month".to_owned(),
         },
         Rule::EveryNWeeks { n, .. } => format!("every {n} weeks"),
+    }
+}
+
+/// A repeat rule with the room a list row has, which is enough for a
+/// weekday's whole name when the rule names only one.
+fn schedule_label(rule: &Rule) -> String {
+    match rule {
+        Rule::Workdays => "every work day".to_owned(),
+        Rule::Weekly { weekdays } if weekdays.len() == 1 => {
+            format!("every {}", weekday_word(weekdays[0]))
+        }
+        Rule::EveryNWeeks { n, .. } if *n == 1 => "every week".to_owned(),
+        other => rule_label(other),
+    }
+}
+
+fn weekday_word(day: Weekday) -> &'static str {
+    match day {
+        Weekday::Mon => "Monday",
+        Weekday::Tue => "Tuesday",
+        Weekday::Wed => "Wednesday",
+        Weekday::Thu => "Thursday",
+        Weekday::Fri => "Friday",
+        Weekday::Sat => "Saturday",
+        Weekday::Sun => "Sunday",
     }
 }
 
@@ -521,6 +559,7 @@ enum Kind {
 /// The rows of one group of a pane.
 enum Content<'a> {
     Tasks(&'a [domain::Row], Kind),
+    Schedules(&'a [ScheduleRow]),
     Notes(&'a [NoteRow]),
 }
 
@@ -614,7 +653,10 @@ fn backlog_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
     let view = app.backlog();
     let mut sections = Vec::new();
 
-    if view.open > 0 || adding {
+    // The add line belongs to the first group, so it is drawn whenever
+    // the pane has anything at all: a backlog holding only schedules is
+    // not the empty state, but it still needs the key that fills it.
+    if view.open > 0 || adding || !view.schedules.is_empty() {
         sections.push(Section {
             label: "",
             count: None,
@@ -627,6 +669,18 @@ fn backlog_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
             label: "Waiting",
             count: Some(view.waiting_count),
             content: Content::Tasks(&view.waiting, Kind::Waiting),
+            add: None,
+        });
+    }
+
+    // The schedules under the two groups are a view of the rules, not of
+    // tasks: somewhere to see and edit them without a fourth place for a
+    // task to live (DOMAIN.md section 7).
+    if !view.schedules.is_empty() {
+        sections.push(Section {
+            label: "Repeating",
+            count: Some(view.schedules.len()),
+            content: Content::Schedules(&view.schedules),
             add: None,
         });
     }
@@ -684,6 +738,7 @@ enum Line<'a> {
     Blank,
     Rule(&'static str, Option<usize>),
     Task(&'a domain::Row, Kind),
+    Schedule(&'a ScheduleRow),
     Note(&'a NoteRow),
     Add(&'static str),
 }
@@ -702,6 +757,7 @@ fn lines_of<'a>(view: &'a PaneView<'a>) -> Vec<Line<'a>> {
             Content::Tasks(rows, kind) => {
                 lines.extend(rows.iter().map(|row| Line::Task(row, kind)));
             }
+            Content::Schedules(rows) => lines.extend(rows.iter().map(Line::Schedule)),
             Content::Notes(rows) => lines.extend(rows.iter().map(Line::Note)),
         }
         if let Some(add) = section.add {
@@ -769,8 +825,9 @@ fn pane(
     // cursor row.
     let anchor = lines.iter().position(|line| match line {
         Line::Add(_) => adding,
-        Line::Task(row, _) => !adding && on == Some(row.task),
-        Line::Note(row) => !adding && on == Some(row.note),
+        Line::Task(row, _) => !adding && on == Some(RowId::Task(row.task)),
+        Line::Note(row) => !adding && on == Some(RowId::Note(row.note)),
+        Line::Schedule(row) => !adding && on == Some(RowId::Schedule(row.schedule)),
         _ => false,
     });
     let first = scroll_to(lines.len(), anchor, height as usize);
@@ -795,7 +852,11 @@ fn pane(
             }
             Line::Note(row) => {
                 note_row(canvas, x, width, y, row, today);
-                row.note
+                RowId::Note(row.note)
+            }
+            Line::Schedule(row) => {
+                schedule_row(canvas, x, width, y, row);
+                RowId::Schedule(row.schedule)
             }
             Line::Task(row, kind) => {
                 let renaming = writing
@@ -805,7 +866,9 @@ fn pane(
                     Some(editor) => {
                         title_field(canvas, x, width, y, mark_of(row, *kind).0, editor);
                         // A row being typed into is not also a cursor row.
-                        layout.rows.push(row_area(list, row.task, column, y));
+                        layout
+                            .rows
+                            .push(row_area(list, RowId::Task(row.task), column, y));
                         continue;
                     }
                     None => task_row(
@@ -821,7 +884,7 @@ fn pane(
                         },
                     ),
                 }
-                row.task
+                RowId::Task(row.task)
             }
         };
         if on == Some(id) {
@@ -831,7 +894,7 @@ fn pane(
     }
 }
 
-fn row_area(list: List, id: i64, column: Column, y: u16) -> RowArea {
+fn row_area(list: List, id: RowId, column: Column, y: u16) -> RowArea {
     RowArea {
         list,
         id,
@@ -922,7 +985,7 @@ fn chips_of(row: &domain::Row, kind: Kind, today: Date) -> Vec<Chip> {
     }
     if let Some(due) = row.due {
         chips.push(Chip {
-            text: format!("due {}", when(due.on, today)),
+            text: format!("due {}{}", when(due.on, today), how_late(due, today)),
             short: "due",
             style: Style::new().fg(if due.overdue {
                 Color::Red
@@ -939,6 +1002,20 @@ fn chips_of(row: &domain::Row, kind: Kind, today: Date) -> Vec<Chip> {
         });
     }
     chips
+}
+
+/// How long a due date has been past, which is the cost of leaving it
+/// there and the reason the chip is red.
+fn how_late(due: domain::DueChip, today: Date) -> String {
+    if !due.overdue {
+        return String::new();
+    }
+    let days = due
+        .on
+        .until(today)
+        .map_or(0, |span| i64::from(span.get_days()));
+    let day = if days == 1 { "day" } else { "days" };
+    format!(" · {days} {day} over")
 }
 
 /// The right-hand words that are not a chip: that the row is being
@@ -971,12 +1048,6 @@ fn task_row(canvas: &mut Canvas, column: Column, y: u16, row: &domain::Row, look
     } = look;
     let (mark, mark_style, title_style) = mark_of(row, kind);
     canvas.put(x + 1, y, mark, mark_style);
-    canvas.put(
-        x + 5,
-        y,
-        clip(&row.title, width.saturating_sub(6)),
-        title_style,
-    );
 
     // The right of the row, filled from its edge inwards: the time it was
     // closed, then the chips, then whatever text is left.
@@ -993,8 +1064,19 @@ fn task_row(canvas: &mut Canvas, column: Column, y: u16, row: &domain::Row, look
     // which is the whole content of the row.
     let meta = meta_of(row, kind, today, moving);
     if !meta.is_empty() && (!narrow || kind == Kind::Moved) {
-        canvas.rput(edge, y, &meta, dim());
+        edge = canvas
+            .rput(edge, y, &meta, dim())
+            .saturating_sub(count(&meta) + 1);
     }
+
+    // The title has whatever is left, so a row carrying three chips loses
+    // the end of its own title rather than running under them.
+    canvas.put(
+        x + 5,
+        y,
+        clip(&row.title, edge.saturating_sub(x + 5)),
+        title_style,
+    );
 }
 
 /// The time a task was closed, or the date when it was closed on a later
@@ -1029,6 +1111,19 @@ fn field_text(canvas: &mut Canvas, x: u16, y: u16, width: u16, editor: &Editor) 
     let at = canvas.put(x, y, clip(&typed, width), plain());
     let at = canvas.put(at, y, CARET, bold());
     canvas.put(at, y, clip(&rest, width.saturating_sub(at - x)), plain());
+}
+
+/// ` ↻  Write standup notes                     every work day`
+fn schedule_row(canvas: &mut Canvas, x: u16, width: u16, y: u16, row: &ScheduleRow) {
+    let rule = schedule_label(&row.rule);
+    canvas.put(x + 1, y, " ↻ ", dim());
+    canvas.put(
+        x + 5,
+        y,
+        clip(&row.title, width.saturating_sub(8 + count(&rule))),
+        plain(),
+    );
+    canvas.rput(x + width - 1, y, &rule, dim());
 }
 
 /// ` ▪ Mention to Anna: CI runner b                        yesterday`
@@ -1074,7 +1169,7 @@ fn open_note(
     focused: bool,
 ) {
     let Column { x, width, .. } = column;
-    let open = app.cursor(List::Notes);
+    let open = app.cursor(List::Notes).and_then(RowId::note);
     let made = app
         .notes()
         .rows

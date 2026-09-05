@@ -28,7 +28,21 @@ pub enum Weekday {
 }
 
 impl Weekday {
-    fn of(date: Date) -> Weekday {
+    /// The seven days in the order a week is written and a weekly rule
+    /// stores them, Monday first.
+    pub const ALL: [Weekday; 7] = [
+        Weekday::Mon,
+        Weekday::Tue,
+        Weekday::Wed,
+        Weekday::Thu,
+        Weekday::Fri,
+        Weekday::Sat,
+        Weekday::Sun,
+    ];
+
+    /// The weekday a date falls on, which the repeat card needs to open
+    /// on the weekday of the day it is about.
+    pub fn of(date: Date) -> Weekday {
         match date.weekday() {
             Civil::Monday => Weekday::Mon,
             Civil::Tuesday => Weekday::Tue,

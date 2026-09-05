@@ -21,9 +21,9 @@
  [x] Pay electricity│ [x] Invoice template v2                                           Fri 18 Jul │aiting]  [◷ 15 Sep]
                     │ [x] Ask Anna about invoice terms                                   Wed 2 Jul │          [waiting]
  MOVED 1 ───────────│                                                                              │
- [→] Chase the hosti│──────────────────────────────────────────────────────────────────────────────│
-                    │ ⏎ go to that day alt-t re-add to today as a new task esc close               │
-                    │                                                                              │
+ [→] Chase the hosti│──────────────────────────────────────────────────────────────────────────────│───────────────────
+                    │ ⏎ go to that day alt-t re-add to today as a new task esc close               │       every Friday
+                    │                                                                              │     every work day
                     └──────────────────────────────────────────────────────────────────────────────┘
                                                            │
                                                            │

@@ -370,7 +370,7 @@ fn draw_answers_where_every_row_was_put() {
         .iter()
         .filter(|row| row.list == List::Backlog)
         .collect();
-    assert_eq!(backlog.len(), 12);
+    assert_eq!(backlog.len(), 14, "twelve tasks and the two schedules");
     assert_eq!(backlog[0].area.x, 60, "the right pane starts after it");
 }
 
@@ -425,6 +425,8 @@ fn every_colour_is_one_the_terminal_themes() {
         Action::Help,
         Action::Search,
         Action::MoveToDay,
+        Action::DueBy,
+        Action::Repeat,
         Action::Add,
     ] {
         app.update(action);
@@ -609,6 +611,133 @@ fn the_move_card_names_the_task_and_the_days() {
 }
 
 #[test]
+fn a_row_with_more_chips_than_room_loses_the_end_of_its_title() {
+    let now = at(NOW);
+    let mut model = Model::empty();
+    model.tasks.insert(
+        1,
+        Task {
+            due_on: Some(on("2025-09-30")),
+            remind_on: Some(on("2025-09-12")),
+            schedule_id: Some(1),
+            scheduled_on: Some(on("2025-09-05")),
+            ..task(1, "Write the Q4 planning doc and the one after it", None, 0)
+        },
+    );
+    model.schedules.insert(
+        1,
+        Schedule {
+            id: 1,
+            title: "Write the Q4 planning doc".to_owned(),
+            rule: Rule::Workdays,
+            generated_through: on("2025-09-05"),
+            stopped_on: None,
+            created_at: now.clone(),
+        },
+    );
+    let app = App::new(Box::new(MemStore::holding(model)), &now).expect("an app");
+
+    let row = look(&app, 120, 36)
+        .into_iter()
+        .find(|row| row.contains("[due 30 Sep]"))
+        .expect("the backlog row");
+
+    assert!(
+        row.contains("[↻ work days]  [due 30 Sep]  [◷ 12 Sep]"),
+        "every chip is drawn: {row:?}"
+    );
+    assert!(
+        !row.contains("doc[↻"),
+        "and the title stops before them: {row:?}"
+    );
+}
+
+#[test]
+fn the_backlog_lists_the_schedules_under_its_groups() {
+    let drawn = look(&app(), 120, 36);
+    let text = drawn.join("\n");
+
+    assert!(text.contains("REPEATING 2"), "a group of its own");
+    assert!(
+        drawn
+            .iter()
+            .any(|row| row.contains(" ↻  Ship invoice export") && row.ends_with("every Friday")),
+        "each schedule by title and rule"
+    );
+    assert!(
+        drawn
+            .iter()
+            .any(|row| row.contains(" ↻  Write standup notes") && row.ends_with("every work day"))
+    );
+}
+
+#[test]
+fn the_date_card_types_picks_and_walks_the_month() {
+    let mut app = app();
+    app.update(Action::PaneRight);
+    app.update(Action::Down);
+    app.update(Action::DueBy);
+    for typed in "30 sep".chars() {
+        app.update(Action::Insert(typed));
+    }
+    let drawn = look(&app, 120, 36);
+    let text = drawn.join("\n");
+
+    assert!(text.contains("Due by Write the Q4 planning doc"));
+    assert!(text.contains("alt-r remind on"), "the card's other mode");
+    assert!(text.contains("Tue 30 Sep"), "what the typed date reads as");
+    assert!(text.contains("alt-3"));
+    assert!(text.contains("In a week"));
+    assert!(text.contains("no due date"), "what clearing answers");
+    assert!(text.contains("September 2025"));
+    assert!(text.contains(" Mo Tu We Th Fr Sa Su"));
+    assert!(text.contains("⏎ set"));
+    assert!(text.contains("tab calendar"));
+}
+
+#[test]
+fn the_date_cards_calendar_takes_the_keyboard_on_tab() {
+    let mut app = app();
+    app.update(Action::PaneRight);
+    app.update(Action::DueBy);
+    app.update(Action::NextPane);
+    app.update(Action::Right);
+    let drawn = look(&app, 120, 36);
+    let text = drawn.join("\n");
+
+    assert!(text.contains("h/l/j/k day"), "the calendar's own keys");
+    assert!(text.contains("</> month"));
+    assert!(text.contains("tab type it"), "and the way back");
+    assert!(
+        drawn
+            .iter()
+            .any(|row| row.contains('▏') && row.contains("Sat 13 Sep")),
+        "the card opened on the due date the task has and l walked a day on"
+    );
+}
+
+#[test]
+fn the_repeat_card_shows_the_shapes_and_the_dates_they_fall_on() {
+    let mut app = app();
+    app.update(Action::Repeat);
+    app.update(Action::EveryWeek);
+    let text = look(&app, 120, 36).join("\n");
+
+    assert!(text.contains("Repeat Ship invoice export"));
+    assert!(text.contains("Every work day"));
+    assert!(text.contains("Mon–Fri"));
+    assert!(text.contains("Every week on"));
+    assert!(
+        text.contains(" Mo  Tu  We  Th [Fr] Sa  Su "),
+        "the weekdays, the ones in the set bracketed"
+    );
+    assert!(text.contains("Stop repeating"));
+    assert!(text.contains("copies stay"));
+    assert!(text.contains("Next: Fri 12 Sep · Fri 19 Sep · Fri 26 Sep"));
+    assert!(text.contains("⏎ save"));
+}
+
+#[test]
 fn the_copy_question_spells_both_answers_out() {
     let mut app = app();
     app.update(Action::Edit);
@@ -748,6 +877,8 @@ fn no_size_the_window_can_take_makes_the_drawing_panic() {
         Action::Help,
         Action::Search,
         Action::MoveToDay,
+        Action::DueBy,
+        Action::Repeat,
         Action::Add,
     ] {
         app.update(action);

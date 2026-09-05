@@ -41,6 +41,11 @@ pub enum PopupKind {
     Help,
     /// The move card: the day a task is sent to.
     Move,
+    /// The date card: due by, remind on, or the day the move card sends
+    /// a task to. One card, three things to set.
+    Date,
+    /// The repeat card: the five rule shapes, and stopping.
+    Repeat,
     /// The one deliberate question: whether a recurring copy's new title
     /// is for this copy or for this and future copies.
     CopyQuestion,
@@ -119,8 +124,26 @@ pub enum Action {
     NextMonday,
     DueBy,
     RemindOn,
+    /// The date card's own days, and the pick that takes a date off.
+    InAWeek,
+    EndOfMonth,
+    ClearDate,
+    /// The month the calendar is showing.
+    PrevMonth,
+    NextMonth,
     Waiting,
     Repeat,
+    /// The rows of the repeat card, which are the five rule shapes of
+    /// DOMAIN.md section 10 and the end of them all.
+    EveryWorkDay,
+    EveryDay,
+    EveryWeek,
+    EveryMonth,
+    EveryFewWeeks,
+    StopRepeat,
+    /// Take the highlighted thing into the row's answer, which is how a
+    /// weekday joins the set the weekly shape repeats on.
+    Pick,
     Keep,
     Undo,
     /// The two answers to the copy question.
@@ -390,6 +413,16 @@ const HOME_DAY: &[Binding] = home_table![
         label: "delete",
         bar: Bar::Left,
         narrow: Bar::Short(Side::Left, "del"),
+    },
+    // Waiting is a backlog state, so on a day task it is a move as well
+    // as a flag (DOMAIN.md section 9). The bar is full by here, and the
+    // palette and the help overlay teach it.
+    Binding {
+        keys: &[("w", Action::Waiting)],
+        shown: "w",
+        label: "waiting",
+        bar: Bar::Off,
+        narrow: Bar::Off,
     },
 ];
 
@@ -916,6 +949,237 @@ const MOVE_CARD: &[Binding] = &[
     },
 ];
 
+/// The date card's picks, which are the rows of the card rather than of
+/// the hint bar. They are on Alt because the field has the keyboard and
+/// every letter and digit types there (DESIGN.md section 4); the same
+/// keys work in the calendar so that a pick is one gesture wherever the
+/// keyboard is.
+macro_rules! date_picks {
+    () => {
+        [
+            Binding {
+                keys: &[("alt-1", Action::Tomorrow)],
+                shown: "alt-1",
+                label: "Tomorrow",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+            Binding {
+                keys: &[("alt-2", Action::NextMonday)],
+                shown: "alt-2",
+                label: "Next Monday",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+            Binding {
+                keys: &[("alt-3", Action::InAWeek)],
+                shown: "alt-3",
+                label: "In a week",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+            Binding {
+                keys: &[("alt-4", Action::EndOfMonth)],
+                shown: "alt-4",
+                label: "End of month",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+            Binding {
+                keys: &[("alt-0", Action::ClearDate)],
+                shown: "alt-0",
+                label: "Clear date",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+            // Which date the card is setting, switched without losing
+            // what has been typed.
+            Binding {
+                keys: &[("alt-d", Action::DueBy)],
+                shown: "alt-d",
+                label: "due by",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+            Binding {
+                keys: &[("alt-r", Action::RemindOn)],
+                shown: "alt-r",
+                label: "remind on",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+        ]
+    };
+}
+
+/// A date card table: its picks, then the keys of the control that has
+/// the keyboard, then the two that leave.
+macro_rules! date_table {
+    ($($own:expr),* $(,)?) => {
+        &[
+            Binding {
+                keys: &[("enter", Action::Confirm)],
+                shown: "⏎",
+                label: "set",
+                bar: Bar::Left,
+                narrow: Bar::Left,
+            },
+            Binding {
+                keys: &[("esc", Action::Cancel)],
+                shown: "esc",
+                label: "cancel",
+                bar: Bar::Left,
+                narrow: Bar::Left,
+            },
+            $($own,)*
+            date_picks!()[0],
+            date_picks!()[1],
+            date_picks!()[2],
+            date_picks!()[3],
+            date_picks!()[4],
+            date_picks!()[5],
+            date_picks!()[6],
+        ]
+    };
+}
+
+/// The date card while the field has the keyboard, which is how it opens.
+const DATE_FIELD: &[Binding] = date_table![Binding {
+    keys: &[("tab", Action::NextPane)],
+    shown: "tab",
+    label: "calendar",
+    bar: Bar::Left,
+    narrow: Bar::Left,
+}];
+
+/// The date card once `tab` has moved the keyboard into the calendar,
+/// where single keys work again.
+const DATE_CALENDAR: &[Binding] = date_table![
+    Binding {
+        keys: &[("tab", Action::NextPane)],
+        shown: "tab",
+        label: "type it",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[
+            ("h", Action::Left),
+            ("l", Action::Right),
+            ("j", Action::Down),
+            ("k", Action::Up),
+            ("left", Action::Left),
+            ("right", Action::Right),
+            ("down", Action::Down),
+            ("up", Action::Up),
+        ],
+        shown: "h/l/j/k",
+        label: "day",
+        bar: Bar::Left,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("<", Action::PrevMonth), (">", Action::NextMonth)],
+        shown: "</>",
+        label: "month",
+        bar: Bar::Left,
+        narrow: Bar::Off,
+    },
+];
+
+/// The repeat card. Its six shapes are rows of the card rather than of
+/// the hint bar; the application reads them back to build a rule, and
+/// `h`/`l` adjust whichever one is selected.
+const REPEAT_CARD: &[Binding] = &[
+    Binding {
+        keys: &[("1", Action::EveryWorkDay)],
+        shown: "1",
+        label: "Every work day",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("2", Action::EveryDay)],
+        shown: "2",
+        label: "Every day",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("3", Action::EveryWeek)],
+        shown: "3",
+        label: "Every week on",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("4", Action::EveryMonth)],
+        shown: "4",
+        label: "Every month on the",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("5", Action::EveryFewWeeks)],
+        shown: "5",
+        label: "Every",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("0", Action::StopRepeat)],
+        shown: "0",
+        label: "Stop repeating",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("enter", Action::Confirm)],
+        shown: "⏎",
+        label: "save",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("esc", Action::Cancel)],
+        shown: "esc",
+        label: "cancel",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[
+            ("h", Action::Left),
+            ("l", Action::Right),
+            ("left", Action::Left),
+            ("right", Action::Right),
+        ],
+        shown: "h/l",
+        label: "adjust",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("space", Action::Pick)],
+        shown: "space",
+        label: "pick a day",
+        bar: Bar::Left,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[
+            ("j", Action::Down),
+            ("k", Action::Up),
+            ("down", Action::Down),
+            ("up", Action::Up),
+        ],
+        shown: "j/k",
+        label: "move",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+];
+
 /// The one deliberate question (DESIGN.md section 8). Both answers are a
 /// key of their own, because there is no default that is safe to guess.
 const COPY_QUESTION: &[Binding] = &[
@@ -1033,6 +1297,18 @@ pub fn bindings(context: KeyContext) -> &'static [Binding] {
             kind: PopupKind::CopyQuestion,
             ..
         } => COPY_QUESTION,
+        KeyContext::Popup {
+            kind: PopupKind::Date,
+            text_field: true,
+        } => DATE_FIELD,
+        KeyContext::Popup {
+            kind: PopupKind::Date,
+            text_field: false,
+        } => DATE_CALENDAR,
+        KeyContext::Popup {
+            kind: PopupKind::Repeat,
+            ..
+        } => REPEAT_CARD,
     }
 }
 
@@ -1082,6 +1358,14 @@ pub fn name(context: KeyContext) -> &'static str {
             kind: PopupKind::CopyQuestion,
             ..
         } => "RENAME",
+        KeyContext::Popup {
+            kind: PopupKind::Date,
+            ..
+        } => "DATE",
+        KeyContext::Popup {
+            kind: PopupKind::Repeat,
+            ..
+        } => "REPEAT",
     }
 }
 
