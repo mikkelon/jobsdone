@@ -87,10 +87,11 @@ pub enum Command {
     },
 
     // The inverses, which say more than a user ever does.
-    /// The inverse of Move, of Close's move out of the backlog, and of
-    /// the move inside SetWaiting: the task goes back to the place and
-    /// position it had, open again, with its old waiting flag, and the
-    /// placement row the command wrote is dropped.
+    /// The inverse of Move, of Close, and of the move inside SetWaiting:
+    /// the task goes back to the place and position it had, open again,
+    /// with its old waiting flag, and the placement row the command wrote
+    /// is dropped. A close that stayed on its day undoes as a move back
+    /// to where the task already is, which is only the reopening.
     MoveBack {
         task: Id,
         place: Place,
