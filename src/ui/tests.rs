@@ -491,7 +491,10 @@ fn a_past_day_with_nothing_on_it_names_the_keys_that_leave_it() {
     let text = look(&app, 120, 36).join("\n");
 
     assert!(text.contains("Sun 31 Aug past day"));
-    assert!(text.contains("nothing was planned"), "and the header says so");
+    assert!(
+        text.contains("nothing was planned"),
+        "and the header says so"
+    );
     assert!(text.contains("Nothing was planned on this day."));
     assert!(text.contains("[ keeps stepping back · g pick a date"));
     assert!(

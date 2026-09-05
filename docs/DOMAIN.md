@@ -495,7 +495,11 @@ then closed tasks by place day, newest first. Each recurring copy is its
 own row, marked `↻`. Enter goes to the task's place day. Notes are not
 searched.
 
-The empty result offers to add the typed text as a task on today.
+The empty result offers to add the typed text as a task on today. A
+result offers the same thing under `alt-t`, with its own title: a task
+done long ago is started again as a new task rather than reopened,
+because reopening would take the old one off the day it was done on and
+rewrite that day's record.
 
 ## 15. Notes
 

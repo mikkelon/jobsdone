@@ -1333,33 +1333,62 @@ const COPY_QUESTION: &[Binding] = &[
 ];
 
 /// The palette and search share a shape: a text field, a filtered list,
-/// and the two keys that leave.
-const FILTER_BOX: &[Binding] = &[
-    Binding {
-        keys: &[],
-        shown: "type",
-        label: "to filter",
-        bar: Bar::Left,
-        narrow: Bar::Left,
-    },
-    Binding {
-        keys: &[("up", Action::Up), ("down", Action::Down)],
-        shown: "↑/↓",
-        label: "move",
-        bar: Bar::Left,
-        narrow: Bar::Left,
-    },
+/// and the two keys that leave. Only what Enter does differs, and the
+/// one key search has that the palette does not.
+macro_rules! filter_box {
+    ($($own:expr),* $(,)?) => {
+        &[
+            Binding {
+                keys: &[],
+                shown: "type",
+                label: "to filter",
+                bar: Bar::Left,
+                narrow: Bar::Left,
+            },
+            Binding {
+                keys: &[("up", Action::Up), ("down", Action::Down)],
+                shown: "↑/↓",
+                label: "move",
+                bar: Bar::Left,
+                narrow: Bar::Left,
+            },
+            $($own,)*
+            Binding {
+                keys: &[("esc", Action::Cancel)],
+                shown: "esc",
+                label: "close",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+        ]
+    };
+}
+
+const PALETTE_BOX: &[Binding] = filter_box![Binding {
+    keys: &[("enter", Action::Confirm)],
+    shown: "⏎",
+    label: "run",
+    bar: Bar::Off,
+    narrow: Bar::Off,
+}];
+
+/// Search finds tasks rather than commands, so Enter goes to one and
+/// `alt-t` starts it again. Both are on the footer of the box rather
+/// than in the bar, which the field's own two rows fill (wireframe 09).
+const SEARCH_BOX: &[Binding] = filter_box![
     Binding {
         keys: &[("enter", Action::Confirm)],
         shown: "⏎",
-        label: "run",
+        label: "go to that day",
         bar: Bar::Off,
         narrow: Bar::Off,
     },
+    // The field has the keyboard, where every letter types, so the one
+    // action it has of its own is on Alt (DESIGN.md section 4).
     Binding {
-        keys: &[("esc", Action::Cancel)],
-        shown: "esc",
-        label: "close",
+        keys: &[("alt-t", Action::ToToday)],
+        shown: "alt-t",
+        label: "re-add to today as a new task",
         bar: Bar::Off,
         narrow: Bar::Off,
     },
@@ -1418,9 +1447,13 @@ pub fn bindings(context: KeyContext) -> &'static [Binding] {
             ..
         } => REVIEW_SURFACED,
         KeyContext::Popup {
-            kind: PopupKind::Palette | PopupKind::Search,
+            kind: PopupKind::Palette,
             ..
-        } => FILTER_BOX,
+        } => PALETTE_BOX,
+        KeyContext::Popup {
+            kind: PopupKind::Search,
+            ..
+        } => SEARCH_BOX,
         KeyContext::Popup {
             kind: PopupKind::Help,
             ..

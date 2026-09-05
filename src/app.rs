@@ -546,7 +546,7 @@ impl App {
             Action::Delete => self.delete(),
             Action::MoveDown => self.reorder(true),
             Action::MoveUp => self.reorder(false),
-            Action::ToToday => self.move_it(MoveTarget::Day(self.today)),
+            Action::ToToday => self.pull_onto_today(),
             Action::ToBacklog => self.move_it(MoveTarget::Backlog),
             Action::Tomorrow
             | Action::NextWorkDay
@@ -735,11 +735,6 @@ impl App {
             text: text.into(),
             undo,
         });
-    }
-
-    /// A key the shell already declares and a later phase fills in.
-    fn not_yet(&mut self, what: &str) {
-        self.say(what, false);
     }
 
     // ---- the rows ----------------------------------------------------
@@ -982,6 +977,20 @@ impl App {
         if self.run(Command::Reorder { task, position }).is_some() {
             self.moving = Some(task);
         }
+    }
+
+    /// `t`: the cursor row onto today, or, in search, the result the
+    /// cursor is on as a new task there.
+    fn pull_onto_today(&mut self) {
+        if self
+            .popup
+            .as_ref()
+            .is_some_and(|open| open.kind == PopupKind::Search)
+        {
+            self.readd_from_search();
+            return;
+        }
+        self.move_it(MoveTarget::Day(self.today));
     }
 
     /// `t`, `b`, and the days of the move card. With the card open the
@@ -2232,26 +2241,64 @@ impl App {
         self.move_it(choice.target);
     }
 
-    /// Enter in search. A search that found nothing offers to add what was
-    /// typed as a task on today (DOMAIN.md section 14); going to a result
-    /// is phase 10's.
+    /// The result the cursor is on: the open matches and then the closed,
+    /// which is the order the box draws them in.
+    fn found_at_cursor(&self) -> Option<Id> {
+        let popup = self.popup.as_ref()?;
+        let results = self.search_results();
+        results
+            .open
+            .iter()
+            .chain(results.closed.iter())
+            .nth(popup.selected)
+            .map(|row| row.task)
+    }
+
+    /// Enter in search: the day the result is on, which for an open
+    /// backlog task is the backlog beside today. A search that found
+    /// nothing offers to add what was typed as a task on today instead
+    /// (DOMAIN.md section 14).
     fn take_the_search(&mut self) {
+        if let Some(task) = self.found_at_cursor() {
+            self.popup = None;
+            self.follow_the_task(task);
+            return;
+        }
         let Some(popup) = &self.popup else {
             return;
         };
         let title = popup.text.trim().to_owned();
-        if self.search_results().total > 0 {
-            self.not_yet("Going to a task from search is not built yet.");
-            return;
-        }
         if title.is_empty() {
             return;
         }
         self.popup = None;
+        self.add_to_today(title);
+    }
+
+    /// `alt-t` in search: the title of the result, as a fresh task on
+    /// today. What was found stays where it is; nothing about a closed
+    /// task is reopened (DOMAIN.md section 14).
+    fn readd_from_search(&mut self) {
+        let title = self
+            .found_at_cursor()
+            .and_then(|task| self.model.live_task(task))
+            .map(|task| task.title.clone());
+        let Some(title) = title else {
+            self.say("There is no task here to re-add.", false);
+            return;
+        };
+        self.popup = None;
+        self.add_to_today(title);
+    }
+
+    /// A new task at the end of today's plan, with the keyboard and the
+    /// cursor on it, which is where both offers of the search box end.
+    fn add_to_today(&mut self, title: String) {
         let place = Place::Day(self.today);
         if let Some(change) = self.run(Command::AddTask { title, place })
             && let Some(added) = added_task(&change)
         {
+            self.show_the_day(self.today);
             self.focus_on(List::Day);
             self.set_cursor(List::Day, RowId::Task(added));
         }

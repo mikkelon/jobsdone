@@ -1437,6 +1437,80 @@ fn the_day_pane_follows_the_day_over_only_when_it_was_on_today() {
     assert_eq!(app.showing(), on("2025-09-07"));
 }
 
+// ---- search ----------------------------------------------------------
+
+#[test]
+fn enter_in_search_goes_to_the_day_the_result_is_on() {
+    let mut app = started();
+    let id = add(&mut app, "Send the invoice to Nordic Ltd");
+    let mut app = rewound(&app, &[id]);
+    app.update(Action::Search);
+    type_in(&mut app, "invoice");
+
+    app.update(Action::Confirm);
+
+    assert!(app.popup().is_none());
+    assert_eq!(app.showing(), on(YESTERDAY));
+    assert_eq!(app.focused(), List::Day);
+    assert_eq!(cursor(&app, List::Day), Some(id));
+}
+
+#[test]
+fn enter_in_search_on_a_backlog_task_comes_back_to_today() {
+    let mut app = started();
+    app.update(Action::PaneRight);
+    let id = add(&mut app, "Chase the unpaid invoices");
+    app.update(Action::PaneLeft);
+    app.update(Action::PrevDay);
+    app.update(Action::Search);
+    type_in(&mut app, "invoice");
+
+    app.update(Action::Confirm);
+
+    assert_eq!(
+        app.showing(),
+        on("2025-09-05"),
+        "the backlog is beside today"
+    );
+    assert_eq!(app.focused(), List::Backlog);
+    assert_eq!(cursor(&app, List::Backlog), Some(id));
+}
+
+#[test]
+fn alt_t_in_search_starts_the_task_it_found_again_on_today() {
+    let mut app = started();
+    let old = add(&mut app, "Send the meter reading");
+    app.update(Action::Close);
+    let mut app = rewound(&app, &[old]);
+    app.update(Action::Search);
+    type_in(&mut app, "meter");
+
+    app.update(Action::ToToday);
+
+    assert!(app.popup().is_none());
+    assert_eq!(app.showing(), on("2025-09-05"));
+    assert_eq!(titles(&app, List::Day), ["Send the meter reading"]);
+    let added = cursor(&app, List::Day).expect("the new task");
+    assert_ne!(added, old, "a fresh task, not the one that was found");
+    assert!(
+        app.model()
+            .task(old)
+            .is_some_and(|task| !task.is_open() && task.day == Some(on(YESTERDAY))),
+        "what was found stays where it was, and closed"
+    );
+}
+
+#[test]
+fn a_search_that_found_nothing_adds_what_was_typed() {
+    let mut app = started();
+    app.update(Action::Search);
+    type_in(&mut app, "tax return");
+
+    app.update(Action::Confirm);
+
+    assert_eq!(titles(&app, List::Day), ["tax return"]);
+}
+
 // ---- the hint bar ----------------------------------------------------
 
 #[test]
@@ -1451,19 +1525,6 @@ fn what_the_hint_bar_says_stands_until_the_next_key() {
 
     app.update(Action::Down);
     assert!(app.message().is_none());
-}
-
-#[test]
-fn a_key_a_later_phase_owns_says_so_and_does_nothing() {
-    let mut app = started();
-    add(&mut app, "Clean out the garage");
-
-    app.update(Action::Search);
-    type_in(&mut app, "garage");
-    app.update(Action::Confirm);
-
-    assert_eq!(hint(&app), "Going to a task from search is not built yet.");
-    assert_eq!(titles(&app, List::Day), ["Clean out the garage"]);
 }
 
 #[test]
@@ -2217,17 +2278,4 @@ fn an_undo_that_no_longer_applies_is_dropped_and_says_so() {
         Some("Added \"Book dentist\""),
         "the entry that could not be undone is dropped off the stack"
     );
-}
-
-#[test]
-fn going_to_a_search_result_is_not_built_yet() {
-    let mut app = started();
-    add(&mut app, "Ship invoice export");
-    app.update(Action::Search);
-    type_in(&mut app, "invoice");
-
-    app.update(Action::Confirm);
-
-    assert_eq!(hint(&app), "Going to a task from search is not built yet.");
-    assert!(app.popup().is_some(), "and the search stays open");
 }
