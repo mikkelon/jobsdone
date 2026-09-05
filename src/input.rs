@@ -936,6 +936,13 @@ const REVIEW_PILE: &[Binding] = &[
         narrow: Bar::Off,
     },
     Binding {
+        keys: &[("?", Action::Help)],
+        shown: "?",
+        label: "help",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
         keys: &[("q", Action::Quit)],
         shown: "q",
         label: "quit",
@@ -1021,6 +1028,13 @@ const REVIEW_SURFACED: &[Binding] = &[
         narrow: Bar::Off,
     },
     Binding {
+        keys: &[("?", Action::Help)],
+        shown: "?",
+        label: "help",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
         keys: &[("q", Action::Quit)],
         shown: "q",
         label: "quit",
@@ -1057,6 +1071,13 @@ const REVIEW_INFORMATION: &[Binding] = &[
         ],
         shown: "j ↑/↓",
         label: "move",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("?", Action::Help)],
+        shown: "?",
+        label: "help",
         bar: Bar::Off,
         narrow: Bar::Off,
     },
@@ -1786,10 +1807,19 @@ pub fn action_for(event: &Event, context: KeyContext) -> Option<Action> {
     }
 }
 
+/// The one key that belongs to no context: it leaves from wherever the
+/// keyboard is, a card or a field included, and puts the terminal back
+/// (DESIGN.md section 4). It is a row of no table, and the help overlay
+/// writes it from here so that it is not a hidden key.
+pub const CTRL_C: Binding = Binding {
+    keys: &[("ctrl-c", Action::Quit)],
+    shown: "ctrl-c",
+    label: "quit, from anywhere",
+    bar: Bar::Off,
+    narrow: Bar::Off,
+};
+
 fn key_action(key: &KeyEvent, context: KeyContext) -> Option<Action> {
-    // The one key that belongs to no context: it leaves from wherever the
-    // keyboard is, a card or a field included, and puts the terminal back
-    // (DESIGN.md section 4).
     if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
         return Some(Action::Quit);
     }

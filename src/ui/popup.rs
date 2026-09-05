@@ -13,7 +13,7 @@ use ratatui::style::{Color, Modifier, Style};
 
 use super::{Canvas, Rows, accent, bold, count, cursor, day_label, dim, place_label, plain};
 use crate::app::{App, DateDraft, DateKind, MoveTarget, Popup, RepeatDraft, RowId};
-use crate::domain::{Row, Weekday};
+use crate::domain::{self, Row, Weekday};
 use crate::input::{
     self, Action, Binding, KeyContext, NotesPane, Pane, PopupKind, ReviewStep, Shown,
 };
@@ -141,7 +141,16 @@ fn palette(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
                 canvas.put(x + 2, row, super::clip(text, width - 4), dim());
             }
             Command::Row(command) => {
-                canvas.put(x + 2, row, &sentence(command.label), plain());
+                // Undo names what it would take back, which is the one
+                // label the table cannot know.
+                let label = match (command.keys.first(), app.next_undo()) {
+                    (Some((_, Action::Undo)), Some(what)) => {
+                        format!("{}: {what}", sentence(command.label))
+                    }
+                    _ => sentence(command.label),
+                };
+                let room = width.saturating_sub(6 + super::count(command.shown));
+                canvas.put(x + 2, row, super::clip(&label, room), plain());
                 canvas.rput(x + width - 2, row, command.shown, accent());
                 if command_at == popup.selected {
                     canvas.restyle(x + 1, row, width - 2, cursor());
@@ -416,6 +425,10 @@ fn move_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
 /// with room around it.
 const DATE_WIDTH: u16 = 54;
 
+/// The shapes the field reads (DOMAIN.md section 2), shown while it is
+/// empty so that they are found without leaving it.
+const DATE_SHAPES: &str = "e.g. 12 sep, +3, -3, mon, tomorrow";
+
 /// The columns the month grid takes: seven days of two figures, each
 /// under a space.
 const CALENDAR: u16 = 21;
@@ -454,10 +467,19 @@ fn date_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
         canvas.rput(x + width - 2, y, other, dim());
     }
 
-    // What has been typed, and the day it and the calendar agree on.
-    let day = day_label(draft.on);
+    // What has been typed, and the day it and the calendar agree on; or
+    // that the typed line is not a date yet, since Enter would say so.
+    let typed = popup.text.trim();
+    let day = if typed.is_empty() || domain::parse_date(typed, app.today()).is_some() {
+        day_label(draft.on)
+    } else {
+        "not a date".to_owned()
+    };
     let room = width.saturating_sub(6 + count(&day));
     super::caret_line(canvas, x + 3, y + 2, room, &popup.text, popup.caret);
+    if typed.is_empty() {
+        canvas.put(x + 5, y + 2, DATE_SHAPES, dim());
+    }
     canvas.rput(x + width - 2, y + 2, &day, dim());
 
     for (at, choice) in choices.iter().enumerate() {
@@ -834,11 +856,11 @@ fn columns() -> Vec<(&'static str, Vec<Help>)> {
         &shared,
     ));
 
+    let mut everywhere: Vec<Help> = shared.into_iter().map(Help::Key).collect();
+    everywhere.push(Help::Key(&input::CTRL_C));
+
     vec![
-        (
-            "EVERYWHERE",
-            shared.into_iter().map(Help::Key).collect::<Vec<_>>(),
-        ),
+        ("EVERYWHERE", everywhere),
         ("DAY", second),
         ("BACKLOG", third),
     ]

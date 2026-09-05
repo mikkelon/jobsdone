@@ -2057,6 +2057,33 @@ fn what_the_hint_bar_says_stands_until_the_next_key() {
 }
 
 #[test]
+fn a_message_nobody_types_past_goes_after_a_few_seconds() {
+    let mut app = started();
+    add(&mut app, "Book dentist");
+    app.update(Action::Delete);
+
+    app.clock = app
+        .clock
+        .checked_add(Span::new().seconds(3))
+        .expect("a time");
+    app.update(Action::Tick);
+    assert!(
+        app.message().is_some(),
+        "three seconds is a pause to read it"
+    );
+
+    app.clock = app
+        .clock
+        .checked_add(Span::new().seconds(2))
+        .expect("a time");
+    app.update(Action::Tick);
+    assert!(
+        app.message().is_none(),
+        "five seconds is a pause in front of the wrong line"
+    );
+}
+
+#[test]
 fn a_key_on_an_empty_pane_says_there_is_nothing_there() {
     let mut app = started();
     app.update(Action::Close);

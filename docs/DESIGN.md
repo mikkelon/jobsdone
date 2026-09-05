@@ -36,7 +36,11 @@ The app lives next to a terminal, an editor and a browser. It should look
 like it belongs to the first two.
 
 - One cell per row. Titles, chips and hints share the line. Density over
-  decoration; 24 tasks fit in the floating window.
+  decoration; 24 tasks fit in the floating window. A title longer than
+  its line ends in a dim ellipsis, so a cut is never mistaken for the
+  end. The cursor row is the one exception: it is read whole, its title
+  going on under it at the pane's full width, and the rows below move
+  down for as long as the cursor is there.
 - A one-cell margin all round: a blank row above the status line and below
   the hint bar, a blank column at the left and right edges. Text never
   touches the window border.
@@ -257,7 +261,8 @@ The app never reorders, carries over, expires, or tidies.
 ## 8. Undo instead of confirm
 
 No action asks "are you sure". Delete, close, move, and review decisions
-apply immediately and offer `u` in the hint bar until the next key. Editing
+apply immediately and offer `u` in the hint bar until the next key, or
+for a few seconds when no key comes. Editing
 is always in place; the only forms are the three small cards (date, repeat,
 move).
 
@@ -270,10 +275,13 @@ A field on a row is a mode like any other, so its keys are in the hint
 bar rather than beside it: while a title is being typed the bar says what
 Enter does there, "add & keep typing" when adding and "save" when
 renaming. A line longer than the field scrolls with the caret rather than
-clipping at its end, so what is being typed is always the part on screen. What just happened takes the same line over until the next key,
-which is where the offer of `u` is. The offer is left off while a field
-has the keyboard, because `u` types there: the bar never names a key the
-line would swallow.
+clipping at its end, so what is being typed is always the part on screen.
+What just happened goes first on the same line until the next key, or
+for a few seconds when no key comes, and the keys that still fit follow
+it; a quoted title is cut to a few words so that the offer of `u`, which
+comes right after it, is never pushed off. The offer is left off while a
+field has the keyboard, because `u` types there: the bar never names a
+key the line would swallow.
 
 The one deliberate question: editing the title of a recurring copy asks
 whether the change is for this copy or this and future copies, because

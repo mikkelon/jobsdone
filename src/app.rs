@@ -269,12 +269,17 @@ impl Review {
 }
 
 /// The hint bar's last word: what just happened, and whether `u` takes it
-/// back. It stands until the next key (DESIGN.md section 8).
+/// back. It stands until the next key or for a few seconds, whichever
+/// comes first (DESIGN.md section 8).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Message {
     pub text: String,
     pub undo: bool,
+    pub said_at: Zoned,
 }
+
+/// How long a message stands when no key follows it, in seconds.
+const MESSAGE_STANDS: i64 = 4;
 
 /// A title being typed on a row. Uncommitted text lives here and nowhere
 /// else (ARCHITECTURE.md rule 8); Enter turns it into one command.
@@ -623,6 +628,9 @@ impl App {
         if !matches!(action, Action::Tick | Action::Resize | Action::FocusGained) {
             self.message = None;
             self.moving = None;
+        }
+        if matches!(action, Action::Tick) {
+            self.forget_an_old_message();
         }
 
         match action {
@@ -1122,7 +1130,25 @@ impl App {
         self.message = Some(Message {
             text: text.into(),
             undo,
+            said_at: self.now(),
         });
+    }
+
+    /// The hint bar goes back to its keys a few seconds after a message
+    /// nobody has typed past, so that a pause to read them is never a
+    /// pause in front of the wrong line.
+    fn forget_an_old_message(&mut self) {
+        let now = self.now();
+        let stands = Span::new().seconds(MESSAGE_STANDS);
+        let old = self.message.as_ref().is_some_and(|message| {
+            message
+                .said_at
+                .checked_add(stands)
+                .is_ok_and(|until| now >= until)
+        });
+        if old {
+            self.message = None;
+        }
     }
 
     // ---- the rows ----------------------------------------------------
@@ -2352,6 +2378,11 @@ impl App {
     /// The open note, while the keyboard is in it.
     pub fn draft(&self) -> Option<&Draft> {
         self.draft.as_ref()
+    }
+
+    /// What `u` would take back, for the palette to say beside the key.
+    pub fn next_undo(&self) -> Option<&str> {
+        self.model.undo.last().map(|entry| entry.label.as_str())
     }
 
     pub fn message(&self) -> Option<&Message> {

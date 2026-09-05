@@ -272,26 +272,29 @@ fn the_list(canvas: &mut Canvas, app: &App, review: &Review, column: Column, lay
         };
         match writing.filter(|editor| editor.task == Some(row.task)) {
             Some(editor) => a_title_being_typed(canvas, column, y, *kind, row, editor),
-            None => task_row(
-                canvas,
-                column,
-                y,
-                row,
-                Look {
-                    kind: *kind,
-                    today,
-                    narrow: layout.narrow,
-                    moving: false,
-                    note: Some(note),
-                },
-            ),
+            None => {
+                task_row(
+                    canvas,
+                    column,
+                    y,
+                    row,
+                    Look {
+                        kind: *kind,
+                        today,
+                        narrow: layout.narrow,
+                        moving: false,
+                        note: Some(note),
+                        whole: false,
+                    },
+                );
+            }
         }
         if on == Some(RowId::Task(row.task)) && writing.is_none() {
             canvas.restyle(x, y, width, cursor());
         }
         layout
             .rows
-            .push(row_area(List::Review, RowId::Task(row.task), column, y));
+            .push(row_area(List::Review, RowId::Task(row.task), column, y, 1));
     }
 }
 

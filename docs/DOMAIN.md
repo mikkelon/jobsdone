@@ -75,7 +75,7 @@ reads, case and spacing aside:
 | `30`                           | The next month that has a 30th.              |
 | `mon`, `monday`                | The next such weekday, never today.          |
 | `today`, `tomorrow`            | Those days.                                  |
-| `+3`                           | Three days from today.                       |
+| `+3`, `-3`                     | Three days from today, or three days ago.    |
 
 A month or a weekday is written out or cut to three letters. A date with
 no year is the next one that has not passed, so `1 sep` typed in

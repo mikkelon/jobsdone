@@ -23,8 +23,11 @@ pub fn parse_date(text: &str, today: Date) -> Option<Date> {
     if text.is_empty() {
         return None;
     }
-    if let Some(days) = text.strip_prefix('+') {
+    // A count of days is signed, so that "-3" is three days ago rather
+    // than the third of a month.
+    if let Some(days) = text.strip_prefix(['+', '-']) {
         let days: i64 = days.trim().parse().ok()?;
+        let days = if text.starts_with('-') { -days } else { days };
         return today.checked_add(Span::new().days(days)).ok();
     }
     match text.as_str() {

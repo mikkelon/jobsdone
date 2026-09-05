@@ -853,9 +853,18 @@ pub(super) fn next_id(ids: impl Iterator<Item = Id>) -> Id {
 
 // ---- labels ----------------------------------------------------------
 
+/// A title in quotes, cut to the few words a hint bar has room for beside
+/// what happened to it.
 fn named(title: &str) -> String {
-    format!("\"{title}\"")
+    let mut chars = title.char_indices().skip(NAMED_MOST);
+    match chars.next() {
+        Some((at, _)) => format!("\"{}…\"", title[..at].trim_end()),
+        None => format!("\"{title}\""),
+    }
 }
+
+/// The most characters of a title a label quotes.
+const NAMED_MOST: usize = 40;
 
 fn place_name(place: Place, today: Date) -> String {
     match place {

@@ -478,16 +478,18 @@ fn hint_bar(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
     let context = app.key_context();
     let mut x = canvas.put(1, y, input::name(context), bold()) + 2;
 
+    let edge = canvas.width() - 1;
     if let Some(message) = app.message() {
-        x = canvas.put(x, y, &message.text, plain()) + 2;
-        // Not while a field has the keyboard: `u` types there, so the bar
-        // would be offering a key the line would swallow (DESIGN.md
-        // section 8).
-        if message.undo && !context.text_field() {
+        // The offer of `u` is not made while a field has the keyboard:
+        // `u` types there, so the bar would be offering a key the line
+        // would swallow (DESIGN.md section 8).
+        let offer = message.undo && !context.text_field();
+        let room = edge.saturating_sub(x + if offer { 8 } else { 0 });
+        x = canvas.put(x, y, clip(&message.text, room), plain()) + 2;
+        if offer {
             x = canvas.put(x, y, "u", accent());
-            canvas.put(x + 2, y, "undo", dim());
+            x = canvas.put(x + 2, y, "undo", dim()) + 2;
         }
-        return;
     }
 
     let mut left = Vec::new();
@@ -501,12 +503,17 @@ fn hint_bar(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
         }
     }
 
+    // After a message, the keys that still fit follow it; the ones that
+    // do not are left out rather than cut in half.
     for (shown, name) in left {
+        if x + count(shown) + 1 + count(name) > edge {
+            break;
+        }
         x = canvas.put(x, y, shown, accent());
         x = canvas.put(x + 1, y, name, dim()) + 2;
     }
 
-    let mut edge = canvas.width() - 1;
+    let mut edge = edge;
     for (shown, name) in right.into_iter().rev() {
         // A row that would reach what the left end has already drawn is
         // left out rather than written over it.
@@ -667,6 +674,10 @@ struct Look<'a> {
     /// the drawing cannot work them out, which is the review saying what
     /// it did. They stand in for everything else the right holds.
     note: Option<&'a str>,
+    /// Whether the row is to be read whole: a title longer than its line
+    /// then goes on under it rather than ending in an ellipsis, which is
+    /// how the cursor row is drawn (DESIGN.md section 2).
+    whole: bool,
 }
 
 /// How a row is drawn, which is what its group says rather than anything
@@ -1057,21 +1068,47 @@ fn pane(
         Line::Day(row) => !adding && on == Some(RowId::Day(row.day)),
         _ => false,
     });
-    // The foot is the pane's last word about itself, so it follows the
-    // last row on screen rather than being scrolled off under it.
-    let anchor = match (anchor, view.foot) {
-        (Some(at), Some(_)) if at + 2 == lines.len() => Some(at + 1),
-        (anchor, _) => anchor,
+    // The cursor row is read whole: a title longer than its line goes on
+    // under it, and the rows below move down by as much (DESIGN.md
+    // section 2). How much is known before anything scrolls.
+    let tail_of_row = |row: &domain::Row, kind: Kind| -> Vec<String> {
+        let look = Look {
+            kind,
+            today,
+            narrow,
+            moving: app.moving() == Some(row.task),
+            note: None,
+            whole: true,
+        };
+        let (_, room) = right_side(column, row, look);
+        tail_of(&row.title, room, width.saturating_sub(6))
     };
-    let first = scroll_to(lines.len(), anchor, height as usize);
+    let extra = match anchor.map(|at| &lines[at]) {
+        Some(Line::Task(row, kind)) if writing.is_none() => tail_of_row(row, *kind).len(),
+        _ => 0,
+    };
 
-    for (at, line) in lines.iter().skip(first).take(height as usize).enumerate() {
-        let y = column.top + at as u16;
+    // The foot is the pane's last word about itself, so it follows the
+    // last row on screen rather than being scrolled off under it. The
+    // scroll counts the cursor row's extra lines as lines after it.
+    let bottom = match (anchor, view.foot) {
+        (Some(at), Some(_)) if at + 2 == lines.len() => Some(at + extra + 1),
+        (anchor, _) => anchor.map(|at| at + extra),
+    };
+    let first = scroll_to(lines.len() + extra, bottom, height as usize);
+    let first = anchor.map_or(first, |at| first.min(at));
+
+    let mut y = column.top;
+    for line in lines.iter().skip(first) {
+        if y > column.bottom {
+            break;
+        }
+        let mut rows = 1;
         let id = match line {
-            Line::Blank => continue,
+            Line::Blank => None,
             Line::Rule(label, count) => {
                 group_rule(canvas, x, width, y, label, *count);
-                continue;
+                None
             }
             Line::Add(label) => {
                 match writing.filter(|editor| editor.field == Field::Adding) {
@@ -1081,24 +1118,24 @@ fn pane(
                         canvas.rput(x + width - 1, y, "a", accent());
                     }
                 }
-                continue;
+                None
             }
             Line::Foot(text) => {
                 canvas.put(x + 5, y, "…", dim());
                 canvas.rput(x + width - 1, y, text, dim());
-                continue;
+                None
             }
             Line::Note(row) => {
                 note_row(canvas, x, width, y, row, today);
-                RowId::Note(row.note)
+                Some(RowId::Note(row.note))
             }
             Line::Day(row) => {
                 day_row(canvas, x, width, y, row, today);
-                RowId::Day(row.day)
+                Some(RowId::Day(row.day))
             }
             Line::Schedule(row) => {
                 schedule_row(canvas, x, width, y, row);
-                RowId::Schedule(row.schedule)
+                Some(RowId::Schedule(row.schedule))
             }
             Line::Task(row, kind) => {
                 let renaming = writing
@@ -1110,34 +1147,47 @@ fn pane(
                         // A row being typed into is not also a cursor row.
                         layout
                             .rows
-                            .push(row_area(list, RowId::Task(row.task), column, y));
-                        continue;
+                            .push(row_area(list, RowId::Task(row.task), column, y, 1));
+                        None
                     }
-                    None => task_row(
-                        canvas,
-                        column,
-                        y,
-                        row,
-                        Look {
+                    None => {
+                        let id = RowId::Task(row.task);
+                        let look = Look {
                             kind: *kind,
                             today,
                             narrow,
                             moving: app.moving() == Some(row.task),
                             note: None,
-                        },
-                    ),
+                            whole: on == Some(id),
+                        };
+                        if let Some(rest) = task_row(canvas, column, y, row, look) {
+                            let style = mark_of(row, *kind).2;
+                            for (line, _) in wrapped(&rest, width.saturating_sub(6)) {
+                                if y + rows > column.bottom {
+                                    break;
+                                }
+                                canvas.put(x + 5, y + rows, line.trim_end(), style);
+                                rows += 1;
+                            }
+                        }
+                        Some(id)
+                    }
                 }
-                RowId::Task(row.task)
             }
         };
-        if on == Some(id) {
-            canvas.restyle(x, y, width, cursor());
+        if let Some(id) = id {
+            if on == Some(id) {
+                for below in 0..rows {
+                    canvas.restyle(x, y + below, width, cursor());
+                }
+            }
+            layout.rows.push(row_area(list, id, column, y, rows));
         }
-        layout.rows.push(row_area(list, id, column, y));
+        y += rows;
     }
 }
 
-fn row_area(list: List, id: RowId, column: Column, y: u16) -> RowArea {
+fn row_area(list: List, id: RowId, column: Column, y: u16, height: u16) -> RowArea {
     RowArea {
         list,
         id,
@@ -1145,7 +1195,7 @@ fn row_area(list: List, id: RowId, column: Column, y: u16) -> RowArea {
             x: column.x,
             y,
             width: column.width,
-            height: 1,
+            height,
         },
     }
 }
@@ -1317,13 +1367,14 @@ struct Piece {
     drop: u8,
 }
 
-/// `[ ] Book dentist                          [◷ today]`
+/// The pieces at the right of a row, shrunk to fit, and the cells the
+/// title has to the left of them.
 ///
 /// The right-hand side is measured before anything is drawn, and shrinks
 /// to fit: first every chip to the mark a narrow pane would give it, then
 /// pieces dropped from the left until the title has `TITLE_LEAST` cells.
 /// Nothing is ever placed left of the title, whatever the row carries.
-fn task_row(canvas: &mut Canvas, column: Column, y: u16, row: &domain::Row, look: Look) {
+fn right_side(column: Column, row: &domain::Row, look: Look) -> (Vec<Piece>, u16) {
     let Column { x, width, .. } = column;
     let Look {
         kind,
@@ -1331,10 +1382,8 @@ fn task_row(canvas: &mut Canvas, column: Column, y: u16, row: &domain::Row, look
         narrow,
         moving,
         note,
+        ..
     } = look;
-    let (mark, mark_style, title_style) = mark_of(row, kind);
-    canvas.put(x + 1, y, mark, mark_style);
-
     let title_x = x + 5;
     let edge = x + width.saturating_sub(1);
     // A moved row says where the task is now and nothing else: what
@@ -1404,6 +1453,30 @@ fn task_row(canvas: &mut Canvas, column: Column, y: u16, row: &domain::Row, look
         pieces.remove(at);
     }
 
+    let taken = span(&pieces);
+    (pieces, room.saturating_sub(taken))
+}
+
+/// `[ ] Book dentist                          [◷ today]`
+///
+/// The title has whatever the right-hand side leaves it. A title that
+/// does not fit ends in an ellipsis, unless the row is to be read whole:
+/// then its first line is drawn and the rest handed back to go on the
+/// lines below (DESIGN.md section 2).
+fn task_row(
+    canvas: &mut Canvas,
+    column: Column,
+    y: u16,
+    row: &domain::Row,
+    look: Look,
+) -> Option<String> {
+    let Column { x, width, .. } = column;
+    let (mark, mark_style, title_style) = mark_of(row, look.kind);
+    canvas.put(x + 1, y, mark, mark_style);
+
+    let title_x = x + 5;
+    let edge = x + width.saturating_sub(1);
+    let (pieces, room) = right_side(column, row, look);
     let mut right = edge;
     for piece in pieces.iter().rev() {
         right = canvas
@@ -1411,14 +1484,57 @@ fn task_row(canvas: &mut Canvas, column: Column, y: u16, row: &domain::Row, look
             .saturating_sub(count(&piece.text) + piece.gap);
     }
 
-    // The title has whatever is left, so a row carrying three chips loses
-    // the end of its own title rather than running under them.
-    canvas.put(
-        title_x,
-        y,
-        clip(&row.title, right.saturating_sub(title_x)),
-        title_style,
-    );
+    match split_title(&row.title, room) {
+        None => {
+            canvas.put(title_x, y, &row.title, title_style);
+            None
+        }
+        Some((first, rest)) if look.whole => {
+            canvas.put(title_x, y, &first, title_style);
+            Some(rest.to_owned())
+        }
+        Some(_) => {
+            let at = canvas.put(
+                title_x,
+                y,
+                clip(&row.title, room.saturating_sub(1)),
+                title_style,
+            );
+            if room > 0 {
+                canvas.put(at, y, "…", dim());
+            }
+            None
+        }
+    }
+}
+
+/// A title that does not fit its cells, as the first line of it that
+/// does, broken on a space where there is one, and the rest.
+fn split_title(title: &str, room: u16) -> Option<(String, &str)> {
+    if count(title) <= room {
+        return None;
+    }
+    let lines = wrapped(title, room);
+    let first = lines
+        .first()
+        .map(|(line, _)| line.trim_end().to_owned())
+        .unwrap_or_default();
+    let rest = lines
+        .get(1)
+        .map_or("", |(_, start)| &title[glyph_at(title, *start)..]);
+    Some((first, rest))
+}
+
+/// The lines under a row that show the rest of a title its own line had
+/// no room for, each at the full width of the pane.
+fn tail_of(title: &str, room: u16, width: u16) -> Vec<String> {
+    match split_title(title, room) {
+        Some((_, rest)) => wrapped(rest, width)
+            .into_iter()
+            .map(|(line, _)| line.trim_end().to_owned())
+            .collect(),
+        None => Vec::new(),
+    }
 }
 
 /// The time a task was closed, or the date when it was closed on a later

@@ -1591,6 +1591,7 @@ fn a_weekday_a_word_and_a_count_of_days_are_dates_too() {
     assert_eq!(typed("today").as_deref(), Some("2025-09-05"));
     assert_eq!(typed("tomorrow").as_deref(), Some("2025-09-06"));
     assert_eq!(typed("+3").as_deref(), Some("2025-09-08"));
+    assert_eq!(typed("-3").as_deref(), Some("2025-09-02"));
     assert_eq!(typed("mon").as_deref(), Some("2025-09-08"));
     assert_eq!(typed("monday").as_deref(), Some("2025-09-08"));
     // A weekday is the next one, so the day it is typed on is a week
@@ -2081,6 +2082,16 @@ fn a_note_body_edit_pushes_nothing() {
         world.model.note(note).expect("the note").body,
         "remember to mention X"
     );
+}
+
+#[test]
+fn a_label_quotes_a_long_title_only_as_far_as_the_hint_bar_reads() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let title = "Review the complete kitchen renovation estimate and send questions";
+    world.add(title, Place::Backlog);
+    let label = world.model.undo.last().expect("an entry").label.clone();
+
+    assert_eq!(label, "Added \"Review the complete kitchen renovation e…\"");
 }
 
 #[test]

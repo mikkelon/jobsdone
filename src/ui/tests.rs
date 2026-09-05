@@ -1069,6 +1069,53 @@ fn the_help_overlay_is_the_whole_key_map() {
         assert!(text.contains(column), "the {column} column");
     }
     assert!(text.contains("notes page"), "a key only the help shows");
+    assert!(text.contains("ctrl-c"), "the key that is a row of no table");
+}
+
+#[test]
+fn the_palette_says_what_undo_would_take_back() {
+    let mut app = app();
+    app.update(Action::Delete);
+    app.update(Action::Commands);
+    let text = look(&app, 120, 36).join("\n");
+
+    assert!(
+        text.contains("Undo: Deleted \"Ship invoice export\""),
+        "{text}"
+    );
+}
+
+#[test]
+fn the_date_card_names_its_shapes_and_says_when_the_line_is_not_one() {
+    let mut app = app();
+    app.update(Action::DueBy);
+    let text = look(&app, 120, 36).join("\n");
+    assert!(
+        text.contains("e.g. 12 sep, +3, -3, mon, tomorrow"),
+        "{text}"
+    );
+
+    for typed in "banana".chars() {
+        app.update(Action::Insert(typed));
+    }
+    let text = look(&app, 120, 36).join("\n");
+    assert!(text.contains("banana"), "{text}");
+    assert!(text.contains("not a date"), "{text}");
+    assert!(
+        !text.contains("e.g. 12 sep"),
+        "the shapes go once something is typed: {text}"
+    );
+}
+
+#[test]
+fn the_review_opens_the_help_overlay_too() {
+    let mut app = reviewing();
+    app.update(Action::Help);
+    let text = look(&app, 120, 36).join("\n");
+
+    assert!(text.contains(" Keys "));
+    app.update(Action::Cancel);
+    assert!(app.review().is_some(), "closing the help keeps the review");
 }
 
 #[test]
@@ -1176,10 +1223,34 @@ fn the_hint_bar_says_what_just_happened_and_offers_to_undo_it() {
     app.update(Action::Delete);
     let drawn = look(&app, 120, 36);
 
-    assert_eq!(
-        drawn[34].trim_end(),
-        " TODAY  Deleted \"Ship invoice export\"  u  undo"
+    let bar = drawn[34].trim_end();
+    assert!(
+        bar.starts_with(" TODAY  Deleted \"Ship invoice export\"  u  undo  "),
+        "{bar:?}"
     );
+    assert!(
+        bar.contains("space done"),
+        "the keys that fit follow: {bar:?}"
+    );
+    assert!(
+        !bar.contains("tab h/l pane"),
+        "the right end gives way first: {bar:?}"
+    );
+}
+
+#[test]
+fn a_field_keeps_its_keys_beside_what_just_happened() {
+    let mut app = app();
+    app.update(Action::Add);
+    for typed in "Task".chars() {
+        app.update(Action::Insert(typed));
+    }
+    app.update(Action::Confirm);
+    let bar = look(&app, 120, 36)[34].trim_end().to_owned();
+
+    assert!(bar.contains("Added \"Task\""), "{bar:?}");
+    assert!(bar.contains("add & keep typing"), "{bar:?}");
+    assert!(!bar.contains(" u  undo"), "u types in the field: {bar:?}");
 }
 
 #[test]
@@ -1504,12 +1575,94 @@ fn no_width_a_crowded_row_can_take_makes_the_drawing_panic() {
                             narrow,
                             moving: false,
                             note,
+                            whole: false,
                         },
                     );
                 }
             }
         }
     }
+}
+
+/// A title that is cut says so: the row ends in an ellipsis rather than
+/// in the middle of a word, so a reader knows there is more.
+#[test]
+fn a_title_longer_than_its_row_ends_in_an_ellipsis() {
+    let mut row = every_chip();
+    row.title = "Review the complete kitchen renovation estimate".to_owned();
+    let drawn = one_row(
+        30,
+        &row,
+        Look {
+            kind: Kind::Open,
+            today: on("2025-09-05"),
+            narrow: true,
+            moving: false,
+            note: None,
+            whole: false,
+        },
+    );
+
+    assert!(drawn.contains('\u{2026}'), "{drawn:?}");
+    assert!(drawn.starts_with(" [ ] Review the"), "{drawn:?}");
+}
+
+/// The cursor row is the one row that is read whole: its title goes on
+/// under it, the rows below move down, and a click on any of its lines
+/// is a click on it.
+#[test]
+fn the_cursor_row_shows_a_long_title_whole_on_the_lines_under_it() {
+    let mut model = Model::empty();
+    let title = "Review the complete kitchen renovation estimate and send detailed \
+                 questions about delivery dates and installation costs";
+    model
+        .tasks
+        .insert(1, task(1, title, Some(on("2025-09-05")), 0));
+    model
+        .tasks
+        .insert(2, task(2, "Book dentist", Some(on("2025-09-05")), 1));
+    let app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+    let (drawn, layout) = screen(&app, 120, 36);
+
+    assert!(
+        drawn[6].starts_with(" [ ] Review the complete kitchen"),
+        "{:?}",
+        drawn[6]
+    );
+    assert!(!drawn[6].contains('\u{2026}'), "read whole: {:?}", drawn[6]);
+    assert!(
+        drawn[7].starts_with("     "),
+        "the rest is under the title: {:?}",
+        drawn[7]
+    );
+    assert!(
+        drawn[7].contains("send detailed questions"),
+        "{:?}",
+        drawn[7]
+    );
+    assert!(drawn[8].contains("installation costs"), "{:?}", drawn[8]);
+    assert!(
+        drawn[9].starts_with(" [ ] Book dentist"),
+        "the next row moved down: {:?}",
+        drawn[9]
+    );
+
+    let first = layout
+        .rows
+        .iter()
+        .find(|area| area.id == crate::app::RowId::Task(1))
+        .expect("the row");
+    assert_eq!(first.area.height, 3);
+
+    let mut app = app;
+    app.update(Action::Down);
+    let drawn = look(&app, 120, 36);
+    assert!(
+        drawn[6].contains('\u{2026}'),
+        "cut again once the cursor has left: {:?}",
+        drawn[6]
+    );
+    assert!(drawn[7].starts_with(" [ ] Book dentist"), "{:?}", drawn[7]);
 }
 
 /// The chips give way, not the row: whatever else it carries, a row keeps
@@ -1528,6 +1681,7 @@ fn a_crowded_row_keeps_its_box_and_the_start_of_its_title() {
                 narrow: false,
                 moving: false,
                 note: None,
+                whole: false,
             },
         );
         assert!(
