@@ -1040,11 +1040,13 @@ fn note_row(canvas: &mut Canvas, x: u16, width: u16, y: u16, row: &NoteRow, toda
         clip(&row.first_line, width.saturating_sub(16)),
         plain(),
     );
-    canvas.rput(x + width - 1, y, &age(row.created_at.date(), today), dim());
+    let made = domain::working_day(&row.created_at);
+    canvas.rput(x + width - 1, y, &age(made, today), dim());
 }
 
-/// How long ago a note was made, in the few words the list has room for.
-/// Past a couple of months the words stop being shorter than the date.
+/// How long ago a note was made, counted in working days so that one
+/// written at one in the morning is still yesterday's (DOMAIN.md section
+/// 2). Past a couple of months the words stop being shorter than the date.
 fn age(made: Date, today: Date) -> String {
     let days = made
         .until(today)

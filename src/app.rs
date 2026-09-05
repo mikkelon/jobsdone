@@ -827,13 +827,12 @@ impl App {
 
     /// Enter on the list, and `tab` off it: the note under the cursor
     /// takes the keyboard, with the caret at the end of what is there.
-    fn open_the_note(&mut self) -> bool {
-        let Some(note) = self.cursor(List::Notes) else {
-            self.say("There is no note here yet.", false);
-            return false;
+    fn open_the_note(&mut self) {
+        let Some(note) = self.note_at_cursor() else {
+            return;
         };
         let Some(body) = self.model.note(note).map(|note| note.body.clone()) else {
-            return false;
+            return;
         };
         self.draft = Some(Draft {
             note,
@@ -841,7 +840,6 @@ impl App {
             text: body,
         });
         self.notes_pane = NotesPane::Note;
-        true
     }
 
     /// Leaving the note: what was typed is written and the keyboard goes
@@ -1240,7 +1238,6 @@ impl App {
         if self.popup.is_some() || self.editor.is_some() {
             return;
         }
-
         let narrow = self.layout.narrow;
         match (self.page, self.pane, self.notes_pane, forward) {
             (Page::Home, Pane::Day, _, true) => self.pane = Pane::Backlog,
@@ -1250,9 +1247,7 @@ impl App {
             (Page::Home, Pane::Backlog, _, true) if wrap => self.pane = Pane::Day,
             (Page::Home, Pane::Day, _, false) if wrap => self.pane = Pane::Backlog,
 
-            (Page::Notes, _, NotesPane::List, true) => {
-                self.open_the_note();
-            }
+            (Page::Notes, _, NotesPane::List, true) => self.open_the_note(),
             (Page::Notes, _, NotesPane::Note, false) => self.leave_the_note(),
             (Page::Notes, _, NotesPane::List, false) if narrow => {
                 self.page = Page::Home;

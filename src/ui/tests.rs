@@ -688,6 +688,19 @@ fn one_tab_stacks_the_list_and_the_note() {
 }
 
 #[test]
+fn a_note_written_in_the_small_hours_is_as_old_as_the_evening_it_came_from() {
+    let mut model = wireframe_model();
+    if let Some(note) = model.notes.get_mut(&1) {
+        // Half past one on the Friday, which is Thursday's working day.
+        note.created_at = at("2025-09-05T01:30:00+02:00[Europe/Copenhagen]");
+    }
+    let mut app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+    app.update(Action::NotesPage);
+
+    assert!(look(&app, 120, 36)[5].contains("yesterday"));
+}
+
+#[test]
 fn a_page_with_no_notes_on_it_names_the_key_that_makes_one() {
     let mut app = empty();
     app.update(Action::NotesPage);
