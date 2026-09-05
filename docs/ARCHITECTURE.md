@@ -97,6 +97,7 @@ task and schedule ids, never cursor positions.
 | `PutPlacement(Placement)`   | Insert; placements are never updated.         |
 | `DeletePlacement(task, day)`| Only ever from the undo of a move.            |
 | `PutSchedule(Schedule)`     | Insert or replace.                            |
+| `DeleteSchedule(id)`        | Only ever from the undo of a CreateSchedule.  |
 | `PutNote(Note)`             | Insert or replace.                            |
 | `PushUndo(UndoEntry)`       |                                               |
 | `PopUndo(id)`               |                                               |
@@ -136,7 +137,7 @@ is a `Model` and `Model::apply`, and it lives in `domain/tests.rs` as
    `Command`. It reads the clock once, here.
 3. If `store.version()` differs from the version the app last saw, the
    app reloads the model first.
-4. `domain::apply(&model, command, &now)` returns a `Change` or a
+4. `domain::apply(&model, command, &now, undo_cap)` returns a `Change` or a
    `Rejected` with the sentence for the hint bar.
 5. `store.commit(&change)`. On success `model.apply(&change)` and the
    version is re-read. On `Conflict` the change is dropped and the hint
@@ -170,17 +171,29 @@ adds it here first, the way a new dependency is added to section 2 first.
 - Types: `Model`, `Task`, `Placement`, `Schedule`, `Rule`, `Note`,
   `UndoEntry`, `Command`, `Change`, `Rejected`, `Store`, `StoreError`,
   and one result type per view: `DayView`, `BacklogView`, `Pile`,
-  `Surfaced`, `SearchResults`, `DayList`.
-- `apply(&Model, Command, now: &Zoned) -> Result<Change, Rejected>`: every
-  user command. Pushes the undo entry as part of the change.
-- `undo(&Model, now) -> Result<Change, Rejected>`: pops the top entry and
-  returns its inverse's change with nothing pushed.
-- `generate_copies(&Model, today) -> Change` and
+  `Surfaced`, `SearchResults`, `DayList`. With them the small types those
+  name: `Id`, `Place`, `FromPlace`, `Weekday`, `MonthDay`, `Write`,
+  `Row`, `DueChip`, `DayCounts`, `PileDay`, `DayListRow`, `ScheduleRow`,
+  `Undone`.
+- `apply(&Model, Command, now: &Zoned, undo_cap: usize) -> Result<Change,
+  Rejected>`: every user command. Pushes the undo entry as part of the
+  change. The cap is the length the undo stack is held to; the domain
+  does not choose the number, so the application passes it in.
+- `undo(&Model, now) -> Result<Undone, Rejected>`: pops the top entry and
+  returns its inverse's change with nothing pushed. `Undone` carries the
+  change, the entry's label, and, when the inverse no longer applied, the
+  `Rejected` saying why the entry was dropped instead: DOMAIN.md section
+  11 wants both a write and a sentence, which a `Result` cannot hold.
+  `Err` is only "there is nothing to undo".
+- `generate_copies(&Model, now: &Zoned) -> Change` and
   `start_review(&Model, today) -> Option<Change>`: the two system
-  operations. Neither touches the undo stack.
+  operations. Neither touches the undo stack. Generation takes an instant
+  rather than a date because the rows it writes carry `created_at` and
+  `placed_at`.
 - `Model::empty()` and `Model::apply(&mut self, &Change)`.
 - Views, each `(&Model, ...dates) -> value`: `day_view`, `backlog_view`,
-  `pile`, `surfaced`, `search`, `day_list`, `next_dates`, `working_day`.
+  `pile`, `surfaced`, `search`, `day_list`, `next_dates`, `working_day`,
+  and `previous_review`, the lower bound of the reminder window.
 
 ### `storage`
 

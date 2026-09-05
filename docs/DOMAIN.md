@@ -55,8 +55,11 @@ Consequences:
 ### Representation
 
 Dates are civil dates (`jiff::civil::Date`), stored as `YYYY-MM-DD`.
-Instants are zoned timestamps, stored as RFC 3339 text with offset, for
-example `2026-09-05T08:12:00+02:00`.
+Instants are zoned timestamps, stored as RFC 3339 text with the offset
+and the time zone it came from, for example
+`2026-09-05T08:12:00+02:00[Europe/Copenhagen]`. The bracketed name is RFC
+9557's addition to RFC 3339; without it the offset alone would not read
+back as the zoned timestamp that was written.
 
 ## 3. Task
 
@@ -361,7 +364,7 @@ application passes in.
 | Reopen(task)             | live, closed                     | `closed_at` none, position = end of its place. Focus unchanged.                                        | Close restoring old `closed_at` and position |
 | SetFocus(task, bool)     | live, on a day                   | Sets focus.                                                                                            | SetFocus(old)                               |
 | Move(task, place)        | live, open, place ≠ current      | Renumber old place; position = end of new; `waiting` = false; placement written if new place is a day and no row exists for that day. | Move back, restoring position and `waiting`, deleting the placement row if this command created it |
-| Reorder(task, position)  | live, position in range          | Moves the task within its place.                                                                       | Reorder(old position)                       |
+| Reorder(task, position)  | live                             | Moves the task within its place. A position past the end is clamped to it, because undo needs that (section 11) and one code path serves both. | Reorder(old position)                       |
 | SetWaiting(task, bool)   | live, open                       | If on a day and bool is true: Move to backlog, then set. Otherwise sets the flag.                      | The reverse Move if one happened, and the old flag |
 | SetDue(task, date/none)  | live                             |                                                                                                        | SetDue(old)                                 |
 | SetRemind(task, date/none) | live                           |                                                                                                        | SetRemind(old)                              |
