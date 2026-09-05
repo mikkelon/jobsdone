@@ -81,6 +81,11 @@ Rules:
   defines as its blue. Reminders therefore use cyan, not blue.
 - Accent marks "where the keyboard is" and "the one thing to press". It
   never marks task state.
+- The cursor row is reverse video rather than the terminal's selection
+  colour, because a terminal does not tell a program running inside it what
+  its selection colour is. Reverse video is the ANSI equivalent: the row
+  takes the foreground as its background, and a coloured chip on it stays
+  that colour, as a block instead of as text.
 - Nothing else. No 256-colour or truecolour values, no bright variants
   except bright black for dim where the terminal has no dim.
 
@@ -107,6 +112,9 @@ Conventions, so the map is guessable:
   extra actions a text field needs are on Alt plus a key (`alt-t` re-add
   from search, `alt-1` to `alt-4` quick dates). `Tab` moves focus to the
   next control, where single keys work again.
+- One collision, and its resolution: in the review `k` is "keep", so the
+  cursor moves there with `j` and the arrow keys and `k` does not move it.
+  Everywhere else `j` and `k` move.
 - The command palette lists every action with its direct key beside it.
   Inside the palette you filter and press Enter; the key shown is for next
   time, outside the palette, so it teaches the map and then stops being

@@ -537,7 +537,7 @@ fn task_row(canvas: &mut Canvas, x: u16, width: u16, y: u16, row: &Row, narrow: 
     }
 }
 
-fn chip_text<'a>(chip: &'a Chip, narrow: bool) -> &'a str {
+fn chip_text(chip: &Chip, narrow: bool) -> &str {
     if narrow { chip.short } else { chip.text }
 }
 

@@ -57,12 +57,19 @@ fn input(canvas: &mut Canvas, x: u16, y: u16, prompt: &str, popup: &Popup) {
 }
 
 /// A footer of key-and-label pairs, in the accent so a key never looks
-/// like its description.
-fn footer(canvas: &mut Canvas, x: u16, y: u16, parts: &[(&str, &str)]) {
+/// like its description. It stops at the box rather than running through
+/// its right border.
+fn footer(canvas: &mut Canvas, x: u16, y: u16, width: u16, parts: &[(&str, &str)]) {
     let mut at = x + 2;
+    let edge = x + width - 2;
     for (key, label) in parts {
-        at = canvas.put(at, y, key, accent());
-        at = canvas.put(at + 1, y, label, dim()) + 1;
+        at = canvas.put(at, y, super::clip(key, edge.saturating_sub(at)), accent());
+        at = canvas.put(
+            at + 1,
+            y,
+            super::clip(label, edge.saturating_sub(at + 1)),
+            dim(),
+        ) + 1;
     }
 }
 
@@ -109,12 +116,10 @@ fn palette(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
         canvas,
         x,
         last + 1,
+        width,
         &[
             ("⏎", "run"),
-            (
-                "esc",
-                "close · the right column is the direct key, for next time",
-            ),
+            ("esc", "close · the key on the right is for next time"),
         ],
     );
 }
@@ -202,12 +207,13 @@ fn search(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     divide(canvas, x, last, width);
     if results.is_empty() {
         let add = format!("add \"{}\" to today", popup.text.trim());
-        footer(canvas, x, last + 1, &[("⏎", &add), ("esc", "close")]);
+        footer(canvas, x, last + 1, width, &[("⏎", &add), ("esc", "close")]);
     } else {
         footer(
             canvas,
             x,
             last + 1,
+            width,
             &[
                 ("⏎", "go to that day"),
                 ("alt-t", "re-add to today as a new task"),

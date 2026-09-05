@@ -602,14 +602,15 @@ const REVIEW_PILE: &[Binding] = &[
         bar: Bar::Right,
         narrow: Bar::Right,
     },
+    // `k` is keep here, so the cursor moves with `j` and the arrows
+    // (DESIGN.md section 4).
     Binding {
         keys: &[
             ("j", Action::Down),
-            ("k", Action::Up),
             ("down", Action::Down),
             ("up", Action::Up),
         ],
-        shown: "j/k",
+        shown: "j ↑/↓",
         label: "move",
         bar: Bar::Off,
         narrow: Bar::Off,
@@ -681,8 +682,12 @@ const REVIEW_SURFACED: &[Binding] = &[
         narrow: Bar::Right,
     },
     Binding {
-        keys: &[("j", Action::Down), ("down", Action::Down)],
-        shown: "j/k",
+        keys: &[
+            ("j", Action::Down),
+            ("down", Action::Down),
+            ("up", Action::Up),
+        ],
+        shown: "j ↑/↓",
         label: "move",
         bar: Bar::Off,
         narrow: Bar::Off,
