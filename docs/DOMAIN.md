@@ -458,7 +458,7 @@ Three groups, each computed at the moment the step is shown:
 |---------------------|-----------------------------------------------------------------|
 | Due                 | section 8, due; overdue first, then by `due_on`                 |
 | Reminders           | section 8, remind; waiting ones dimmed                          |
-| Also starting today | live copies with `scheduled_on` = today, shown for information  |
+| Also starting today | live copies on today with `scheduled_on` = today, shown for information |
 
 ### Gate and session
 

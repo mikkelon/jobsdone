@@ -13,7 +13,7 @@ use super::{
     place_label, plain, row_area, scroll_to, task_row, title_field,
 };
 use crate::app::{App, Decided, Editor, Layout, List, ListArea, Rect as Cells, Review, RowId};
-use crate::domain::Row;
+use crate::domain::{Place, Row};
 use crate::input::{self, Field, ReviewStep};
 
 /// The columns the panel takes, as wireframes 01 and 02 draw it.
@@ -190,8 +190,13 @@ fn note_of(answered: Option<Decided>, row: &Row, today: Date, starting: bool) ->
         None => {}
     }
     if starting {
-        // Nothing is asked of these: the app is saying what it did.
-        return "on today's plan".to_owned();
+        // Nothing is asked of these: the app is saying where the copy it
+        // made this morning is. It says it from the row rather than from
+        // the group, so it cannot claim a plan the task is not on.
+        return match row.place {
+            Place::Day(day) if day == today => "on today's plan".to_owned(),
+            place => format!("now in {}", place_label(place, today)),
+        };
     }
     // The day this task was a must-do for has passed.
     if row.focus {
