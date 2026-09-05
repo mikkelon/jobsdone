@@ -311,7 +311,7 @@ adds it here first, the way a new dependency is added to section 2 first.
   keyboard, and for the repeat card the parameters of every shape, so
   that stepping through them loses nothing; `Editor` is a title being
   typed on a row; `Draft` is the note the keyboard is in, as its id, the
-  body being typed and the caret in characters; `Message` is what the
+  body being typed and the caret in grapheme clusters; `Message` is what the
   hint bar says until
   the next key, and whether `u` takes it back; `MoveChoice` is a row of
   the move card, its key and name from the key table and its day worked
