@@ -132,8 +132,8 @@ pub struct App {
     popup: Option<Popup>,
     cursors: Cursors,
     layout: Layout,
-    /// Phase 6 draws fake data. Phase 7 deletes this field with the
-    /// `demo` module.
+    /// The shell is drawn from fake data until phase 7 connects it to
+    /// the domain, which deletes this field with the `demo` module.
     fixture: Fixture,
 }
 
@@ -197,8 +197,8 @@ impl App {
             Action::MouseDown { column, row } => self.point_at(column, row),
             Action::Scroll { down, .. } => self.step(down),
 
-            // Phase 7 onwards turns the rest into commands. Until the
-            // domain is connected they name what the shell would do.
+            // The rest are changes to the model, which phase 7 onwards
+            // turns into commands. The shell has no model to change yet.
             _ => {}
         }
         Flow::Continue

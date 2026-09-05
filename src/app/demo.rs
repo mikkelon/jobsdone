@@ -1,11 +1,11 @@
 //! The fake data the shell is drawn from, and the shape the screen needs
 //! it in.
 //!
-//! Phase 6 builds the frame; phase 7 connects it to the domain. Until then
-//! every row on screen comes from the tables below, which are the ones the
-//! wireframes are drawn with, including their invented calendar: 5 Sep 2026
-//! is a Friday there and a Saturday in the world, so the day labels are
-//! written out rather than formatted from [`crate::app::App::today`].
+//! Until phase 7 connects the shell to the domain, every row on screen
+//! comes from the tables below. They hold the data the wireframes are
+//! drawn with, including their invented calendar: 5 Sep 2026 is a Friday
+//! there and a Saturday in the world, so the day labels are written out
+//! rather than formatted from [`crate::app::App::today`].
 //!
 //! Phase 7 replaces `Fixture` with the domain's views, formats the dates
 //! from the clock, and deletes this file. Nothing else knows the data is

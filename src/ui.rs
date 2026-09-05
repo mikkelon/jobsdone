@@ -415,19 +415,7 @@ fn pane(
     });
 
     if view.is_empty() && !view.empty.what.is_empty() {
-        let middle = |text: &str| x + width.saturating_sub(count(text)) / 2;
-        canvas.put(
-            middle(view.empty.what),
-            rows.top + 2,
-            view.empty.what,
-            dim(),
-        );
-        canvas.put(
-            middle(view.empty.keys),
-            rows.top + 3,
-            view.empty.keys,
-            dim(),
-        );
+        empty_state(canvas, column, rows.top, view);
         return;
     }
 
@@ -437,6 +425,7 @@ fn pane(
     let mut y = rows.top;
 
     for (at, group) in view.groups.iter().enumerate() {
+        // A blank line between groups, and none before the first.
         if at > 0 {
             y += 1;
         }
@@ -480,6 +469,14 @@ fn pane(
             y += 1;
         }
     }
+}
+
+/// What an empty list is for, and the one or two keys that fill it
+/// (DESIGN.md section 10). No illustration, no encouragement.
+fn empty_state(canvas: &mut Canvas, column: Column, top: u16, view: &PaneView) {
+    let middle = |text: &str| column.x + column.width.saturating_sub(count(text)) / 2;
+    canvas.put(middle(view.empty.what), top + 2, view.empty.what, dim());
+    canvas.put(middle(view.empty.keys), top + 3, view.empty.keys, dim());
 }
 
 /// `Today Fri 5 Sep                    6 open · 2 done · 1 moved`
