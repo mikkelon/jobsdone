@@ -9,7 +9,7 @@ use std::collections::BTreeMap;
 use jiff::Zoned;
 use jiff::civil::Date;
 
-use super::model::{FromPlace, Id, Model, Place, REVIEW_BEFORE, REVIEW_ON, Task};
+use super::model::{FromPlace, Id, Model, Note, Place, REVIEW_BEFORE, REVIEW_ON, Task};
 use super::rule::Rule;
 use super::working_day;
 
@@ -142,6 +142,21 @@ pub struct DayListRow {
     pub kept: usize,
     pub done: usize,
     pub open: usize,
+}
+
+/// The scratchpad's list, and the count the home page shows beside `n`.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct NotesView {
+    pub rows: Vec<NoteRow>,
+    pub count: usize,
+}
+
+/// A note as the list draws it: its first line stands for the whole body.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct NoteRow {
+    pub note: Id,
+    pub first_line: String,
+    pub updated_at: Zoned,
 }
 
 // ---- the views -------------------------------------------------------
@@ -369,6 +384,25 @@ pub fn day_list(model: &Model) -> DayList {
     let mut days: Vec<DayListRow> = days.into_values().collect();
     days.reverse();
     DayList { days }
+}
+
+/// The live notes, newest first. Editing does not move a note, so the
+/// order is the order they were created in (DOMAIN.md section 15).
+pub fn notes(model: &Model) -> NotesView {
+    let mut live: Vec<&Note> = model.notes.values().filter(|note| note.is_live()).collect();
+    live.sort_by(|a, b| b.created_at.cmp(&a.created_at).then(b.id.cmp(&a.id)));
+
+    NotesView {
+        count: live.len(),
+        rows: live
+            .into_iter()
+            .map(|note| NoteRow {
+                note: note.id,
+                first_line: note.body.lines().next().unwrap_or_default().to_owned(),
+                updated_at: note.updated_at.clone(),
+            })
+            .collect(),
+    }
 }
 
 // ---- rows ------------------------------------------------------------

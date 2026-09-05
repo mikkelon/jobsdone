@@ -171,10 +171,10 @@ adds it here first, the way a new dependency is added to section 2 first.
 - Types: `Model`, `Task`, `Placement`, `Schedule`, `Rule`, `Note`,
   `UndoEntry`, `Command`, `Change`, `Rejected`, `Store`, `StoreError`,
   and one result type per view: `DayView`, `BacklogView`, `Pile`,
-  `Surfaced`, `SearchResults`, `DayList`. With them the small types those
-  name: `Id`, `Place`, `FromPlace`, `Weekday`, `MonthDay`, `Write`,
-  `Row`, `DueChip`, `DayCounts`, `PileDay`, `DayListRow`, `ScheduleRow`,
-  `Undone`.
+  `Surfaced`, `SearchResults`, `DayList`, `NotesView`. With them the small
+  types those name: `Id`, `Place`, `FromPlace`, `Weekday`, `MonthDay`,
+  `Write`, `Row`, `DueChip`, `DayCounts`, `PileDay`, `DayListRow`,
+  `ScheduleRow`, `NoteRow`, `Undone`.
 - `apply(&Model, Command, now: &Zoned, undo_cap: usize) -> Result<Change,
   Rejected>`: every user command. Pushes the undo entry as part of the
   change. The cap is the length the undo stack is held to; the domain
@@ -192,8 +192,9 @@ adds it here first, the way a new dependency is added to section 2 first.
   `placed_at`.
 - `Model::empty()` and `Model::apply(&mut self, &Change)`.
 - Views, each `(&Model, ...dates) -> value`: `day_view`, `backlog_view`,
-  `pile`, `surfaced`, `search`, `day_list`, `next_dates`, `working_day`,
-  and `previous_review`, the lower bound of the reminder window.
+  `pile`, `surfaced`, `search`, `day_list`, `notes`, `next_dates`,
+  `working_day`, and `previous_review`, the lower bound of the reminder
+  window.
 
 ### `storage`
 

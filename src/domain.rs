@@ -26,9 +26,9 @@ pub use self::model::{
 pub use self::rule::{MonthDay, Rule, Weekday, next_dates};
 pub use self::system::{generate_copies, start_review};
 pub use self::view::{
-    BacklogView, DayCounts, DayList, DayListRow, DayView, DueChip, Pile, PileDay, Row, ScheduleRow,
-    SearchResults, Surfaced, backlog_view, day_list, day_view, pile, previous_review, search,
-    surfaced,
+    BacklogView, DayCounts, DayList, DayListRow, DayView, DueChip, NoteRow, NotesView, Pile,
+    PileDay, Row, ScheduleRow, SearchResults, Surfaced, backlog_view, day_list, day_view, notes,
+    pile, previous_review, search, surfaced,
 };
 
 /// The hour a day begins, so 01:30 on Saturday belongs to Friday. A
