@@ -866,7 +866,9 @@ impl App {
         let waiting = |row: &&Id| review.decision(**row).is_none();
         // From here on, then from the top; when every row has been
         // answered the cursor stays where it is and Enter is what is left.
-        let next = rows[at + 1..]
+        let next = rows
+            .get(at + 1..)
+            .unwrap_or_default()
             .iter()
             .find(waiting)
             .or_else(|| rows[..at].iter().find(waiting))
