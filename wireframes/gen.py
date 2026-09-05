@@ -217,7 +217,7 @@ def page(name, title, grids, notes):
 
 
 def sample_today(g, focus='left', cursor=True, div=None, wide=False):
-    lx, lw, rx, rw, y0, y1 = frame2(g, ('Today', 'Fri 5 Sep', '6 open · 2 done'),
+    lx, lw, rx, rw, y0, y1 = frame2(g, ('Today', 'Fri 5 Sep', '6 open · 2 done · 1 moved'),
                                    ('Backlog', '', '12 · 3 waiting'), focus, div)
     y = y0
     group(g, lx, lw, y, 'Focus'); y += 1
@@ -231,7 +231,9 @@ def sample_today(g, focus='left', cursor=True, div=None, wide=False):
     add_row(g, lx, lw, y); y += 2
     group(g, lx, lw, y, 'Done', 2); y += 1
     task(g, lx, lw, y, 'Morning review', state='done', done_at='08:12'); y += 1
-    task(g, lx, lw, y, 'Pay electricity bill', state='done', done_at='08:30'); y += 1
+    task(g, lx, lw, y, 'Pay electricity bill', state='done', done_at='08:30'); y += 2
+    group(g, lx, lw, y, 'Moved', 1); y += 1
+    task(g, lx, lw, y, 'Chase the hosting invoice', state='moved', meta='to Mon 8 Sep'); y += 1
     y = y0
     bl = [('Migrate CI to the new runners', [('due', 'due 12 Sep')]),
           ('Write the Q4 planning doc', [('due', 'due 30 Sep')]),
@@ -273,9 +275,10 @@ def p03():
     g.callout(lx + 8, y0, 2)
     g.callout(lx + 8, y0 + 4, 3)
     g.callout(lx + 10, y0 + 11, 4)
-    g.callout(rx + 13, y0 + 11, 5)
+    g.callout(lx + 11, y0 + 15, 5)
+    g.callout(rx + 13, y0 + 11, 6)
     hx = hints(g, g.h - 1, 'Today', TODAY_HINTS, PANE_KEYS)
-    g.callout(hx, g.h - 1, 6)
+    g.callout(hx, g.h - 1, 7)
 
     w = Grid(160, 48)
     today_strip(w)
@@ -287,11 +290,13 @@ def p03():
 <li>Status line: which day, how to move between days, and the only global indicators: the review count (red when non-zero), notes, search, commands, help.</li>
 <li>Focus: the few tasks that must get done today. Bold and listed first. <kbd>f</kbd> toggles.</li>
 <li>Plan: the ordered working list, manual order only. The cursor row uses the terminal's selection colour so chips keep their colours.</li>
-<li>Done: closed tasks drop here in the order closed, with the time.</li>
+<li>Done: closed tasks drop here in the order closed, with the time. A task closed out of Focus keeps a <em>was focus</em> marker, because Focus is a property of the task, not of where the row sits.</li>
+<li>Moved: a task planned for this day and then moved away leaves a pointer here, at normal weight, saying where it is now. It appears the moment the task is moved, not the next morning.</li>
 <li>Backlog is one flat list; Waiting is the same list under its own heading. Chips are bracketed text in the theme's yellow, cyan and magenta, so they still read in plain grey.</li>
 <li>Hint bar for the focused pane, lazygit-style. One key per action; mouse click and wheel also work.</li>
 </ol>
 <div class="flow"><b>Floating vs tiled</b>The floating window at 120×36 is the primary layout. The same layout runs in a full-width tile; it just shows more rows. Nothing is hidden at the small size except a few characters of row metadata.</div>
+<div class="flow"><b>The same four groups on every day</b>Focus, Plan, Done and Moved, always in that order, on today and on any past or future day (screen 08). An empty group is not drawn, which is why today usually has no Moved group and a finished past day usually has no Focus group. Nothing about a day is re-arranged when it stops being today.</div>
 <div class="flow"><b>Open and close at will</b>Every change is written immediately. Quitting with <kbd>q</kbd> or closing the window never asks anything, and reopening lands where you were.</div>''')
 
 
@@ -407,7 +412,9 @@ def p04():
     add_row(g, lx, lw, y); y += 2
     group(g, lx, lw, y, 'Done', 2); y += 1
     task(g, lx, lw, y, 'Morning review', state='done'); y += 1
-    task(g, lx, lw, y, 'Pay electricity bill', state='done'); y += 1
+    task(g, lx, lw, y, 'Pay electricity bill', state='done'); y += 2
+    group(g, lx, lw, y, 'Moved', 1); y += 1
+    task(g, lx, lw, y, 'Chase the hosting invoice', state='moved', meta='to Mon 8 Sep'); y += 1
     hints(g, g.h - 1, 'Today', [('space', 'done'), ('f', 'focus'), ('a', 'add'), ('b', 'backlog'), ('x', 'del')], [('?', 'more')])
     g.callout(g.w - 10, g.h - 1, 3)
     page('04-narrow', 'Half-width tile', [('80×44 · half-width tile, beside an editor', g)], '''
@@ -415,7 +422,7 @@ def p04():
 <p>When the window is tiled into a half column the two panes collapse to one, switched by a tab row. The floating window never hits this; a tiled one often will.</p>
 <ol>
 <li>Tabs replace panes. <kbd>h</kbd>/<kbd>l</kbd> or <kbd>tab</kbd> switch tabs. Counts keep the other tabs informative. Notes becomes a tab.</li>
-<li>Rows drop text metadata first and keep glyph-only chips. Titles get the width.</li>
+<li>Rows drop text metadata first and keep glyph-only chips. Titles get the width. Close times go; where a moved task went stays, because that is the whole content of the row.</li>
 <li>The hint bar shows the top five keys and defers to <kbd>?</kbd>.</li>
 </ol>
 <div class="flow"><b>Pull from backlog when narrow</b><kbd>l</kbd> to the Backlog tab, <kbd>t</kbd> on a task: it moves to Today, the Today count increments. No confirmation.</div>
@@ -452,15 +459,17 @@ def p05():
     g.put(5, y, 'Order is remembered per day. Focus items reorder within Focus.', 'd')
     grids.append(('C · Reorder (J/K, or drag)', g))
 
-    g = mini(11); y = 0
+    g = mini(12); y = 0
     group(g, 0, 80, y, 'Focus'); y += 1
     task(g, 0, 80, y, 'Ship invoice export', focus=True); y += 1
     task(g, 0, 80, y, 'Book dentist', focus=True, cursor=True, meta='just marked'); y += 2
     group(g, 0, 80, y, 'Plan'); y += 1
     task(g, 0, 80, y, 'Fix the flaky migration test'); y += 2
-    group(g, 0, 80, y, 'Done', 1); y += 1
+    group(g, 0, 80, y, 'Done', 2); y += 1
     task(g, 0, 80, y, "Review Anna's PR", state='done', done_at='10:41'); y += 1
-    g.put(5, y, 'space on a done task reopens it at the end of the plan.', 'd')
+    task(g, 0, 80, y, 'Reply to the tender questions', state='done', meta='was focus', done_at='11:02'); y += 1
+    g.put(5, y, 'space on a done task reopens it at the end of the plan.', 'd'); y += 1
+    g.put(5, y, 'Closing does not erase Focus; the row keeps "was focus".', 'd')
     grids.append(('D · Focus (f) and close (space)', g))
 
     g = mini(13); y = 0
@@ -537,7 +546,7 @@ def p06():
 def p07():
     g = Grid(120, 36)
     today_strip(g)
-    lx, lw, rx, rw, y0, y1 = frame2(g, ('Today', 'Fri 5 Sep', '6 open · 2 done'), ('Backlog', '', '12 · 3 waiting'), 'left')
+    lx, lw, rx, rw, y0, y1 = frame2(g, ('Today', 'Fri 5 Sep', '6 open · 2 done · 1 moved'), ('Backlog', '', '12 · 3 waiting'), 'left')
     y = y0
     group(g, lx, lw, y, 'Focus'); y += 1
     task(g, lx, lw, y, 'Ship invoice export', focus=True, cursor=True, chips=[('rep', '↻ every Fri')]); g.callout(lx + 26, y, 1); y += 1
@@ -589,15 +598,15 @@ def p08():
     lx, lw, rx, rw, y0, y1 = frame2(g, ('Mon 1 Sep', 'past day', '8 planned · 3 done · 2 open · 3 moved'), ('Days', '', 'g go to date'), 'left')
     g.callout(rx + rw - 15, 2, 4)
     y = y0
-    group(g, lx, lw, y, 'Focus'); g.callout(lx + 8, y, 2); y += 1
-    task(g, lx, lw, y, 'Send the contract draft', state='done', done_at='11:20'); y += 2
     group(g, lx, lw, y, 'Plan'); y += 1
-    task(g, lx, lw, y, 'Weekly planning', state='done', done_at='09:05'); y += 1
-    task(g, lx, lw, y, 'Call the accountant about VAT', cursor=True, chips=[('pile', 'on the pile')]); g.callout(lx + 36, y, 3); y += 1
-    task(g, lx, lw, y, 'Reply to Anna', state='done', done_at='15:48'); y += 1
+    task(g, lx, lw, y, 'Call the accountant about VAT', cursor=True, chips=[('pile', 'on the pile')]); g.callout(lx + 36, y, 2); y += 1
     task(g, lx, lw, y, 'Write standup notes', chips=[('rep', '↻'), ('pile', 'on the pile')]); y += 1
     add_row(g, lx, lw, y, 'add a task to this day'); y += 2
-    group(g, lx, lw, y, 'Moved', 3); g.callout(lx + 10, y, 5); y += 1
+    group(g, lx, lw, y, 'Done', 3); g.callout(lx + 10, y, 3); y += 1
+    task(g, lx, lw, y, 'Weekly planning', state='done', done_at='09:05'); y += 1
+    task(g, lx, lw, y, 'Send the contract draft', state='done', meta='was focus', done_at='11:20'); y += 1
+    task(g, lx, lw, y, 'Reply to Anna', state='done', done_at='15:48'); y += 2
+    group(g, lx, lw, y, 'Moved', 3); g.callout(lx + 11, y, 5); y += 1
     task(g, lx, lw, y, 'Prepare slides for Monday', state='moved', meta='to today'); y += 1
     task(g, lx, lw, y, 'Book the venue', state='moved', meta='to Wed 3 Sep'); y += 1
     task(g, lx, lw, y, 'Order new office chair', state='moved', meta='to backlog'); y += 1
@@ -619,13 +628,13 @@ def p08():
     hints(g, g.h - 1, 'Past day', [('[ ]', 'day'), ('.', 'today'), ('g', 'go to date'), ('space', 'close'), ('t', 'to today'), ('b', 'to backlog'), ('m', 'move…'), ('⏎', 'follow moved')])
     page('08-history', 'History', [('120×36 · floating window', g)], '''
 <h2>History: browsing past days</h2>
-<p>History is not a separate screen: it is the same day view stepped backwards. Past days are read as they were, and the two panes stay in place.</p>
+<p>History is not a separate screen: it is the same day view stepped backwards. A past day is drawn exactly as it was while it was today, and the two panes stay in place.</p>
 <ol>
 <li>Stepping back with <kbd>[</kbd> changes the day pane. The status line says how far back you are and offers one key home.</li>
-<li>A past day shows what was planned and what got closed, with close times. Focus marking is kept.</li>
 <li>Unfinished tasks on a past day are the review pile seen from the other side, and can be dealt with here with the same keys.</li>
+<li>Closed tasks sit in Done in the order they were closed, with the time, exactly where they dropped while the day was today; one closed out of Focus carries <em>was focus</em>, so the marking is kept without the row jumping back up. Focus is empty on this day and so is not drawn: a day is not re-arranged just because it is no longer today.</li>
 <li>While browsing the past, the backlog pane gives way to a day list with done counts. Days with nothing planned are skipped. <kbd>l</kbd> then <kbd>.</kbd> restores the backlog.</li>
-<li>Tasks moved off this day get their own group under the plan, like Done. An arrow in the box says "not here any more", and the right side says where: today, another day, or the backlog. Normal weight, because they are not finished; only Done is dim. Each row is a pointer, not a copy: <kbd>⏎</kbd> jumps there. "On the pile" stays reserved for tasks still open on this day.</li>
+<li>Tasks moved off this day get their own group at the bottom, under Done. An arrow in the box says "not here any more", and the right side says where: today, another day, or the backlog. Normal weight, because they are not finished; only Done is dim. Each row is a pointer, not a copy: <kbd>⏎</kbd> jumps there. "On the pile" stays reserved for tasks still open on this day.</li>
 </ol>
 <div class="flow"><b>Future days</b><kbd>]</kbd> from today steps forward. A future day shows already-moved tasks and the recurring copies that will be created, dimmed. Adding to a future day is allowed.</div>''')
 

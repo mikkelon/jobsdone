@@ -3,7 +3,7 @@
 
  ‹ Today · Fri 5 Sep › [ ] day g go to date                       ● 2 in review   4 notes n   / search   : commands   ?
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- Today Fri 5 Sep                           6 open · 2 done   Backlog                                     12 · 3 waiting
+ Today Fri 5 Sep                 6 open · 2 done · 1 moved   Backlog                                     12 · 3 waiting
 ───────────────────────────────────────────────────────────┬────────────────────────────────────────────────────────────
  FOCUS ─────────────┌──────────────────────────────────────────────────────────────────────────────┐       [due 12 Sep]
  [ ] Ship invoice ex│ /  invoice▏                                                        9 matches │       [due 30 Sep]
@@ -20,8 +20,8 @@
  [x] Morning review │ [x] Set up invoice numbering                                       Mon 4 Aug │          [waiting]
  [x] Pay electricity│ [x] Invoice template v2                                           Fri 18 Jul │aiting]  [◷ 15 Sep]
                     │ [x] Ask Anna about invoice terms                                   Wed 2 Jul │          [waiting]
-                    │                                                                              │
-                    │──────────────────────────────────────────────────────────────────────────────│
+ MOVED 1 ───────────│                                                                              │
+ [→] Chase the hosti│──────────────────────────────────────────────────────────────────────────────│
                     │ ⏎ go to that day alt-t re-add to today as a new task esc close               │
                     │                                                                              │
                     └──────────────────────────────────────────────────────────────────────────────┘

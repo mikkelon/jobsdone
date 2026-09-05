@@ -50,10 +50,11 @@
  PLAN ─────────────────────────────────────────────────────────────────────────
  [ ] Fix the flaky migration test
 
- DONE 1 ───────────────────────────────────────────────────────────────────────
+ DONE 2 ───────────────────────────────────────────────────────────────────────
  [x] Review Anna's PR                                                     10:41
+ [x] Reply to the tender questions                             was focus  11:02
      space on a done task reopens it at the end of the plan.
-
+     Closing does not erase Focus; the row keeps "was focus".
 
 
 == E · Move to a day… (m), the only popup here

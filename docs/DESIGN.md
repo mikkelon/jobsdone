@@ -132,20 +132,30 @@ History is not a separate screen. It is the day pane stepped backwards with
 Future days work the same way forwards.
 
 A past day shows every task that was planned for it, in three states: closed
-(dim, with the time), still open (marked "on the pile", in red), and moved
-away. Moved tasks sit in their own group under the plan, like Done, at
-normal weight: an arrow in the box (`[→]`) says the task is not here any
-more, and the right side says where it is now ("to today", "to Wed 3 Sep",
-"to backlog"). Dim is reserved for finished. A moved row is a pointer, not
-a copy; Enter on it jumps there. Moving a task never rewrites what was
-planned.
+(dim, with the time, in the Done group), still open (marked "on the pile",
+in red, in Focus or Plan), and moved away. Moved tasks sit in their own
+group at the bottom, under Done, at normal weight: an arrow in the box
+(`[→]`) says the task is not here any more, and the right side says where it
+is now ("to today", "to Wed 3 Sep", "to backlog"). Dim is reserved for
+finished. A moved row is a pointer, not a copy; Enter on it jumps there.
+Moving a task never rewrites what was planned.
+
+A past day is drawn exactly as it was while it was today: the same four
+groups in the same order, Focus, Plan, Done, Moved, and a group with
+nothing in it is not drawn at all. That is why today rarely shows a Moved
+group and a finished past day rarely shows a Focus one.
 
 ## 7. Nothing moves on its own
 
 The app never reorders, carries over, expires, or tidies.
 
 - Task order on a day is manual and remembered. Closed tasks drop to a Done
-  group at the bottom, in the order they were closed.
+  group at the bottom, in the order they were closed; one closed out of
+  Focus keeps a "was focus" marker there, because closing changes where the
+  row sits, not what the task was. A task moved off a day leaves its
+  pointer in that day's Moved group the moment it is moved.
+- A day is laid out the same way whether or not it is today. Nothing is
+  re-grouped behind the person's back, least of all overnight.
 - Unfinished tasks stay on their day, however old, until the person acts.
   The review shows their age relatively so the cost of ignoring them is
   visible.

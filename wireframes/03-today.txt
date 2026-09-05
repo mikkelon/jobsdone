@@ -3,7 +3,7 @@
 
  ‹ Today · Fri 5 Sep › [ ] day g go to date                       ● 2 in review   4 notes n   / search   : commands   ?
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- Today Fri 5 Sep                           6 open · 2 done   Backlog                                     12 · 3 waiting
+ Today Fri 5 Sep                 6 open · 2 done · 1 moved   Backlog                                     12 · 3 waiting
 ───────────────────────────────────────────────────────────┬────────────────────────────────────────────────────────────
  FOCUS ─────────────────────────────────────────────────── │ [ ] Migrate CI to the new runners             [due 12 Sep]
  [ ] Ship invoice export                     [↻ every Fri] │ [ ] Write the Q4 planning doc                 [due 30 Sep]
@@ -20,8 +20,8 @@
  [x] Morning review                                  08:12 │ [ ] Quote from the electrician                   [waiting]
  [x] Pay electricity bill                            08:30 │ [ ] Feedback on the proposal         [waiting]  [◷ 15 Sep]
                                                            │ [ ] Parcel from the supplier                     [waiting]
-                                                           │
-                                                           │
+ MOVED 1 ───────────────────────────────────────────────── │
+ [→] Chase the hosting invoice                to Mon 8 Sep │
                                                            │
                                                            │
                                                            │
@@ -42,7 +42,7 @@
 
  ‹ Today · Fri 5 Sep › [ ] day g go to date                                                               ● 2 in review   4 notes n   / search   : commands   ?
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- Today Fri 5 Sep                                               6 open · 2 done   Backlog                                                         12 · 3 waiting
+ Today Fri 5 Sep                                     6 open · 2 done · 1 moved   Backlog                                                         12 · 3 waiting
 ───────────────────────────────────────────────────────────────────────────────┬────────────────────────────────────────────────────────────────────────────────
  FOCUS ─────────────────────────────────────────────────────────────────────── │ [ ] Migrate CI to the new runners                                 [due 12 Sep]
  [ ] Ship invoice export                                         [↻ every Fri] │ [ ] Write the Q4 planning doc                                     [due 30 Sep]
@@ -59,8 +59,8 @@
  [x] Morning review                                                      08:12 │ [ ] Quote from the electrician                                       [waiting]
  [x] Pay electricity bill                                                08:30 │ [ ] Feedback on the proposal                             [waiting]  [◷ 15 Sep]
                                                                                │ [ ] Parcel from the supplier                                         [waiting]
-                                                                               │
-                                                                               │
+ MOVED 1 ───────────────────────────────────────────────────────────────────── │
+ [→] Chase the hosting invoice                                    to Mon 8 Sep │
                                                                                │
                                                                                │
                                                                                │
