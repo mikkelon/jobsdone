@@ -748,6 +748,22 @@ fn no_size_the_window_can_take_makes_the_drawing_panic() {
 }
 
 #[test]
+fn no_size_the_notes_page_can_take_makes_the_drawing_panic() {
+    let mut app = app();
+    app.update(Action::NotesPage);
+    // The list, then the note open under it, then the list again.
+    for action in [Action::Confirm, Action::Insert('x'), Action::Cancel] {
+        app.update(action);
+        assert_eq!(app.page(), Page::Notes);
+        for width in [1, 2, 23, 24, 25, 40, 45, 99, 100, 101, 120, 200] {
+            for height in [1, 2, 8, 9, 10, 11, 12, 13, 36, 48, 90] {
+                look(&app, width, height);
+            }
+        }
+    }
+}
+
+#[test]
 fn the_narrow_hint_bar_names_five_keys_and_defers_to_help() {
     let mut app = app();
 

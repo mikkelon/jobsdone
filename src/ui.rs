@@ -457,7 +457,8 @@ fn one_pane(canvas: &mut Canvas, app: &App, rows: &Rows, layout: &mut Layout) {
         top: rows.top,
         bottom: rows.bottom,
     };
-    if app.page() != Page::Notes {
+    // Too short to stack the note under the list: the list is the tab.
+    if app.page() != Page::Notes || whole.height() < 6 {
         pane(canvas, app, app.focused(), whole, rows, true, layout);
         return;
     }
@@ -492,7 +493,7 @@ struct Column {
 
 impl Column {
     fn height(self) -> u16 {
-        self.bottom - self.top + 1
+        (self.bottom + 1).saturating_sub(self.top)
     }
 }
 
