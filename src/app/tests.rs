@@ -657,6 +657,82 @@ fn the_move_card_acts_on_the_row_it_was_opened_on() {
     assert_eq!(app.model().task(first).and_then(|task| task.day), None);
 }
 
+// ---- waiting ---------------------------------------------------------
+
+#[test]
+fn w_moves_a_backlog_row_under_waiting_and_back() {
+    let mut app = started();
+    app.update(Action::PaneRight);
+    let blocked = add(&mut app, "Quote from the electrician");
+    add(&mut app, "Clean out the garage");
+    app.update(Action::Up);
+
+    app.update(Action::Waiting);
+    assert_eq!(hint(&app), "Waiting on \"Quote from the electrician\"");
+    assert_eq!(
+        groups(&app, List::Backlog),
+        [Group::Ordinary, Group::Waiting]
+    );
+    assert_eq!(
+        titles(&app, List::Backlog),
+        ["Clean out the garage", "Quote from the electrician"]
+    );
+    // The row moved between the groups of one pane; the cursor is a flag
+    // behind, not a task behind.
+    assert_eq!(app.cursor(List::Backlog), Some(blocked));
+
+    app.update(Action::Waiting);
+    assert_eq!(
+        hint(&app),
+        "No longer waiting on \"Quote from the electrician\""
+    );
+    assert_eq!(
+        groups(&app, List::Backlog),
+        [Group::Ordinary, Group::Ordinary]
+    );
+}
+
+#[test]
+fn w_on_a_day_task_sends_it_to_the_backlog_as_waiting() {
+    let mut app = started();
+    add(&mut app, "Chase the hosting invoice");
+    let next = add(&mut app, "Review Anna's PR");
+    app.update(Action::Up);
+
+    app.update(Action::Waiting);
+
+    assert_eq!(
+        titles(&app, List::Backlog),
+        ["Chase the hosting invoice"],
+        "waiting is a backlog state"
+    );
+    assert!(app.backlog().waiting.len() == 1);
+    // A move like any other: the pointer stays on the day and the cursor
+    // steps to the next row of the group it left.
+    assert_eq!(groups(&app, List::Day), [Group::Plan, Group::Moved]);
+    assert_eq!(app.cursor(List::Day), Some(next));
+
+    app.update(Action::Undo);
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Chase the hosting invoice", "Review Anna's PR"]
+    );
+    assert!(app.backlog().waiting.is_empty());
+}
+
+#[test]
+fn pulling_a_waiting_task_onto_today_clears_the_flag() {
+    let mut app = started();
+    app.update(Action::PaneRight);
+    let task = add(&mut app, "Feedback on the proposal");
+    app.update(Action::Waiting);
+
+    app.update(Action::ToToday);
+
+    assert!(app.model().task(task).is_some_and(|task| !task.waiting));
+    assert_eq!(titles(&app, List::Day), ["Feedback on the proposal"]);
+}
+
 // ---- delete and undo -------------------------------------------------
 
 #[test]
@@ -723,7 +799,6 @@ fn a_key_a_later_phase_owns_says_so_and_does_nothing() {
 
     for (action, said) in [
         (Action::DueBy, "Due dates and reminders are not built yet."),
-        (Action::Waiting, "Waiting is not built yet."),
         (Action::Repeat, "The repeat card is not built yet."),
         (Action::PrevDay, "Stepping through days is not built yet."),
         (Action::GoToDate, "The date card is not built yet."),

@@ -329,7 +329,7 @@ impl App {
             Action::DueBy | Action::RemindOn => {
                 self.not_yet("Due dates and reminders are not built yet.");
             }
-            Action::Waiting => self.not_yet("Waiting is not built yet."),
+            Action::Waiting => self.wait_on_someone(),
             Action::Repeat => self.not_yet("The repeat card is not built yet."),
             Action::Keep => {}
 
@@ -606,6 +606,31 @@ impl App {
         };
         let focus = !task.focus;
         self.run(Command::SetFocus { task: id, focus });
+    }
+
+    /// `w`: blocked on someone or something else. Waiting is a backlog
+    /// state, so on a day task the domain moves the task to the backlog
+    /// with the flag, and the cursor steps on as it does for any move
+    /// (DOMAIN.md section 9).
+    fn wait_on_someone(&mut self) {
+        let Some(id) = self.task_at_cursor() else {
+            return;
+        };
+        let Some(task) = self.model.live_task(id) else {
+            return;
+        };
+        let waiting = !task.waiting;
+        let leaves = waiting && task.day.is_some();
+        let list = self.focused();
+        let next = leaves.then(|| self.neighbour_of(list, id)).flatten();
+
+        if self
+            .run(Command::SetWaiting { task: id, waiting })
+            .is_some()
+            && let Some(next) = next
+        {
+            self.set_cursor(list, next);
+        }
     }
 
     /// `x`: no confirm, and `u` in the hint bar until the next key.

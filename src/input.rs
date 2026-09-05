@@ -390,6 +390,16 @@ const HOME_DAY: &[Binding] = home_table![
         bar: Bar::Left,
         narrow: Bar::Short(Side::Left, "del"),
     },
+    // Waiting is a backlog state, so on a day task it is a move as well
+    // as a flag (DOMAIN.md section 9). The bar is full by here, and the
+    // palette and the help overlay teach it.
+    Binding {
+        keys: &[("w", Action::Waiting)],
+        shown: "w",
+        label: "waiting",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
 ];
 
 const HOME_BACKLOG: &[Binding] = home_table![
