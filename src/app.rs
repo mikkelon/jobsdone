@@ -503,8 +503,11 @@ impl App {
             Action::MoveUp => self.reorder(false),
             Action::ToToday => self.move_it(MoveTarget::Day(self.today)),
             Action::ToBacklog => self.move_it(MoveTarget::Backlog),
-            Action::Tomorrow | Action::NextWorkDay | Action::NextMonday => self.quick_pick(action),
-            Action::InAWeek | Action::EndOfMonth => self.quick_pick(action),
+            Action::Tomorrow
+            | Action::NextWorkDay
+            | Action::NextMonday
+            | Action::InAWeek
+            | Action::EndOfMonth => self.quick_pick(action),
             Action::ClearDate => self.take_the_date(None),
             Action::MoveToDay => self.open_the_move_card(),
             Action::GoToDate => self.pick_a_date(),
