@@ -302,7 +302,8 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
         dim()
     };
     let day = (format!("Today · {}", day_label(app.today())), bold());
-    let notes = format!("{} notes", app.notes().count);
+    let count = app.notes().count;
+    let notes = format!("{count} note{}", if count == 1 { "" } else { "s" });
 
     let (left, right) = match (app.page(), narrow) {
         (Page::Home, true) => (
@@ -1088,7 +1089,7 @@ fn open_note(
             String::new()
         },
         sections: Vec::new(),
-        empty: ["Nothing open.", "⏎ opens the note the cursor is on"],
+        empty: ["No notes yet.", "a writes one"],
     };
     match header_row {
         Some(y) => header(canvas, x, width, y, &view, focused),

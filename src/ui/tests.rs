@@ -667,6 +667,41 @@ fn the_open_note_is_a_text_area_beside_the_list() {
     assert_eq!(drawn[34], wanted[34], "the hint bar of the note");
 }
 
+#[test]
+fn one_tab_stacks_the_list_and_the_note() {
+    let mut app = app();
+    app.update(Action::NotesPage);
+    app.update(Action::Confirm);
+    let drawn = look(&app, 80, 44);
+
+    // The list keeps to its own rows, and the note's header becomes the
+    // rule between the two.
+    assert!(drawn[5].starts_with("  ▪ Mention to Anna:"));
+    assert!(drawn[10].starts_with("  +  new note"));
+    assert!(
+        drawn[11].starts_with(" Note Thu 4 Sep 16:40 ─────"),
+        "{:?}",
+        drawn[11]
+    );
+    assert_eq!(drawn[12], "  Mention to Anna:");
+    assert_eq!(drawn[42], " NOTE  type to edit  esc back");
+}
+
+#[test]
+fn a_page_with_no_notes_on_it_names_the_key_that_makes_one() {
+    let mut app = empty();
+    app.update(Action::NotesPage);
+    let drawn = look(&app, 120, 36);
+
+    assert!(drawn[1].starts_with(" Notes 0 notes"));
+    assert!(drawn[6].starts_with("  +  new note"), "{:?}", drawn[6]);
+    assert!(drawn.join("\n").contains("No notes yet."));
+
+    // And one note in is one note, not "1 notes".
+    app.update(Action::Add);
+    assert!(look(&app, 120, 36)[1].starts_with(" Notes 1 note "));
+}
+
 /// Everything to the right of the divider, which is the open note.
 fn right(row: &str) -> String {
     row.chars()

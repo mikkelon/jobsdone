@@ -302,9 +302,6 @@ impl App {
                 return Flow::Quit;
             }
             Action::Tick | Action::FocusGained => {
-                // The pause between keystrokes is when a note body is
-                // written (ARCHITECTURE.md rule 8).
-                self.save_the_note();
                 // The clock is read here and nowhere else, so the date
                 // rolling over while the window is open is just a tick.
                 let today = domain::working_day(&self.now());
@@ -313,6 +310,11 @@ impl App {
                 if self.reload_if_stale() || rolled {
                     self.refresh();
                 }
+                // The pause between keystrokes is when a note body is
+                // written (ARCHITECTURE.md rule 8), after the reload, so
+                // that a note another window has thrown away is not
+                // written back.
+                self.save_the_note();
             }
             Action::Resize => {}
 
@@ -862,7 +864,14 @@ impl App {
             return;
         };
         let (note, body) = (draft.note, draft.text.clone());
-        if self.model.note(note).is_some_and(|held| held.body == body) {
+        let Some(held) = self.model.note(note).filter(|note| note.is_live()) else {
+            // Another window threw it away while it was open. There is
+            // nothing left to write it to.
+            self.draft = None;
+            self.notes_pane = NotesPane::List;
+            return;
+        };
+        if held.body == body {
             return;
         }
         self.run(Command::EditNote { note, body });

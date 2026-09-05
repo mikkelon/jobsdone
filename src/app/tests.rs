@@ -1081,6 +1081,30 @@ fn tab_walks_from_the_list_into_the_note_and_back() {
 }
 
 #[test]
+fn a_note_another_window_threw_away_stops_being_typed_into() {
+    let store = MemStore::new();
+    let mut app = app_at(store.clone(), NOW);
+    let mut elsewhere = app_at(store, NOW);
+    app.update(Action::NotesPage);
+    let note = note_saying(&mut app, "half a thought");
+
+    elsewhere.update(Action::NotesPage);
+    elsewhere.update(Action::Tick);
+    elsewhere.update(Action::Delete);
+    assert_eq!(
+        elsewhere.notes().count,
+        0,
+        "the other window did throw it away"
+    );
+
+    app.update(Action::Tick);
+    assert!(app.draft().is_none(), "there is nothing left to write to");
+    assert_eq!(app.notes_pane(), NotesPane::List);
+    assert!(app.model().note(note).is_some_and(|note| !note.is_live()));
+    assert!(app.message().is_none(), "and no complaint about it");
+}
+
+#[test]
 fn a_key_for_tasks_says_so_on_the_notes_page() {
     let mut app = started();
     app.update(Action::NotesPage);
