@@ -1394,8 +1394,8 @@ impl App {
         let Some(target) = self.popup.as_ref().and_then(|popup| popup.target) else {
             return;
         };
-        let rule = self.drafted_rule();
-        let command = match (self.schedule_of(target), rule) {
+        let schedule = self.schedule_of(target);
+        let command = match (schedule, self.drafted_rule()) {
             (Some(schedule), Some(rule)) => Command::SetRule { schedule, rule },
             (Some(schedule), None) => Command::StopSchedule { schedule },
             (None, Some(rule)) => match target.task() {
@@ -1407,11 +1407,13 @@ impl App {
                 return;
             }
         };
-        // A refused rule leaves the card open with the reason in the
-        // hint bar, so the shape can be changed and saved again.
-        let stopping = self.schedule_of(target).is_some() && self.drafted_rule().is_none();
+        // A stopped schedule leaves the backlog's list, so the cursor
+        // steps on as it does for any row that goes.
         let list = self.focused();
+        let stopping = matches!(command, Command::StopSchedule { .. });
         let next = stopping.then(|| self.neighbour_of(list, target)).flatten();
+        // A rule the domain refuses leaves the card open with the reason
+        // in the hint bar, so the shape can be changed and saved again.
         if self.run(command).is_some() {
             self.popup = None;
             if let Some(next) = next {
