@@ -3,13 +3,16 @@
 //! Exactly five shapes. The JSON here is the JSON stored in
 //! `schedules.rule`, so the serde attributes are part of the format.
 
+use jiff::Span;
 use jiff::civil::{Date, Weekday as Civil};
 use serde::de::{Error as _, Unexpected};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
-/// How far `next_dates` looks before it gives up on a rule that never
-/// falls due. Two years is well past the widest gap any shape can leave.
-const HORIZON: usize = 366 * 2;
+/// How many days `next_dates` walks per date it is asked for before it
+/// gives up. The widest gap the walked shapes can leave is a month, so a
+/// year is slack, and the bound is what keeps a rule that never falls due
+/// from looping. "Every N weeks" does not walk at all.
+const HORIZON: usize = 366;
 
 /// A day of the week, spelled the way the stored JSON spells it.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Serialize, Deserialize)]
@@ -137,13 +140,18 @@ impl Rule {
 /// The next `count` dates a rule falls on strictly after `after`. The
 /// repeat card's preview and copy generation are the same function.
 pub fn next_dates(rule: &Rule, after: Date, count: usize) -> Vec<Date> {
-    let mut dates = Vec::new();
     if count == 0 || !rule.is_usable() {
-        return dates;
+        return Vec::new();
+    }
+    // Every N weeks is arithmetic; the other four are rare enough in any
+    // week or month to be found by walking.
+    if let Rule::EveryNWeeks { n, from } = rule {
+        return every_n_weeks(*n, *from, after, count);
     }
 
+    let mut dates = Vec::new();
     let mut date = after;
-    for _ in 0..HORIZON * count.max(1) {
+    for _ in 0..HORIZON.saturating_mul(count) {
         let Ok(next) = date.tomorrow() else { break };
         date = next;
         if rule.falls_on(date) {
@@ -152,6 +160,30 @@ pub fn next_dates(rule: &Rule, after: Date, count: usize) -> Vec<Date> {
                 break;
             }
         }
+    }
+    dates
+}
+
+fn every_n_weeks(n: u32, from: Date, after: Date, count: usize) -> Vec<Date> {
+    let step = i64::from(n) * 7;
+    let mut date = from;
+    if after >= from {
+        let gone = from
+            .until(after)
+            .map_or(0, |span| i64::from(span.get_days()));
+        let Ok(next) = from.checked_add(Span::new().days((gone / step + 1) * step)) else {
+            return Vec::new();
+        };
+        date = next;
+    }
+
+    let mut dates = Vec::with_capacity(count);
+    while dates.len() < count {
+        dates.push(date);
+        let Ok(next) = date.checked_add(Span::new().days(step)) else {
+            break;
+        };
+        date = next;
     }
     dates
 }

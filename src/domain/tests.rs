@@ -1973,3 +1973,108 @@ fn a_second_window_sees_the_same_pile_gate_and_stack() {
     assert_eq!(elsewhere.meta_date(REVIEW_ON), Some(on("2026-09-07")));
     assert_eq!(elsewhere.undo.len(), world.model.undo.len());
 }
+
+// ---- the rules that need one more angle -------------------------------
+
+#[test]
+fn a_task_leaves_the_pile_by_being_closed_moved_or_deleted() {
+    let mut world = World::at("2026-09-01T09:00:00");
+    let closed = world.add("Weekly planning", day("2026-09-01"));
+    let moved = world.add("Order new office chair", day("2026-09-01"));
+    let deleted = world.add("Book the team dinner", day("2026-09-01"));
+    let kept = world.add("Call the accountant about VAT", day("2026-09-01"));
+
+    world.clock("2026-09-07T09:00:00");
+    assert_eq!(world.pile().total, 4);
+
+    world.must(Command::Close { task: closed });
+    world.must(Command::Move {
+        task: moved,
+        place: Place::Backlog,
+    });
+    world.must(Command::DeleteTask { task: deleted });
+
+    assert_eq!(
+        titles(&world.pile().days[0].rows),
+        ["Call the accountant about VAT"]
+    );
+    assert_eq!(world.task(kept).day, Some(on("2026-09-01")));
+}
+
+#[test]
+fn closing_and_reopening_are_refused_when_they_have_nothing_to_do() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let id = world.add("Review Anna's PR", day("2026-09-07"));
+
+    assert_eq!(
+        world.refuse(Command::Reopen { task: id }),
+        "That task is not closed."
+    );
+    world.must(Command::Close { task: id });
+    assert_eq!(
+        world.refuse(Command::Close { task: id }),
+        "That task is already closed."
+    );
+
+    world.must(Command::DeleteTask { task: id });
+    assert_eq!(
+        world.refuse(Command::EditTitle {
+            task: id,
+            title: "Anything".to_owned(),
+        }),
+        "That task is gone."
+    );
+}
+
+#[test]
+fn a_day_with_nothing_planned_is_empty_and_not_in_the_day_list() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.add("Review Anna's PR", day("2026-09-07"));
+
+    let quiet = world.day("2026-09-12");
+    assert_eq!(quiet.counts, DayCounts::default());
+    assert!(quiet.focus.is_empty() && quiet.plan.is_empty());
+    assert!(quiet.done.is_empty() && quiet.moved.is_empty());
+
+    let days: Vec<String> = day_list(&world.model)
+        .days
+        .iter()
+        .map(|row| row.day.to_string())
+        .collect();
+    assert_eq!(days, ["2026-09-07"]);
+}
+
+#[test]
+fn what_a_day_planned_is_what_it_has_placements_for() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.add("Kept", day("2026-09-07"));
+    let moved = world.add("Moved", day("2026-09-07"));
+    world.must(Command::Move {
+        task: moved,
+        place: Place::Backlog,
+    });
+
+    let placed = world
+        .model
+        .placements
+        .values()
+        .filter(|placement| placement.day == on("2026-09-07"))
+        .filter(|placement| world.model.live_task(placement.task_id).is_some())
+        .count();
+    assert_eq!(world.day("2026-09-07").counts.planned, placed);
+}
+
+#[test]
+fn every_n_weeks_counts_from_a_start_that_may_be_ahead() {
+    let ahead = Rule::EveryNWeeks {
+        n: 1,
+        from: on("2027-01-08"),
+    };
+    assert_eq!(dates(&ahead, "2026-09-07", 2), ["2027-01-08", "2027-01-15"]);
+
+    let rare = Rule::EveryNWeeks {
+        n: 52,
+        from: on("2026-09-04"),
+    };
+    assert_eq!(dates(&rare, "2026-09-07", 2), ["2027-09-03", "2028-09-01"]);
+}
