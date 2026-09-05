@@ -47,7 +47,7 @@ for a phase that has not landed).
 | 7.29 | Add a task, then `stop` with `kill -9` on the jobsdone process instead of `q` (find it with `pgrep -f target/debug/jobsdone`), `start` | The task is there. No change is ever lost to a kill. |
 | 7.30 | Colour, on the PNGs | Only theme colours: cursor row in reverse video, key names in the hint bar in accent, group labels dim, focus bold, done dim with a green `[x]`. Nothing carries meaning by colour alone: read the `.txt` captures and confirm every state is legible without colour. |
 | 7.31 | Render one capture with `render.py … --theme catppuccin-latte` | The light theme reads as well as the dark. |
-| 7.32 | `keys d`, `keys r`, `keys w`, `keys R`, `keys [`, `keys g`, `keys n` | Keys of phases not yet on `main` answer with a sentence in the hint bar and change nothing; once a phase lands its rows below apply instead. |
+| 7.32 | `keys ?`, then `keys :` and `type "morning"` | Every key the hint bar, help and palette name does something; nothing answers "not built yet" anywhere in the program. The palette lists the morning review under `M`. |
 | 7.33 | Two instances: start a second copy on the same data in another tmux session (`UAT_SESSION=second uat/tui start --data uat/out/data`), add a task in one, `screen` in the other after a second | Both show the same rows within a tick (DESIGN.md 1). |
 
 ## Phase 8: dates, waiting and repeat
@@ -79,13 +79,13 @@ for a phase that has not landed).
 |------|-------|----------|
 | 9.01 | Fresh data, `start` | No review is shown when there is nothing to review (12-empty C). |
 | 9.02 | `stop`; with `sql` put two open tasks on yesterday and one on a date three weeks ago with placements; delete the `review_*` meta keys; `start`, `screen` | The pile as in 01-review: `MORNING REVIEW step 1 of 2 · the pile`, `n unfinished from past days`, `esc skip for now`, the cursor task's title in capitals on the right, groups per day with relative age (`YESTERDAY · THU 4 SEP`, `3 WEEKS AGO`), the key card `d t b m x`, a progress bar `0 of n handled`. |
-| 9.03 | `keys d` on one, `keys t` on the next, `keys b`, `keys x` | Each decision applies at once, the row leaves the pile, the bar advances, `u` undoes the last. `k` does not move the cursor here (DESIGN.md 4). |
+| 9.03 | `keys d` on one, `keys t` on the next, `keys b`, `keys x` | Each decision applies at once; the row stays where it was, checked and dim, saying what happened (`✓ closed`, `→ today`, `→ backlog`, `✗ deleted`); the cursor steps to the next undecided row; the bar advances; `u` undoes the last decision. `k` does not move the cursor here (DESIGN.md 4). |
 | 9.04 | When the pile is empty, `screen` | Step 2 shows only if something is surfaced; otherwise the home page. |
 | 9.05 | Set up a due-today task, an overdue one, a reminder for today, a waiting task with a due date, a waiting task with a reminder, and a schedule with a copy for today; delete the `review_*` meta; `start` | Step 2 as in 02-surfaced: DUE, REMINDERS, ALSO STARTING TODAY groups; the waiting task's due date does not surface but its reminder does (PRODUCT.md waiting); keys `t k d w space`; `Start the day ⏎` box. |
 | 9.06 | Decide each, `keys Enter` | Home page. Status line `0 in review`. |
 | 9.07 | `restart` | The review does not show again today. Stored `review_on` = today. |
 | 9.08 | Set up a pile again, delete the meta, `start`, handle one, `keys Escape`, `screen` | Skipping leaves the pile; the home page shows the count in red `n in review`. |
-| 9.09 | `restart` | The interrupted review resumes where it was, with what is still on the pile. |
+| 9.09 | `restart`, `screen`, `keys M`, `screen` | A restart the same day goes straight to today with the red count (DESIGN.md 1: closing mid-review leaves the pile intact). `M` opens the review again on what is still on the pile and whatever has surfaced since; it never shows empty. |
 | 9.10 | With a pile and empty surfaced set | Step 2 is skipped; the review says `step 1 of 1` or the equivalent the docs define. |
 
 ## Phase 10: history and search
