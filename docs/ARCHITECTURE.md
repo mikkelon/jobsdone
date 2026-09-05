@@ -159,7 +159,9 @@ when it happens.
 Only `app` reads the clock, once per action, with `jiff::Zoned::now()`.
 The domain receives an instant or a date and derives the working day
 itself (DOMAIN.md section 2). `terminal` never sees time at all; a tick is
-an action like any other.
+an action like any other. Because that one call is the whole of it, a
+test's `App` keeps the instant it was built with instead, which is what
+lets a rule about days be tested without waiting for one.
 
 ## 4. Public surface of each module
 
@@ -171,10 +173,10 @@ adds it here first, the way a new dependency is added to section 2 first.
 - Types: `Model`, `Task`, `Placement`, `Schedule`, `Rule`, `Note`,
   `UndoEntry`, `Command`, `Change`, `Rejected`, `Store`, `StoreError`,
   and one result type per view: `DayView`, `BacklogView`, `Pile`,
-  `Surfaced`, `SearchResults`, `DayList`. With them the small types those
-  name: `Id`, `Place`, `FromPlace`, `Weekday`, `MonthDay`, `Write`,
-  `Row`, `DueChip`, `DayCounts`, `PileDay`, `DayListRow`, `ScheduleRow`,
-  `Undone`.
+  `Surfaced`, `SearchResults`, `DayList`, `NotesView`. With them the small
+  types those name: `Id`, `Place`, `FromPlace`, `Weekday`, `MonthDay`,
+  `Write`, `Row`, `DueChip`, `DayCounts`, `PileDay`, `DayListRow`,
+  `ScheduleRow`, `NoteRow`, `Undone`.
 - `apply(&Model, Command, now: &Zoned, undo_cap: usize) -> Result<Change,
   Rejected>`: every user command. Pushes the undo entry as part of the
   change. The cap is the length the undo stack is held to; the domain
@@ -192,8 +194,9 @@ adds it here first, the way a new dependency is added to section 2 first.
   `placed_at`.
 - `Model::empty()` and `Model::apply(&mut self, &Change)`.
 - Views, each `(&Model, ...dates) -> value`: `day_view`, `backlog_view`,
-  `pile`, `surfaced`, `search`, `day_list`, `next_dates`, `working_day`,
-  and `previous_review`, the lower bound of the reminder window.
+  `pile`, `surfaced`, `search`, `day_list`, `notes`, `next_dates`,
+  `working_day`, and `previous_review`, the lower bound of the reminder
+  window.
 
 ### `storage`
 
@@ -209,13 +212,17 @@ adds it here first, the way a new dependency is added to section 2 first.
   cell coordinates, and in text fields `Insert(char)` and the editing
   keys.
 - `KeyContext`: `Home { pane }`, `Notes { pane }`, `Review { step }`,
-  `Popup { kind }`, each with a `text_field: bool` overlay, and
-  `KeyContext::text_field()` to read it. When the overlay is set,
+  `Popup { kind }`, each with a text-field overlay, and
+  `KeyContext::text_field()` to read it. Home's overlay is a
+  `Option<Field>` rather than a bool, because the hint bar has to say
+  which field it is: adding keeps the field open after Enter and
+  renaming does not. When the overlay is set,
   printable keys become `Insert` and only `Enter`, `Escape`, `Tab`, `Up`,
   `Down`, the editing keys and the `Alt` shortcuts keep a name. The
   editing keys belong to the field rather than to the table, so they are
   never a row of the hint bar.
-- `Pane`, `NotesPane`, `ReviewStep` and `PopupKind`: what a context is of.
+- `Pane`, `NotesPane`, `ReviewStep`, `Field` and `PopupKind`: what a
+  context is of.
 - `action_for(Event, KeyContext) -> Option<Action>`.
 - `bindings(KeyContext) -> &[Binding]`: the rows of the key table for a
   context. The hint bar, the command palette and the help overlay are
@@ -251,14 +258,21 @@ adds it here first, the way a new dependency is added to section 2 first.
   `App::set_layout(Layout)` stores the last one and the mouse actions are
   resolved against it.
 - Read access to the model and the application state for `ui`:
-  `today`, `model`, `page`, `pane`, `notes_pane`, `focused`, `popup`,
-  `view`, `cursor`, `palette_rows`, `search_results` and `layout`.
+  `today`, `model`, the views `day`, `backlog`, `notes` and
+  `review_count`, `page`, `pane`, `notes_pane`, `focused`, `popup`,
+  `editor`, `message`, `cursor`, `palette_rows`, `search_results`,
+  `move_choices` and `layout`.
   `Page` is `Home` or `Notes`; `List` is `Day`, `Backlog` or `Notes`, one
   cursor each, held by id; `Popup` carries the kind, the text typed into
-  it, the caret and the selected row.
-- `app::demo`: the fake data phase 6 draws, and the shape `ui` needs it
-  in, in one module so that phase 7 replaces it with the domain's views
-  by deleting one file. `App::fixture()` hands it out.
+  it, the caret, the selected row and the task it is about; `Editor` is a
+  title being typed on a row; `Message` is what the hint bar says until
+  the next key, and whether `u` takes it back; `MoveChoice` is a row of
+  the move card, its key and name from the key table and its day worked
+  out here.
+- `Group`: which group of a pane a row is in. The domain decides what is
+  in each; the application needs the name because a key means something
+  different in each, and `ui` because a group is drawn under its own
+  rule.
 
 ### `ui`
 

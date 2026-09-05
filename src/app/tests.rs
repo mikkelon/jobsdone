@@ -1,10 +1,37 @@
 use super::*;
 
+use jiff::civil::Date;
+
 use crate::domain::tests::MemStore;
-use crate::domain::{Change, Write};
+use crate::domain::{Change, Placement, Rule, Schedule, Task, Write};
+
+/// A store that refuses to write, so that a failed commit can be seen to
+/// leave the model as it was (ARCHITECTURE.md rule 10).
+struct Broken(MemStore);
+
+impl Store for Broken {
+    fn load(&self) -> Result<Model, StoreError> {
+        self.0.load()
+    }
+
+    fn commit(&mut self, _change: &Change) -> Result<(), StoreError> {
+        Err(StoreError::Other("the disk is full".to_owned()))
+    }
+
+    fn version(&self) -> Result<u64, StoreError> {
+        self.0.version()
+    }
+}
+
+/// The wireframes' own day, which is a Friday.
+const NOW: &str = "2025-09-05T09:00:00+02:00[Europe/Copenhagen]";
 
 fn at(text: &str) -> Zoned {
     text.parse().expect("a zoned timestamp")
+}
+
+fn on(text: &str) -> Date {
+    text.parse().expect("a civil date")
 }
 
 fn set_meta(key: &str, value: &str) -> Change {
@@ -20,29 +47,116 @@ fn app_at(store: MemStore, now: &str) -> App {
     App::new(Box::new(store), &at(now)).expect("an app")
 }
 
+fn started() -> App {
+    app_at(MemStore::new(), NOW)
+}
+
+fn type_in(app: &mut App, text: &str) {
+    for typed in text.chars() {
+        app.update(Action::Insert(typed));
+    }
+}
+
+/// `a`, the title, Enter, Escape: one task in the focused pane, the way
+/// somebody adds one.
+fn add(app: &mut App, title: &str) -> Id {
+    app.update(Action::Add);
+    type_in(app, title);
+    app.update(Action::Confirm);
+    app.update(Action::Cancel);
+    app.cursor(app.focused()).expect("the task just added")
+}
+
+/// The titles of a list, in the order they are drawn.
+fn titles(app: &App, list: List) -> Vec<String> {
+    app.rows_of(list)
+        .into_iter()
+        .filter_map(|(id, _)| app.model().task(id).map(|task| task.title.clone()))
+        .collect()
+}
+
+fn groups(app: &App, list: List) -> Vec<Group> {
+    app.rows_of(list)
+        .into_iter()
+        .map(|(_, group)| group)
+        .collect()
+}
+
+fn hint(app: &App) -> String {
+    app.message()
+        .map(|message| message.text.clone())
+        .unwrap_or_default()
+}
+
+/// An app on a store that already holds a schedule and one copy of it on
+/// today, which no key can make until phase 8.
+fn with_a_recurring_copy() -> (App, Id) {
+    let now = at(NOW);
+    let today = domain::working_day(&now);
+    let mut model = Model::empty();
+    model.schedules.insert(
+        1,
+        Schedule {
+            id: 1,
+            title: "Write standup notes".to_owned(),
+            rule: Rule::Workdays,
+            generated_through: today,
+            stopped_on: None,
+            created_at: now.clone(),
+        },
+    );
+    model.tasks.insert(
+        1,
+        Task {
+            id: 1,
+            title: "Write standup notes".to_owned(),
+            day: Some(today),
+            position: 0,
+            focus: false,
+            waiting: false,
+            closed_at: None,
+            due_on: None,
+            remind_on: None,
+            schedule_id: Some(1),
+            scheduled_on: Some(today),
+            created_at: now.clone(),
+            deleted_at: None,
+        },
+    );
+    model.placements.insert(
+        (1, today),
+        Placement {
+            task_id: 1,
+            day: today,
+            placed_at: now,
+            from_place: domain::FromPlace::New,
+        },
+    );
+    (app_at(MemStore::holding(model), NOW), 1)
+}
+
+// ---- the launch ------------------------------------------------------
+
 #[test]
 fn launching_loads_the_model_and_the_working_day() {
     let mut model = Model::empty();
-    model.meta.insert("review_on".into(), "2026-09-04".into());
+    model.meta.insert("review_on".into(), "2025-09-04".into());
 
     let app = app_at(
         MemStore::holding(model),
-        "2026-09-05T01:30:00+02:00[Europe/Copenhagen]",
+        "2025-09-05T01:30:00+02:00[Europe/Copenhagen]",
     );
 
     assert_eq!(
         app.model().meta.get("review_on").map(String::as_str),
-        Some("2026-09-04")
+        Some("2025-09-04")
     );
-    assert_eq!(app.today().to_string(), "2026-09-04");
+    assert_eq!(app.today().to_string(), "2025-09-04");
 }
 
 #[test]
 fn q_quits_and_a_tick_does_not() {
-    let mut app = app_at(
-        MemStore::new(),
-        "2026-09-05T09:00:00+02:00[Europe/Copenhagen]",
-    );
+    let mut app = started();
 
     assert_eq!(app.update(Action::Tick), Flow::Continue);
     assert_eq!(app.update(Action::Resize), Flow::Continue);
@@ -52,66 +166,600 @@ fn q_quits_and_a_tick_does_not() {
 #[test]
 fn a_tick_picks_up_what_another_window_did() {
     let store = MemStore::new();
-    let mut app = app_at(
-        store.clone(),
-        "2026-09-05T09:00:00+02:00[Europe/Copenhagen]",
-    );
+    let mut app = app_at(store.clone(), NOW);
     assert!(app.model().meta.is_empty());
 
     let mut elsewhere = store;
     elsewhere
-        .commit(&set_meta("review_on", "2026-09-05"))
-        .unwrap();
+        .commit(&set_meta("review_on", "2025-09-05"))
+        .expect("the in-memory store");
 
     app.update(Action::Tick);
 
     assert_eq!(
         app.model().meta.get("review_on").map(String::as_str),
-        Some("2026-09-05")
+        Some("2025-09-05")
     );
 }
 
 #[test]
-fn the_hint_bar_has_a_context_to_draw_from() {
-    let app = app_at(
-        MemStore::new(),
-        "2026-09-05T09:00:00+02:00[Europe/Copenhagen]",
+fn a_command_reloads_before_it_asks_the_domain() {
+    // Rule 7: what another window wrote is in the model before the
+    // command that is about to be built sees it.
+    let store = MemStore::new();
+    let mut app = app_at(store.clone(), NOW);
+    let mut elsewhere = app_at(store, NOW);
+    elsewhere.update(Action::Add);
+    type_in(&mut elsewhere, "Ship invoice export");
+    elsewhere.update(Action::Confirm);
+
+    add(&mut app, "Reply to the tender questions");
+
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Ship invoice export", "Reply to the tender questions"],
+        "the other window's task is there, and the new one is after it"
     );
+}
+
+#[test]
+fn the_review_count_is_the_size_of_the_pile() {
+    let mut app = started();
+    assert_eq!(app.review_count(), 0);
+
+    // A task added today and then left behind by the clock.
+    add(&mut app, "Chase the hosting invoice");
+    let mut app = app_at(
+        MemStore::holding(app.model().clone()),
+        "2025-09-08T09:00:00+02:00[Europe/Copenhagen]",
+    );
+
+    assert_eq!(app.review_count(), 1);
+    app.update(Action::Close);
+    assert_eq!(app.review_count(), 1, "the pile is what is on past days");
+}
+
+// ---- adding and renaming ---------------------------------------------
+
+#[test]
+fn a_adds_to_the_pane_the_keyboard_is_on_and_keeps_the_field_open() {
+    let mut app = started();
+    app.update(Action::Add);
+    assert_eq!(
+        app.page_context(),
+        KeyContext::Home {
+            pane: Pane::Day,
+            field: Some(Field::Adding)
+        },
+        "every letter types while the field is open"
+    );
+
+    type_in(&mut app, "Ship invoice export");
+    app.update(Action::Confirm);
+
+    assert_eq!(titles(&app, List::Day), ["Ship invoice export"]);
+    assert_eq!(
+        app.editor().map(|editor| editor.text.as_str()),
+        Some(""),
+        "the field is empty and still open, ready for the next one"
+    );
+
+    type_in(&mut app, "Reply to the tender questions");
+    app.update(Action::Confirm);
+    app.update(Action::Cancel);
+
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Ship invoice export", "Reply to the tender questions"]
+    );
+    assert!(app.editor().is_none(), "escape stops");
+}
+
+#[test]
+fn adding_in_the_backlog_puts_the_task_in_the_backlog() {
+    let mut app = started();
+    app.update(Action::PaneRight);
+    add(&mut app, "Clean out the garage");
+
+    assert!(titles(&app, List::Day).is_empty());
+    assert_eq!(titles(&app, List::Backlog), ["Clean out the garage"]);
+}
+
+#[test]
+fn an_empty_field_is_how_quick_add_stops() {
+    let mut app = started();
+    app.update(Action::Add);
+    app.update(Action::Confirm);
+
+    assert!(app.editor().is_none());
+    assert!(titles(&app, List::Day).is_empty());
+    assert_eq!(hint(&app), "", "and it is not an error either");
+}
+
+#[test]
+fn e_edits_the_title_in_place() {
+    let mut app = started();
+    add(&mut app, "Fix the migration test");
+
+    app.update(Action::Edit);
+    assert_eq!(
+        app.editor().map(|editor| editor.text.as_str()),
+        Some("Fix the migration test"),
+        "the field starts as the title"
+    );
+    type_in(&mut app, " (CI only)");
+    app.update(Action::Confirm);
+
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Fix the migration test (CI only)"]
+    );
+    assert!(app.editor().is_none(), "renaming closes the field");
+}
+
+#[test]
+fn a_title_that_is_only_spaces_is_refused_and_the_field_stays_open() {
+    let mut app = started();
+    add(&mut app, "Book dentist");
+
+    app.update(Action::Edit);
+    for _ in 0..12 {
+        app.update(Action::Backspace);
+    }
+    app.update(Action::Confirm);
+
+    assert_eq!(hint(&app), "A task needs a title.");
+    assert!(app.editor().is_some(), "so that it can be typed again");
+    assert_eq!(titles(&app, List::Day), ["Book dentist"]);
+}
+
+#[test]
+fn renaming_a_recurring_copy_asks_the_one_question() {
+    let (mut app, copy) = with_a_recurring_copy();
+    app.update(Action::Edit);
+    type_in(&mut app, " (long version)");
+    app.update(Action::Confirm);
 
     assert_eq!(
         app.key_context(),
-        KeyContext::Home {
-            pane: Pane::Day,
+        KeyContext::Popup {
+            kind: PopupKind::CopyQuestion,
             text_field: false
-        }
+        },
+        "nothing is renamed until the question is answered"
+    );
+    assert_eq!(
+        app.model().task(copy).map(|task| task.title.as_str()),
+        Some("Write standup notes")
+    );
+
+    app.update(Action::ThisCopy);
+
+    assert_eq!(
+        app.model().task(copy).map(|task| task.title.as_str()),
+        Some("Write standup notes (long version)")
+    );
+    assert_eq!(
+        app.model()
+            .schedule(1)
+            .map(|schedule| schedule.title.as_str()),
+        Some("Write standup notes"),
+        "this copy only: the schedule keeps its title"
     );
 }
 
-fn started() -> App {
-    app_at(
-        MemStore::new(),
-        "2026-09-05T09:00:00+02:00[Europe/Copenhagen]",
-    )
+#[test]
+fn this_and_future_copies_renames_the_schedule_too() {
+    let (mut app, copy) = with_a_recurring_copy();
+    app.update(Action::Edit);
+    type_in(&mut app, " (long version)");
+    app.update(Action::Confirm);
+    app.update(Action::ThisAndFuture);
+
+    assert_eq!(
+        app.model().task(copy).map(|task| task.title.as_str()),
+        Some("Write standup notes (long version)")
+    );
+    assert_eq!(
+        app.model()
+            .schedule(1)
+            .map(|schedule| schedule.title.as_str()),
+        Some("Write standup notes (long version)")
+    );
 }
 
-fn type_in(app: &mut App, text: &str) {
-    for typed in text.chars() {
-        app.update(Action::Insert(typed));
-    }
+#[test]
+fn escaping_the_question_renames_nothing() {
+    let (mut app, copy) = with_a_recurring_copy();
+    app.update(Action::Edit);
+    type_in(&mut app, " (long version)");
+    app.update(Action::Confirm);
+    app.update(Action::Cancel);
+
+    assert!(app.popup().is_none());
+    assert_eq!(
+        app.model().task(copy).map(|task| task.title.as_str()),
+        Some("Write standup notes")
+    );
 }
+
+// ---- working through the day -----------------------------------------
+
+#[test]
+fn space_closes_a_task_and_the_cursor_steps_to_the_next_one() {
+    let mut app = started();
+    add(&mut app, "Morning review");
+    let next = add(&mut app, "Review Anna's PR");
+    app.update(Action::Up);
+
+    app.update(Action::Close);
+
+    assert_eq!(groups(&app, List::Day), [Group::Plan, Group::Done]);
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Review Anna's PR", "Morning review"]
+    );
+    assert_eq!(app.cursor(List::Day), Some(next), "and steps down the plan");
+    assert_eq!(hint(&app), "Closed \"Morning review\"");
+    assert!(app.message().is_some_and(|message| message.undo));
+}
+
+#[test]
+fn space_on_a_closed_task_reopens_it_at_the_end_of_the_plan() {
+    let mut app = started();
+    let first = add(&mut app, "Morning review");
+    add(&mut app, "Review Anna's PR");
+    app.update(Action::Up);
+    app.update(Action::Close);
+
+    // The cursor stepped on; go back to the closed row and reopen it.
+    app.update(Action::Down);
+    assert_eq!(app.cursor(List::Day), Some(first));
+    app.update(Action::Close);
+
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Review Anna's PR", "Morning review"]
+    );
+    assert_eq!(groups(&app, List::Day), [Group::Plan, Group::Plan]);
+    assert_eq!(app.cursor(List::Day), Some(first), "the cursor follows it");
+}
+
+#[test]
+fn closing_a_backlog_task_puts_it_on_today_first() {
+    let mut app = started();
+    app.update(Action::PaneRight);
+    add(&mut app, "Pay electricity bill");
+
+    app.update(Action::Close);
+
+    assert!(titles(&app, List::Backlog).is_empty());
+    assert_eq!(titles(&app, List::Day), ["Pay electricity bill"]);
+    assert_eq!(groups(&app, List::Day), [Group::Done]);
+}
+
+#[test]
+fn f_marks_a_focus_item_and_unmarks_it() {
+    let mut app = started();
+    add(&mut app, "Ship invoice export");
+    add(&mut app, "Review Anna's PR");
+    app.update(Action::Up);
+
+    app.update(Action::Focus);
+    assert_eq!(groups(&app, List::Day), [Group::Focus, Group::Plan]);
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Ship invoice export", "Review Anna's PR"]
+    );
+    assert_eq!(hint(&app), "Focused \"Ship invoice export\"");
+
+    app.update(Action::Focus);
+    assert_eq!(groups(&app, List::Day), [Group::Plan, Group::Plan]);
+}
+
+#[test]
+fn focus_is_for_tasks_on_a_day_and_the_hint_bar_says_so() {
+    let mut app = started();
+    app.update(Action::PaneRight);
+    add(&mut app, "Clean out the garage");
+
+    app.update(Action::Focus);
+
+    assert_eq!(hint(&app), "Focus is for tasks on a day.");
+    assert!(
+        app.model().tasks.values().all(|task| !task.focus),
+        "and nothing changed"
+    );
+}
+
+#[test]
+fn j_and_k_reorder_within_a_group() {
+    let mut app = started();
+    add(&mut app, "One");
+    add(&mut app, "Two");
+    let three = add(&mut app, "Three");
+
+    app.update(Action::MoveUp);
+    assert_eq!(titles(&app, List::Day), ["One", "Three", "Two"]);
+    assert_eq!(
+        app.cursor(List::Day),
+        Some(three),
+        "the cursor goes with it"
+    );
+
+    app.update(Action::MoveUp);
+    assert_eq!(titles(&app, List::Day), ["Three", "One", "Two"]);
+    app.update(Action::MoveUp);
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Three", "One", "Two"],
+        "the top stops"
+    );
+
+    app.update(Action::MoveDown);
+    assert_eq!(titles(&app, List::Day), ["One", "Three", "Two"]);
+}
+
+#[test]
+fn a_focus_item_reorders_among_the_focus_items() {
+    let mut app = started();
+    let first = add(&mut app, "Ship invoice export");
+    add(&mut app, "Fix the migration test");
+    let last = add(&mut app, "Reply to the tender questions");
+
+    app.update(Action::Focus);
+    app.update(Action::Down);
+    assert_eq!(app.cursor(List::Day), Some(first));
+    app.update(Action::Focus);
+
+    assert_eq!(
+        titles(&app, List::Day),
+        [
+            "Ship invoice export",
+            "Reply to the tender questions",
+            "Fix the migration test"
+        ]
+    );
+    app.update(Action::MoveDown);
+
+    assert_eq!(
+        titles(&app, List::Day),
+        [
+            "Reply to the tender questions",
+            "Ship invoice export",
+            "Fix the migration test"
+        ],
+        "it swapped with the other focus item, over the plan row between them"
+    );
+    assert_eq!(app.cursor(List::Day), Some(first));
+    assert_eq!(
+        groups(&app, List::Day),
+        [Group::Focus, Group::Focus, Group::Plan]
+    );
+
+    let mut positions: Vec<usize> = [first, last]
+        .iter()
+        .chain(std::iter::once(&(last - 1)))
+        .filter_map(|id| app.model().task(*id).map(|task| task.position))
+        .collect();
+    positions.sort_unstable();
+    assert_eq!(positions, [0, 1, 2], "the positions underneath stay dense");
+}
+
+#[test]
+fn the_done_group_keeps_the_order_it_was_closed_in() {
+    let mut app = started();
+    add(&mut app, "Morning review");
+    app.update(Action::Close);
+    add(&mut app, "Pay electricity bill");
+    app.update(Action::Close);
+    app.update(Action::Up);
+
+    app.update(Action::MoveDown);
+
+    assert_eq!(hint(&app), "Those rows keep the order they are in.");
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Morning review", "Pay electricity bill"]
+    );
+}
+
+// ---- moving ----------------------------------------------------------
+
+#[test]
+fn t_pulls_a_backlog_task_onto_today() {
+    let mut app = started();
+    app.update(Action::PaneRight);
+    add(&mut app, "Clean out the garage");
+    add(&mut app, "Sort photo backups");
+    app.update(Action::Up);
+
+    app.update(Action::ToToday);
+
+    assert_eq!(titles(&app, List::Day), ["Clean out the garage"]);
+    assert_eq!(titles(&app, List::Backlog), ["Sort photo backups"]);
+    assert_eq!(hint(&app), "Moved \"Clean out the garage\" to today");
+}
+
+#[test]
+fn b_sends_a_task_to_the_backlog_and_leaves_a_pointer_behind() {
+    let mut app = started();
+    add(&mut app, "Chase the hosting invoice");
+
+    app.update(Action::ToBacklog);
+
+    assert_eq!(titles(&app, List::Backlog), ["Chase the hosting invoice"]);
+    assert_eq!(
+        groups(&app, List::Day),
+        [Group::Moved],
+        "the day keeps the record that it was planned"
+    );
+}
+
+#[test]
+fn a_moved_row_is_a_pointer_rather_than_a_task_to_act_on() {
+    let mut app = started();
+    add(&mut app, "Chase the hosting invoice");
+    app.update(Action::ToBacklog);
+    assert_eq!(groups(&app, List::Day), [Group::Moved]);
+
+    app.update(Action::Delete);
+
+    assert_eq!(
+        hint(&app),
+        "That row only points at the task; it has moved."
+    );
+    assert_eq!(titles(&app, List::Backlog), ["Chase the hosting invoice"]);
+}
+
+#[test]
+fn the_move_card_offers_the_days_and_moves_to_the_one_chosen() {
+    let mut app = started();
+    add(&mut app, "Clean out the garage");
+
+    app.update(Action::MoveToDay);
+    let choices = app.move_choices();
+    let days: Vec<MoveTarget> = choices.iter().map(|choice| choice.target).collect();
+
+    assert_eq!(
+        days,
+        [
+            MoveTarget::Day(on("2025-09-05")),
+            MoveTarget::Day(on("2025-09-06")),
+            MoveTarget::Day(on("2025-09-08")),
+            MoveTarget::Day(on("2025-09-08")),
+            MoveTarget::Pick,
+            MoveTarget::Backlog,
+        ],
+        "today, tomorrow, the next work day, next Monday, a date, no day"
+    );
+
+    // The second row is tomorrow; Enter on it is the same as pressing 1.
+    app.update(Action::Down);
+    app.update(Action::Confirm);
+
+    assert!(app.popup().is_none());
+    assert_eq!(groups(&app, List::Day), [Group::Moved]);
+    assert_eq!(hint(&app), "Moved \"Clean out the garage\" to Sat 6 Sep");
+}
+
+#[test]
+fn the_move_card_acts_on_the_row_it_was_opened_on() {
+    let mut app = started();
+    let first = add(&mut app, "Clean out the garage");
+    add(&mut app, "Sort photo backups");
+    app.update(Action::Up);
+
+    app.update(Action::MoveToDay);
+    app.update(Action::ToBacklog);
+
+    assert_eq!(titles(&app, List::Backlog), ["Clean out the garage"]);
+    assert_eq!(app.model().task(first).and_then(|task| task.day), None);
+}
+
+// ---- delete and undo -------------------------------------------------
+
+#[test]
+fn x_deletes_without_asking_and_u_puts_it_back() {
+    let mut app = started();
+    add(&mut app, "Book dentist");
+    let kept = add(&mut app, "Review Anna's PR");
+    app.update(Action::Up);
+
+    app.update(Action::Delete);
+    assert_eq!(titles(&app, List::Day), ["Review Anna's PR"]);
+    assert_eq!(hint(&app), "Deleted \"Book dentist\"");
+    assert!(app.message().is_some_and(|message| message.undo));
+    assert_eq!(app.cursor(List::Day), Some(kept));
+
+    app.update(Action::Undo);
+
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Book dentist", "Review Anna's PR"]
+    );
+    assert_eq!(hint(&app), "Undone: Deleted \"Book dentist\"");
+    assert!(!app.message().is_some_and(|message| message.undo));
+}
+
+#[test]
+fn undo_walks_back_through_the_day() {
+    let mut app = started();
+    add(&mut app, "Ship invoice export");
+    app.update(Action::Focus);
+    app.update(Action::Close);
+
+    app.update(Action::Undo);
+    assert_eq!(groups(&app, List::Day), [Group::Focus]);
+    app.update(Action::Undo);
+    assert_eq!(groups(&app, List::Day), [Group::Plan]);
+    app.update(Action::Undo);
+    assert!(titles(&app, List::Day).is_empty());
+
+    app.update(Action::Undo);
+    assert_eq!(hint(&app), "There is nothing to undo.");
+}
+
+// ---- the hint bar ----------------------------------------------------
+
+#[test]
+fn what_the_hint_bar_says_stands_until_the_next_key() {
+    let mut app = started();
+    add(&mut app, "Book dentist");
+    app.update(Action::Delete);
+    assert!(app.message().is_some());
+
+    app.update(Action::Tick);
+    assert!(app.message().is_some(), "a tick is not a key");
+
+    app.update(Action::Down);
+    assert!(app.message().is_none());
+}
+
+#[test]
+fn a_key_a_later_phase_owns_says_so_and_does_nothing() {
+    let mut app = started();
+    add(&mut app, "Clean out the garage");
+
+    for (action, said) in [
+        (Action::DueBy, "Due dates and reminders are not built yet."),
+        (Action::Waiting, "Waiting is not built yet."),
+        (Action::Repeat, "The repeat card is not built yet."),
+        (Action::PrevDay, "Stepping through days is not built yet."),
+        (Action::GoToDate, "The date card is not built yet."),
+    ] {
+        app.update(action);
+        assert_eq!(hint(&app), said);
+    }
+    assert_eq!(titles(&app, List::Day), ["Clean out the garage"]);
+}
+
+#[test]
+fn a_key_on_an_empty_pane_says_there_is_nothing_there() {
+    let mut app = started();
+    app.update(Action::Close);
+
+    assert_eq!(hint(&app), "There is no task here yet.");
+}
+
+// ---- moving about ----------------------------------------------------
 
 #[test]
 fn the_cursor_walks_the_list_by_id_and_stops_at_both_ends() {
     let mut app = started();
-    let ids: Vec<_> = app.view(List::Day).rows().map(|row| row.id).collect();
+    for title in ["One", "Two", "Three"] {
+        add(&mut app, title);
+    }
+    let ids: Vec<Id> = app
+        .rows_of(List::Day)
+        .into_iter()
+        .map(|(id, _)| id)
+        .collect();
 
-    assert_eq!(app.cursor(List::Day), Some(ids[0]));
+    app.update(Action::Up);
+    app.update(Action::Up);
     app.update(Action::Up);
     assert_eq!(app.cursor(List::Day), Some(ids[0]), "the top does not wrap");
-
-    app.update(Action::Down);
-    app.update(Action::Down);
-    assert_eq!(app.cursor(List::Day), Some(ids[2]));
 
     for _ in 0..50 {
         app.update(Action::Down);
@@ -126,13 +774,14 @@ fn the_cursor_walks_the_list_by_id_and_stops_at_both_ends() {
 #[test]
 fn each_pane_keeps_its_own_cursor() {
     let mut app = started();
-    app.update(Action::Down);
+    add(&mut app, "One");
+    add(&mut app, "Two");
+    app.update(Action::Up);
     let day = app.cursor(List::Day);
 
     app.update(Action::PaneRight);
     assert_eq!(app.pane(), Pane::Backlog);
-    app.update(Action::Down);
-    app.update(Action::Down);
+    add(&mut app, "In the backlog");
 
     app.update(Action::PaneLeft);
     assert_eq!(app.pane(), Pane::Day);
@@ -140,21 +789,22 @@ fn each_pane_keeps_its_own_cursor() {
 }
 
 #[test]
-fn a_cursor_on_a_row_that_has_gone_clamps_to_the_first() {
-    let mut app = started();
-    app.update(Action::Down);
-    assert_ne!(
-        app.cursor(List::Day),
-        app.view(List::Day).rows().next().map(|row| row.id)
-    );
+fn a_cursor_on_a_row_another_window_took_away_clamps_to_the_first() {
+    let store = MemStore::new();
+    let mut app = app_at(store.clone(), NOW);
+    add(&mut app, "One");
+    let second = add(&mut app, "Two");
+    assert_eq!(app.cursor(List::Day), Some(second));
 
-    // The empty fixture stands in for another window having emptied the
-    // list under the cursor.
-    app.show_empty();
-    assert_eq!(app.cursor(List::Day), None);
+    let mut elsewhere = app_at(store, NOW);
+    elsewhere.update(Action::Down);
+    elsewhere.update(Action::Delete);
+    app.update(Action::Tick);
+
+    assert_eq!(titles(&app, List::Day), ["One"]);
     assert_eq!(
-        app.cursor(List::Notes),
-        app.view(List::Notes).rows().next().map(|row| row.id)
+        app.cursor(List::Day),
+        app.rows_of(List::Day).first().map(|(id, _)| *id)
     );
 }
 
@@ -172,6 +822,20 @@ fn h_and_l_stop_at_the_ends_and_tab_goes_round() {
     app.update(Action::PaneRight);
     app.update(Action::PaneRight);
     assert_eq!(app.pane(), Pane::Backlog, "l does not");
+}
+
+#[test]
+fn a_field_holds_the_keyboard_until_it_is_answered() {
+    let mut app = started();
+    app.update(Action::Add);
+    app.update(Action::NextPane);
+
+    assert_eq!(
+        app.pane(),
+        Pane::Day,
+        "tab does not leave a half-typed task"
+    );
+    assert!(app.editor().is_some());
 }
 
 #[test]
@@ -211,17 +875,26 @@ fn n_turns_the_page_and_turns_it_back() {
 }
 
 #[test]
-fn an_open_note_is_a_text_field_and_the_list_beside_it_is_not() {
+fn the_notes_page_says_it_is_not_built_yet() {
     let mut app = started();
     app.update(Action::NotesPage);
-    assert!(!app.key_context().text_field());
+    app.update(Action::Add);
 
-    app.update(Action::PaneRight);
+    assert_eq!(hint(&app), "The notes page is not built yet.");
+    assert!(app.editor().is_none());
+}
+
+// ---- popups ----------------------------------------------------------
+
+#[test]
+fn the_hint_bar_has_a_context_to_draw_from() {
+    let app = started();
+
     assert_eq!(
         app.key_context(),
-        KeyContext::Notes {
-            pane: NotesPane::Note,
-            text_field: true
+        KeyContext::Home {
+            pane: Pane::Day,
+            field: None
         }
     );
 }
@@ -242,7 +915,7 @@ fn a_popup_takes_the_keyboard_and_escape_gives_it_back() {
         app.page_context(),
         KeyContext::Home {
             pane: Pane::Day,
-            text_field: false
+            field: None
         },
         "the page underneath is what the palette lists"
     );
@@ -324,20 +997,30 @@ fn a_field_edits_where_the_caret_is() {
 #[test]
 fn the_search_field_finds_what_was_typed() {
     let mut app = started();
-    app.update(Action::Search);
-    assert_eq!(
-        app.search_results().count(),
-        9,
-        "an empty filter matches all"
-    );
+    add(&mut app, "Ship invoice export");
+    add(&mut app, "Book dentist");
+    app.update(Action::Close);
 
-    type_in(&mut app, "Nordic");
+    app.update(Action::Search);
+    type_in(&mut app, "invoice");
     let found = app.search_results();
-    assert_eq!(found.count(), 1);
-    assert_eq!(found.closed[0].title, "Send the invoice to Nordic Ltd");
+
+    assert_eq!(found.total, 1);
+    assert_eq!(found.open[0].title, "Ship invoice export");
 
     type_in(&mut app, " and then some");
-    assert!(app.search_results().is_empty());
+    assert_eq!(app.search_results().total, 0);
+}
+
+#[test]
+fn a_search_with_nothing_in_it_offers_to_add_what_was_typed() {
+    let mut app = started();
+    app.update(Action::Search);
+    type_in(&mut app, "tax return");
+    app.update(Action::Confirm);
+
+    assert!(app.popup().is_none());
+    assert_eq!(titles(&app, List::Day), ["tax return"]);
 }
 
 #[test]
@@ -365,6 +1048,8 @@ fn the_palette_can_quit_the_program() {
 #[test]
 fn the_arrows_move_the_selection_inside_a_popup_not_the_pane() {
     let mut app = started();
+    add(&mut app, "One");
+    add(&mut app, "Two");
     let cursor = app.cursor(List::Day);
     app.update(Action::Commands);
 
@@ -391,9 +1076,14 @@ fn typing_puts_the_selection_back_at_the_top() {
     assert_eq!(app.popup().map(|popup| popup.selected), Some(0));
 }
 
+// ---- the mouse -------------------------------------------------------
+
 #[test]
 fn a_click_outside_any_row_still_moves_the_keyboard_to_that_pane() {
     let mut app = started();
+    app.update(Action::PaneRight);
+    add(&mut app, "Clean out the garage");
+    app.update(Action::PaneLeft);
     app.set_layout(Layout {
         narrow: false,
         lists: vec![ListArea {
@@ -421,6 +1111,9 @@ fn a_click_outside_any_row_still_moves_the_keyboard_to_that_pane() {
 #[test]
 fn the_wheel_moves_the_cursor() {
     let mut app = started();
+    add(&mut app, "One");
+    add(&mut app, "Two");
+    app.update(Action::Up);
     let first = app.cursor(List::Day);
 
     app.update(Action::Scroll {
@@ -430,4 +1123,131 @@ fn the_wheel_moves_the_cursor() {
     });
 
     assert_ne!(app.cursor(List::Day), first);
+}
+
+#[test]
+fn a_reorder_marks_the_row_it_is_carrying_until_the_next_key() {
+    let mut app = started();
+    add(&mut app, "One");
+    let two = add(&mut app, "Two");
+
+    app.update(Action::MoveUp);
+    assert_eq!(app.moving(), Some(two));
+
+    app.update(Action::Down);
+    assert_eq!(app.moving(), None, "the mark goes with the message");
+}
+
+#[test]
+fn dragging_a_row_carries_it_the_way_the_keys_do() {
+    let mut app = started();
+    let one = add(&mut app, "One");
+    add(&mut app, "Two");
+    let three = add(&mut app, "Three");
+
+    let rows: Vec<RowArea> = app
+        .rows_of(List::Day)
+        .into_iter()
+        .enumerate()
+        .map(|(at, (id, _))| RowArea {
+            list: List::Day,
+            id,
+            area: Rect {
+                x: 0,
+                y: 5 + at as u16,
+                width: 59,
+                height: 1,
+            },
+        })
+        .collect();
+    app.set_layout(Layout {
+        narrow: false,
+        lists: vec![ListArea {
+            list: List::Day,
+            area: Rect {
+                x: 0,
+                y: 5,
+                width: 59,
+                height: 28,
+            },
+        }],
+        rows,
+    });
+
+    // Take hold of the third row and drag it over the first.
+    app.update(Action::MouseDown { column: 4, row: 7 });
+    app.update(Action::MouseDrag { column: 4, row: 6 });
+    app.update(Action::MouseDrag { column: 4, row: 5 });
+    app.update(Action::MouseUp { column: 4, row: 5 });
+
+    assert_eq!(titles(&app, List::Day), ["Three", "One", "Two"]);
+    assert_eq!(app.cursor(List::Day), Some(three));
+    assert_eq!(
+        app.model().task(one).map(|task| task.position),
+        Some(1),
+        "and the rows it passed shifted, once each"
+    );
+}
+
+#[test]
+fn a_change_that_cannot_be_saved_is_a_hint_and_not_a_crash() {
+    let store = MemStore::new();
+    let mut app = app_at(store.clone(), NOW);
+    add(&mut app, "Book dentist");
+
+    let mut app = App::new(Box::new(Broken(store)), &at(NOW)).expect("an app");
+    app.update(Action::Delete);
+
+    assert_eq!(hint(&app), "The change could not be saved.");
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Book dentist"],
+        "the model is left as it was"
+    );
+}
+
+#[test]
+fn an_undo_that_no_longer_applies_is_dropped_and_says_so() {
+    // An entry left by an instance that has since been overtaken: the
+    // task it would put back is not gone at all.
+    let mut app = started();
+    add(&mut app, "Book dentist");
+    let id = app.cursor(List::Day).expect("the task");
+    let mut model = app.model().clone();
+    model.undo.push(domain::UndoEntry {
+        id: 99,
+        at: at(NOW),
+        label: "Deleted \"Book dentist\"".to_owned(),
+        inverse: Command::RestoreTask {
+            task: id,
+            position: 0,
+        },
+    });
+    let mut app = app_at(MemStore::holding(model), NOW);
+
+    app.update(Action::Undo);
+
+    assert_eq!(
+        hint(&app),
+        "Deleted \"Book dentist\" could not be undone: That task is already back."
+    );
+    assert_eq!(titles(&app, List::Day), ["Book dentist"]);
+    assert_eq!(
+        app.model().undo.last().map(|entry| entry.label.as_str()),
+        Some("Added \"Book dentist\""),
+        "the entry that could not be undone is dropped off the stack"
+    );
+}
+
+#[test]
+fn going_to_a_search_result_is_not_built_yet() {
+    let mut app = started();
+    add(&mut app, "Ship invoice export");
+    app.update(Action::Search);
+    type_in(&mut app, "invoice");
+
+    app.update(Action::Confirm);
+
+    assert_eq!(hint(&app), "Going to a task from search is not built yet.");
+    assert!(app.popup().is_some(), "and the search stays open");
 }

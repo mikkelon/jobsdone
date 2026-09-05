@@ -3,8 +3,19 @@ use super::*;
 use crossterm::event::{KeyEventState, MouseButton};
 
 fn home(pane: Pane) -> KeyContext {
+    KeyContext::Home { pane, field: None }
+}
+
+fn writing(field: Field) -> KeyContext {
     KeyContext::Home {
-        pane,
+        pane: Pane::Day,
+        field: Some(field),
+    }
+}
+
+fn popup(kind: PopupKind) -> KeyContext {
+    KeyContext::Popup {
+        kind,
         text_field: false,
     }
 }
@@ -37,12 +48,13 @@ fn every_context() -> Vec<KeyContext> {
             step: ReviewStep::Surfaced,
             text_field: false,
         },
+        writing(Field::Adding),
+        writing(Field::Renaming),
         field(PopupKind::Palette),
         field(PopupKind::Search),
-        KeyContext::Popup {
-            kind: PopupKind::Help,
-            text_field: false,
-        },
+        popup(PopupKind::Help),
+        popup(PopupKind::Move),
+        popup(PopupKind::CopyQuestion),
     ]
 }
 
@@ -328,4 +340,74 @@ fn the_hint_bar_shortens_its_names_when_the_window_is_narrow() {
         .expect("a help row");
     assert_eq!(help.bar.slot(help.label), None, "the status line has it");
     assert_eq!(help.narrow.slot(help.label), Some((Side::Right, "more")));
+}
+
+#[test]
+fn the_in_place_field_types_and_keeps_only_enter_and_escape() {
+    for field in [Field::Adding, Field::Renaming] {
+        let context = writing(field);
+        assert_eq!(
+            action_for(&typing('j'), context),
+            Some(Action::Insert('j')),
+            "every letter types while a title is being written"
+        );
+        assert_eq!(
+            action_for(&typing(' '), context),
+            Some(Action::Insert(' ')),
+            "space types rather than closing the task"
+        );
+        assert_eq!(
+            action_for(&press(KeyCode::Enter), context),
+            Some(Action::Confirm)
+        );
+        assert_eq!(
+            action_for(&press(KeyCode::Esc), context),
+            Some(Action::Cancel)
+        );
+    }
+}
+
+#[test]
+fn adding_and_renaming_call_enter_different_things() {
+    let name = |context| {
+        bindings(context)
+            .iter()
+            .find(|binding| binding.shown == "⏎")
+            .map(|binding| binding.label)
+    };
+
+    assert_eq!(name(writing(Field::Adding)), Some("add & keep typing"));
+    assert_eq!(name(writing(Field::Renaming)), Some("save"));
+}
+
+#[test]
+fn the_move_card_offers_a_day_under_every_key_it_names() {
+    let card = bindings(popup(PopupKind::Move));
+    let days: Vec<(&str, Action)> = card
+        .iter()
+        .filter_map(|binding| binding.keys.first().copied())
+        .collect();
+
+    assert!(days.contains(&("t", Action::ToToday)));
+    assert!(days.contains(&("1", Action::Tomorrow)));
+    assert!(days.contains(&("2", Action::NextWorkDay)));
+    assert!(days.contains(&("3", Action::NextMonday)));
+    assert!(days.contains(&("g", Action::GoToDate)));
+    assert!(days.contains(&("b", Action::ToBacklog)));
+}
+
+#[test]
+fn the_copy_question_has_a_key_for_each_answer_and_no_default() {
+    let context = popup(PopupKind::CopyQuestion);
+
+    assert_eq!(action_for(&typing('1'), context), Some(Action::ThisCopy));
+    assert_eq!(
+        action_for(&typing('2'), context),
+        Some(Action::ThisAndFuture)
+    );
+    assert_eq!(
+        action_for(&press(KeyCode::Enter), context),
+        None,
+        "there is no answer safe enough to be the one Enter picks"
+    );
 }

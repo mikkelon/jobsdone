@@ -1945,6 +1945,47 @@ fn a_deleted_note_comes_back() {
     assert_eq!(restored.body, "remember to mention X");
 }
 
+#[test]
+fn the_note_list_is_newest_first_and_shows_the_first_line() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.must(Command::CreateNote);
+    let first = world
+        .model
+        .notes
+        .keys()
+        .copied()
+        .next_back()
+        .expect("a note");
+    world.clock("2026-09-07T10:00:00");
+    world.must(Command::CreateNote);
+    let second = world
+        .model
+        .notes
+        .keys()
+        .copied()
+        .next_back()
+        .expect("a note");
+
+    world.must(Command::EditNote {
+        note: first,
+        body: "Mention to Anna:\n- CI runner budget".to_owned(),
+    });
+
+    let view = notes(&world.model);
+    assert_eq!(view.count, 2);
+    assert_eq!(
+        view.rows.iter().map(|row| row.note).collect::<Vec<_>>(),
+        [second, first],
+        "the newest note is at the top, and editing did not move it"
+    );
+    assert_eq!(view.rows[1].first_line, "Mention to Anna:");
+
+    world.must(Command::DeleteNote { note: second });
+    let view = notes(&world.model);
+    assert_eq!(view.count, 1, "a deleted note is out of the list");
+    assert_eq!(view.rows[0].note, first);
+}
+
 // ---- several instances -----------------------------------------------
 
 #[test]

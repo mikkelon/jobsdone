@@ -1,5 +1,5 @@
-//! The popups drawn over a page: the command palette, search, and the
-//! help overlay.
+//! The popups drawn over a page: the command palette, search, the help
+//! overlay, the move card and the question a recurring copy asks.
 //!
 //! They are lazygit-shaped: a centred box with an accent border, drawn
 //! over the panes with nothing behind it dimmed (DESIGN.md section 2).
@@ -8,9 +8,9 @@
 
 use ratatui::style::{Color, Style};
 
-use super::{Canvas, Rows, accent, bold, count, cursor, dim, plain};
-use crate::app::demo::Match;
-use crate::app::{App, Popup};
+use super::{Canvas, Rows, accent, bold, count, cursor, day_label, dim, place_label, plain};
+use crate::app::{App, MoveTarget, Popup};
+use crate::domain::Row;
 use crate::input::{self, Binding, KeyContext, NotesPane, Pane, PopupKind, ReviewStep};
 
 pub(super) fn draw(canvas: &mut Canvas, app: &App, rows: &Rows) {
@@ -21,6 +21,8 @@ pub(super) fn draw(canvas: &mut Canvas, app: &App, rows: &Rows) {
         PopupKind::Palette => palette(canvas, app, popup, rows),
         PopupKind::Search => search(canvas, app, popup, rows),
         PopupKind::Help => help(canvas, rows),
+        PopupKind::Move => move_card(canvas, app, popup, rows),
+        PopupKind::CopyQuestion => copy_question(canvas, app, popup, rows),
     }
 }
 
@@ -170,7 +172,7 @@ fn search(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     canvas.rput(
         x + width - 2,
         y + 1,
-        &format!("{} matches", results.count()),
+        &format!("{} matches", results.total),
         dim(),
     );
     divide(canvas, x, y + 2, width);
@@ -193,8 +195,13 @@ fn search(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
                     ("[ ]", plain())
                 };
                 canvas.put(x + 2, row, mark, style);
-                canvas.put(x + 6, row, found.title, plain());
-                canvas.rput(x + width - 2, row, found.right, dim());
+                canvas.put(x + 6, row, &found.title, plain());
+                canvas.rput(
+                    x + width - 2,
+                    row,
+                    &beside(found, *closed, app.today()),
+                    dim(),
+                );
                 if found_at == popup.selected {
                     canvas.restyle(x + 1, row, width - 2, cursor());
                 }
@@ -205,7 +212,7 @@ fn search(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
 
     let last = y + height - 3;
     divide(canvas, x, last, width);
-    if results.is_empty() {
+    if results.total == 0 {
         let add = format!("add \"{}\" to today", popup.text.trim());
         footer(canvas, x, last + 1, width, &[("⏎", &add), ("esc", "close")]);
     } else {
@@ -225,9 +232,109 @@ fn search(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
 
 enum Line<'a> {
     Heading(&'static str),
-    Found(&'a Match, bool),
+    Found(&'a Row, bool),
     Blank,
     Nothing,
+}
+
+/// What a result says about itself on the right: where an open task is,
+/// and when a closed one was closed.
+fn beside(found: &Row, closed: bool, today: jiff::civil::Date) -> String {
+    let mut parts = Vec::new();
+    if closed {
+        if let Some(at) = &found.closed_at {
+            parts.push(day_label(at.date()));
+        }
+    } else {
+        parts.push(place_label(found.place, today));
+        if found.focus {
+            parts.push("focus".to_owned());
+        }
+        if found.waiting {
+            parts.push("waiting".to_owned());
+        }
+    }
+    if found.repeat.is_some() {
+        parts.push("↻".to_owned());
+    }
+    parts.join(" · ")
+}
+
+// ---- the move card and the copy question -----------------------------
+
+const CARD_WIDTH: u16 = 50;
+
+/// A card over the row it is about, named after the task in its border.
+fn card(canvas: &mut Canvas, rows: &Rows, title: &str, lines: u16) -> (u16, u16) {
+    let width = CARD_WIDTH.min(canvas.width().saturating_sub(4));
+    let height = lines + 4;
+    let (x, y) = place(canvas, rows, width, height);
+    frame(canvas, x, y, width, height);
+    canvas.put(
+        x + 2,
+        y,
+        super::clip(&format!(" {title} "), width.saturating_sub(4)),
+        accent(),
+    );
+    (x, y)
+}
+
+/// The days a task can be sent to, each with the date it works out as.
+/// The keys and their names come from the key table; only the dates are
+/// the application's.
+fn move_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
+    let choices = app.move_choices();
+    let name = popup
+        .target
+        .and_then(|task| app.model().live_task(task))
+        .map_or("a task", |task| task.title.as_str());
+    let width = CARD_WIDTH.min(canvas.width().saturating_sub(4));
+    let (x, y) = card(canvas, rows, &format!("Move {name}"), choices.len() as u16);
+
+    for (at, choice) in choices.iter().enumerate() {
+        let row = y + 2 + at as u16;
+        canvas.put(x + 2, row, choice.key, accent());
+        canvas.put(x + 8, row, choice.label, plain());
+        let day = match choice.target {
+            MoveTarget::Day(day) => day_label(day),
+            MoveTarget::Backlog => "no day".to_owned(),
+            MoveTarget::Pick => "calendar".to_owned(),
+        };
+        canvas.rput(x + width - 2, row, &day, dim());
+        if at == popup.selected {
+            canvas.restyle(x + 1, row, width - 2, cursor());
+        }
+    }
+}
+
+/// The one deliberate question, with both answers spelled out because
+/// PRODUCT.md gives each of them a meaning (DESIGN.md section 8).
+fn copy_question(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
+    let answers: Vec<&Binding> = input::bindings(KeyContext::Popup {
+        kind: PopupKind::CopyQuestion,
+        text_field: false,
+    })
+    .iter()
+    .filter(|binding| binding.shown != "esc")
+    .collect();
+
+    let name = popup
+        .target
+        .and_then(|task| app.model().live_task(task))
+        .map_or("a task", |task| task.title.as_str());
+    let (x, y) = card(
+        canvas,
+        rows,
+        &format!("Rename {name}"),
+        answers.len() as u16 + 2,
+    );
+
+    canvas.put(x + 2, y + 2, "This task repeats. Rename:", dim());
+    for (at, answer) in answers.iter().enumerate() {
+        let row = y + 4 + at as u16;
+        canvas.put(x + 2, row, answer.shown, accent());
+        canvas.put(x + 8, row, &sentence(answer.label), plain());
+    }
 }
 
 // ---- the help overlay ------------------------------------------------
@@ -240,10 +347,7 @@ enum Help {
 }
 
 fn context(pane: Pane) -> KeyContext {
-    KeyContext::Home {
-        pane,
-        text_field: false,
-    }
+    KeyContext::Home { pane, field: None }
 }
 
 /// A row is the same row in two contexts when it says the same thing.
