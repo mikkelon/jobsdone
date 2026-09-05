@@ -14,6 +14,9 @@ closed, many times a day. It can also be left running in a tile, full or
 half width. Both must feel right, and the floating case comes first.
 
 - Start is instant. There is no splash, no loading state, no sync.
+- The day changes at 05:00, not midnight, so a late night belongs to the
+  day it started in. Until then the app still says "Today" about the
+  date that was on the calendar when the evening began.
 - Every change is written the moment it is made. Quitting with `q` or
   closing the window never asks anything; reopening lands where you were.
 - The morning review runs once per day, on the first open of a work day

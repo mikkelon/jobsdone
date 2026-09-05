@@ -60,10 +60,12 @@ onto a day. Surfacing is a prompt, not a move.
 
 ### Waiting
 
-A task can be flagged as waiting, meaning it is blocked on someone or
-something else. Waiting tasks are shown separately in the backlog and are
-not nagged about in the morning review. Clearing the flag returns the task
-to the ordinary backlog.
+A backlog task can be flagged as waiting, meaning it is blocked on
+someone or something else. Waiting tasks are shown separately in the
+backlog and are not nagged about in the morning review: a due date on a
+waiting task does not surface, a reminder still does. Flagging a task
+that is on a day sends it to the backlog as waiting. Pulling a waiting
+task onto a day clears the flag, and so does clearing it in place.
 
 ### Recurring tasks
 

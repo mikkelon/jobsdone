@@ -71,9 +71,10 @@ Consequences the later phases carry:
 - Recurring copy generation is idempotent, enforced by a unique
   constraint on schedule and date, so two instances generating the same
   day is harmless.
-- Undo is per instance. It undoes only that instance's own last action,
-  as an inverse operation, so it stays correct if another instance
-  changed something in between.
+- Undo is a stack of inverse operations stored in the database, shared
+  by every instance and surviving restarts. An inverse whose
+  precondition no longer holds, because another instance changed
+  something in between, is dropped with a message rather than applied.
 - The morning review's once-per-day gate is a stored date, so a second
   instance skips a review the first has started.
 
