@@ -650,6 +650,32 @@ fn the_notes_list_is_newest_first_with_the_age_of_each_note() {
     }
 }
 
+#[test]
+fn the_open_note_is_a_text_area_beside_the_list() {
+    let mut app = app();
+    app.update(Action::NotesPage);
+    app.update(Action::Confirm);
+    let drawn = look(&app, 120, 36);
+    let wanted = wireframe("10-scratchpad", 0, 36);
+
+    // The header of the note is the day and the time it was made.
+    assert_eq!(drawn[3], wanted[3], "the two headers");
+    // The body, beside the list, wrapped where the writer wrapped it.
+    for row in 5..=14 {
+        assert_eq!(right(&drawn[row]), right(&wanted[row]), "row {row}");
+    }
+    assert_eq!(drawn[34], wanted[34], "the hint bar of the note");
+}
+
+/// Everything to the right of the divider, which is the open note.
+fn right(row: &str) -> String {
+    row.chars()
+        .skip(44)
+        .collect::<String>()
+        .trim_end()
+        .to_owned()
+}
+
 /// The 44 columns the notes list has, without the pane beside it.
 fn left(row: &str) -> String {
     row.chars()

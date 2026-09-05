@@ -92,6 +92,22 @@ pub struct Editor {
     pub caret: usize,
 }
 
+/// The body of the open note while it is being typed.
+///
+/// Uncommitted text lives only in the application (ARCHITECTURE.md rule
+/// 8). A body is not confirmed the way a title is: it becomes an
+/// `EditNote` on the first tick after it changes and again when the note
+/// is left, so at most a quarter of a second of typing is ever at risk.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Draft {
+    /// The note being typed into, held by id so that a reload cannot turn
+    /// it into another one.
+    pub note: Id,
+    pub text: String,
+    /// Where the caret is, in characters from the start of the body.
+    pub caret: usize,
+}
+
 /// A popup over the page. What is typed into it is application state for
 /// the same reason a title being edited is.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -219,6 +235,8 @@ pub struct App {
     notes_pane: NotesPane,
     popup: Option<Popup>,
     editor: Option<Editor>,
+    /// The open note, while the keyboard is in it.
+    draft: Option<Draft>,
     message: Option<Message>,
     cursors: Cursors,
     /// The row a reorder is happening to, marked "moving" until the next
@@ -255,6 +273,7 @@ impl App {
             notes_pane: NotesPane::List,
             popup: None,
             editor: None,
+            draft: None,
             message: None,
             cursors: Cursors::default(),
             moving: None,
@@ -278,8 +297,14 @@ impl App {
         }
 
         match action {
-            Action::Quit => return Flow::Quit,
+            Action::Quit => {
+                self.save_the_note();
+                return Flow::Quit;
+            }
             Action::Tick | Action::FocusGained => {
+                // The pause between keystrokes is when a note body is
+                // written (ARCHITECTURE.md rule 8).
+                self.save_the_note();
                 // The clock is read here and nowhere else, so the date
                 // rolling over while the window is open is just a tick.
                 let today = domain::working_day(&self.now());
@@ -338,8 +363,8 @@ impl App {
             Action::DeleteForward => self.rub_forward(),
             Action::Left => self.move_caret(false),
             Action::Right => self.move_caret(true),
-            Action::LineStart => self.set_caret(0),
-            Action::LineEnd => self.set_caret(usize::MAX),
+            Action::LineStart => self.jump_to_the_edge(false),
+            Action::LineEnd => self.jump_to_the_edge(true),
 
             Action::MouseDown { column, row } => self.point_at(column, row),
             Action::MouseDrag { column, row } => self.drag_to(column, row),
@@ -785,19 +810,68 @@ impl App {
         Some(id)
     }
 
-    /// `a` on the notes page: an empty note at the top of the list, with
-    /// the cursor on it.
+    /// `a` on the notes page: an empty note at the top of the list, open
+    /// and ready to be typed into, because there is nothing else to do
+    /// with an empty note.
     fn new_note(&mut self) {
+        self.leave_the_note();
         if let Some(change) = self.run(Command::CreateNote)
             && let Some(note) = added_note(&change)
         {
             self.set_cursor(List::Notes, note);
+            self.open_the_note();
         }
+    }
+
+    /// Enter on the list, and `tab` off it: the note under the cursor
+    /// takes the keyboard, with the caret at the end of what is there.
+    fn open_the_note(&mut self) -> bool {
+        let Some(note) = self.cursor(List::Notes) else {
+            self.say("There is no note here yet.", false);
+            return false;
+        };
+        let Some(body) = self.model.note(note).map(|note| note.body.clone()) else {
+            return false;
+        };
+        self.draft = Some(Draft {
+            note,
+            caret: body.chars().count(),
+            text: body,
+        });
+        self.notes_pane = NotesPane::Note;
+        true
+    }
+
+    /// Leaving the note: what was typed is written and the keyboard goes
+    /// back to the list. A note is left by `esc`, by `tab`, by the page
+    /// turning, and by a click anywhere else.
+    fn leave_the_note(&mut self) {
+        if self.draft.is_none() {
+            return;
+        }
+        self.save_the_note();
+        self.draft = None;
+        self.notes_pane = NotesPane::List;
+    }
+
+    /// The note body as one command, when it differs from the row. This is
+    /// the moment ARCHITECTURE.md rule 8 leaves to this phase: the first
+    /// tick after a keystroke, and every leaving of the note.
+    fn save_the_note(&mut self) {
+        let Some(draft) = &self.draft else {
+            return;
+        };
+        let (note, body) = (draft.note, draft.text.clone());
+        if self.model.note(note).is_some_and(|held| held.body == body) {
+            return;
+        }
+        self.run(Command::EditNote { note, body });
     }
 
     /// `x` on the notes page. A note is thrown away the way a task is: no
     /// confirm, and `u` in the hint bar until the next key.
     fn throw_the_note_away(&mut self) {
+        self.leave_the_note();
         let Some(id) = self.note_at_cursor() else {
             return;
         };
@@ -957,7 +1031,9 @@ impl App {
             },
             Page::Notes => KeyContext::Notes {
                 pane: self.notes_pane,
-                text_field: self.notes_pane == NotesPane::Note,
+                // The note pane is a text field exactly while a note is
+                // open in it.
+                text_field: self.draft.is_some(),
             },
         }
     }
@@ -1018,6 +1094,11 @@ impl App {
 
     pub fn editor(&self) -> Option<&Editor> {
         self.editor.as_ref()
+    }
+
+    /// The open note, while the keyboard is in it.
+    pub fn draft(&self) -> Option<&Draft> {
+        self.draft.as_ref()
     }
 
     pub fn message(&self) -> Option<&Message> {
@@ -1098,9 +1179,14 @@ impl App {
         *slot = Some(id);
     }
 
-    /// One row down or up, in the popup if one is open and in the focused
-    /// list otherwise. Both ends stop rather than wrap.
+    /// One row down or up, in the popup if one is open, by a line of the
+    /// open note if the keyboard is in one, and in the focused list
+    /// otherwise. Both ends stop rather than wrap.
     fn step(&mut self, forward: bool) {
+        if self.popup.is_none() && self.draft.is_some() {
+            self.step_the_caret(forward);
+            return;
+        }
         if self.popup.is_some() {
             let last = self.popup_rows().saturating_sub(1);
             if let Some(popup) = &mut self.popup {
@@ -1145,6 +1231,7 @@ impl App {
         if self.popup.is_some() || self.editor.is_some() {
             return;
         }
+
         let narrow = self.layout.narrow;
         match (self.page, self.pane, self.notes_pane, forward) {
             (Page::Home, Pane::Day, _, true) => self.pane = Pane::Backlog,
@@ -1154,22 +1241,26 @@ impl App {
             (Page::Home, Pane::Backlog, _, true) if wrap => self.pane = Pane::Day,
             (Page::Home, Pane::Day, _, false) if wrap => self.pane = Pane::Backlog,
 
-            (Page::Notes, _, NotesPane::List, true) => self.notes_pane = NotesPane::Note,
-            (Page::Notes, _, NotesPane::Note, false) => self.notes_pane = NotesPane::List,
+            (Page::Notes, _, NotesPane::List, true) => {
+                self.open_the_note();
+            }
+            (Page::Notes, _, NotesPane::Note, false) => self.leave_the_note(),
             (Page::Notes, _, NotesPane::List, false) if narrow => {
                 self.page = Page::Home;
                 self.pane = Pane::Backlog;
             }
             (Page::Notes, _, NotesPane::Note, true) if wrap && narrow => {
+                self.leave_the_note();
                 self.page = Page::Home;
                 self.pane = Pane::Day;
             }
-            (Page::Notes, _, NotesPane::Note, true) if wrap => self.notes_pane = NotesPane::List,
+            (Page::Notes, _, NotesPane::Note, true) if wrap => self.leave_the_note(),
             _ => {}
         }
     }
 
     fn turn_the_page(&mut self) {
+        self.leave_the_note();
         self.page = match self.page {
             Page::Home => Page::Notes,
             Page::Notes => Page::Home,
@@ -1219,6 +1310,7 @@ impl App {
     }
 
     fn focus_on(&mut self, list: List) {
+        self.leave_the_note();
         match list {
             List::Day => {
                 self.page = Page::Home;
@@ -1258,14 +1350,23 @@ impl App {
             return;
         }
         if self.page == Page::Notes {
-            self.turn_the_page();
+            // The note first, then the page: one level at a time.
+            if self.draft.is_some() {
+                self.leave_the_note();
+            } else {
+                self.turn_the_page();
+            }
         }
     }
 
     /// Enter: the popup if one is open, and the field under it otherwise.
     fn confirm(&mut self) -> Flow {
         let Some(kind) = self.popup.as_ref().map(|popup| popup.kind) else {
-            self.commit_the_title();
+            if self.page == Page::Notes {
+                self.open_the_note();
+            } else {
+                self.commit_the_title();
+            }
             return Flow::Continue;
         };
         match kind {
@@ -1332,8 +1433,8 @@ impl App {
         }
     }
 
-    /// The text field with the keyboard: the field on a row, or the one
-    /// in a popup that is typed into.
+    /// The text field with the keyboard: the one in a popup that is typed
+    /// into, the field on a row, or the open note.
     fn field(&mut self) -> Option<(&mut String, &mut usize)> {
         if let Some(popup) = &mut self.popup {
             if !matches!(popup.kind, PopupKind::Palette | PopupKind::Search) {
@@ -1341,8 +1442,48 @@ impl App {
             }
             return Some((&mut popup.text, &mut popup.caret));
         }
-        let editor = self.editor.as_mut()?;
-        Some((&mut editor.text, &mut editor.caret))
+        if let Some(editor) = &mut self.editor {
+            return Some((&mut editor.text, &mut editor.caret));
+        }
+        let draft = self.draft.as_mut()?;
+        Some((&mut draft.text, &mut draft.caret))
+    }
+
+    /// The caret one line down or up the open note, keeping the column it
+    /// was in as far as the line it lands on has one.
+    fn step_the_caret(&mut self, down: bool) {
+        let Some(draft) = &mut self.draft else {
+            return;
+        };
+        let starts = line_starts(&draft.text);
+        let at = line_at(&starts, draft.caret);
+        let next = if down { at + 1 } else { at.wrapping_sub(1) };
+        let Some(start) = starts.get(next).copied() else {
+            return;
+        };
+        let column = draft.caret - starts[at];
+        let end = starts
+            .get(next + 1)
+            .map_or(draft.text.chars().count(), |after| after - 1);
+        draft.caret = (start + column).min(end);
+    }
+
+    /// Home and End, which in a note are the ends of the line the caret is
+    /// on rather than the ends of the whole body.
+    fn jump_to_the_edge(&mut self, end: bool) {
+        let Some(draft) = &mut self.draft else {
+            self.set_caret(if end { usize::MAX } else { 0 });
+            return;
+        };
+        let starts = line_starts(&draft.text);
+        let at = line_at(&starts, draft.caret);
+        draft.caret = if end {
+            starts
+                .get(at + 1)
+                .map_or(draft.text.chars().count(), |after| after - 1)
+        } else {
+            starts[at]
+        };
     }
 
     /// Typing puts the selection of a filtered list back at the top.
@@ -1399,6 +1540,26 @@ impl App {
             *caret = at.min(text.chars().count());
         }
     }
+}
+
+/// Where every line of a body starts, in characters. A body has at least
+/// one line, and a trailing newline opens another.
+fn line_starts(text: &str) -> Vec<usize> {
+    let mut starts = vec![0];
+    for (at, glyph) in text.chars().enumerate() {
+        if glyph == '\n' {
+            starts.push(at + 1);
+        }
+    }
+    starts
+}
+
+/// Which of those lines a caret is on.
+fn line_at(starts: &[usize], caret: usize) -> usize {
+    starts
+        .iter()
+        .rposition(|start| *start <= caret)
+        .unwrap_or_default()
 }
 
 /// The byte offset of a character offset, so that a caret counted in

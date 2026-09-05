@@ -265,7 +265,9 @@ adds it here first, the way a new dependency is added to section 2 first.
   `Page` is `Home` or `Notes`; `List` is `Day`, `Backlog` or `Notes`, one
   cursor each, held by id; `Popup` carries the kind, the text typed into
   it, the caret, the selected row and the task it is about; `Editor` is a
-  title being typed on a row; `Message` is what the hint bar says until
+  title being typed on a row; `Draft` is the note the keyboard is in, as
+  its id, the body being typed and the caret in characters; `Message` is
+  what the hint bar says until
   the next key, and whether `u` takes it back; `MoveChoice` is a row of
   the move card, its key and name from the key table and its day worked
   out here.

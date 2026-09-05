@@ -91,8 +91,11 @@ fn every_row_the_hint_bar_shows_has_a_name_to_show() {
     for context in every_context() {
         for binding in bindings(context) {
             assert!(!binding.shown.is_empty(), "{context:?} has a nameless row");
+            // A row that binds a key says what the key does. A row that
+            // binds none may be a caption over the rows beside it in the
+            // bar, which is all "in the list:" is.
             assert!(
-                !binding.label.is_empty(),
+                !binding.label.is_empty() || binding.keys.is_empty(),
                 "{:?} has no label",
                 binding.shown
             );
