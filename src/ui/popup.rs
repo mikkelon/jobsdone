@@ -21,6 +21,7 @@ pub(super) fn draw(canvas: &mut Canvas, app: &App, rows: &Rows) {
         PopupKind::Palette => palette(canvas, app, popup, rows),
         PopupKind::Search => search(canvas, app, popup, rows),
         PopupKind::Help => help(canvas, rows),
+        PopupKind::Move | PopupKind::CopyQuestion => {}
     }
 }
 
@@ -240,10 +241,7 @@ enum Help {
 }
 
 fn context(pane: Pane) -> KeyContext {
-    KeyContext::Home {
-        pane,
-        text_field: false,
-    }
+    KeyContext::Home { pane, field: None }
 }
 
 /// A row is the same row in two contexts when it says the same thing.

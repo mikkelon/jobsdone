@@ -39,16 +39,30 @@ pub enum PopupKind {
     Palette,
     Search,
     Help,
+    /// The move card: the day a task is sent to.
+    Move,
+    /// The one deliberate question: whether a recurring copy's new title
+    /// is for this copy or for this and future copies.
+    CopyQuestion,
+}
+
+/// The in-place text field on the home page, which is the only place a
+/// task's title is written. Which one it is decides what Enter is called,
+/// because adding keeps the field open and renaming does not.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Field {
+    Adding,
+    Renaming,
 }
 
 /// Where the keyboard is, which is what decides what a key means.
 ///
-/// With `text_field` set, every printable key becomes `Insert` and only
+/// With a text field set, every printable key becomes `Insert` and only
 /// `Enter`, `Escape`, `Tab`, `↑`, `↓`, the editing keys and the `Alt`
 /// shortcuts keep a name of their own.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum KeyContext {
-    Home { pane: Pane, text_field: bool },
+    Home { pane: Pane, field: Option<Field> },
     Notes { pane: NotesPane, text_field: bool },
     Review { step: ReviewStep, text_field: bool },
     Popup { kind: PopupKind, text_field: bool },
@@ -58,8 +72,8 @@ impl KeyContext {
     /// Whether a text field has the keyboard.
     pub fn text_field(self) -> bool {
         match self {
-            KeyContext::Home { text_field, .. }
-            | KeyContext::Notes { text_field, .. }
+            KeyContext::Home { field, .. } => field.is_some(),
+            KeyContext::Notes { text_field, .. }
             | KeyContext::Review { text_field, .. }
             | KeyContext::Popup { text_field, .. } => text_field,
         }
@@ -98,12 +112,20 @@ pub enum Action {
     ToToday,
     ToBacklog,
     MoveToDay,
+    /// The move card's own days, which are the same Monday-to-Friday
+    /// definition the work-days rule uses.
+    Tomorrow,
+    NextWorkDay,
+    NextMonday,
     DueBy,
     RemindOn,
     Waiting,
     Repeat,
     Keep,
     Undo,
+    /// The two answers to the copy question.
+    ThisCopy,
+    ThisAndFuture,
 
     // Popups.
     Search,
@@ -701,6 +723,151 @@ const REVIEW_SURFACED: &[Binding] = &[
     },
 ];
 
+/// The in-place field on a task row. Adding keeps the field open after
+/// Enter so that a list is typed in one go; renaming closes it.
+const HOME_ADDING: &[Binding] = &[
+    Binding {
+        keys: &[],
+        shown: "type",
+        label: "the text is the whole task",
+        bar: Bar::Left,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("enter", Action::Confirm)],
+        shown: "⏎",
+        label: "add & keep typing",
+        bar: Bar::Left,
+        narrow: Bar::Short(Side::Left, "add"),
+    },
+    Binding {
+        keys: &[("esc", Action::Cancel)],
+        shown: "esc",
+        label: "stop",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+];
+
+const HOME_RENAMING: &[Binding] = &[
+    Binding {
+        keys: &[],
+        shown: "type",
+        label: "the text is the whole task",
+        bar: Bar::Left,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("enter", Action::Confirm)],
+        shown: "⏎",
+        label: "save",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("esc", Action::Cancel)],
+        shown: "esc",
+        label: "cancel",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+];
+
+/// The move card. Its six choices are rows of the card rather than of the
+/// hint bar, which is why they are the rows the bar leaves out; the
+/// application reads them back to put a date beside each one.
+const MOVE_CARD: &[Binding] = &[
+    Binding {
+        keys: &[("t", Action::ToToday)],
+        shown: "t",
+        label: "Today",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("1", Action::Tomorrow)],
+        shown: "1",
+        label: "Tomorrow",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("2", Action::NextWorkDay)],
+        shown: "2",
+        label: "Next work day",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("3", Action::NextMonday)],
+        shown: "3",
+        label: "Next Monday",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("g", Action::GoToDate)],
+        shown: "g",
+        label: "Pick a date…",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("b", Action::ToBacklog)],
+        shown: "b",
+        label: "Backlog",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("up", Action::Up), ("down", Action::Down)],
+        shown: "↑/↓",
+        label: "move",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("enter", Action::Confirm)],
+        shown: "⏎",
+        label: "move it there",
+        bar: Bar::Left,
+        narrow: Bar::Short(Side::Left, "move"),
+    },
+    Binding {
+        keys: &[("esc", Action::Cancel)],
+        shown: "esc",
+        label: "cancel",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+];
+
+/// The one deliberate question (DESIGN.md section 8). Both answers are a
+/// key of their own, because there is no default that is safe to guess.
+const COPY_QUESTION: &[Binding] = &[
+    Binding {
+        keys: &[("1", Action::ThisCopy)],
+        shown: "1",
+        label: "this copy",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("2", Action::ThisAndFuture)],
+        shown: "2",
+        label: "this and future copies",
+        bar: Bar::Left,
+        narrow: Bar::Short(Side::Left, "and future"),
+    },
+    Binding {
+        keys: &[("esc", Action::Cancel)],
+        shown: "esc",
+        label: "cancel",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+];
+
 /// The palette and search share a shape: a text field, a filtered list,
 /// and the two keys that leave.
 const FILTER_BOX: &[Binding] = &[
@@ -746,6 +913,14 @@ const HELP_OVERLAY: &[Binding] = &[Binding {
 pub fn bindings(context: KeyContext) -> &'static [Binding] {
     match context {
         KeyContext::Home {
+            field: Some(Field::Adding),
+            ..
+        } => HOME_ADDING,
+        KeyContext::Home {
+            field: Some(Field::Renaming),
+            ..
+        } => HOME_RENAMING,
+        KeyContext::Home {
             pane: Pane::Day, ..
         } => HOME_DAY,
         KeyContext::Home {
@@ -776,6 +951,14 @@ pub fn bindings(context: KeyContext) -> &'static [Binding] {
             kind: PopupKind::Help,
             ..
         } => HELP_OVERLAY,
+        KeyContext::Popup {
+            kind: PopupKind::Move,
+            ..
+        } => MOVE_CARD,
+        KeyContext::Popup {
+            kind: PopupKind::CopyQuestion,
+            ..
+        } => COPY_QUESTION,
     }
 }
 
@@ -817,6 +1000,14 @@ pub fn name(context: KeyContext) -> &'static str {
             kind: PopupKind::Help,
             ..
         } => "HELP",
+        KeyContext::Popup {
+            kind: PopupKind::Move,
+            ..
+        } => "MOVE",
+        KeyContext::Popup {
+            kind: PopupKind::CopyQuestion,
+            ..
+        } => "RENAME",
     }
 }
 

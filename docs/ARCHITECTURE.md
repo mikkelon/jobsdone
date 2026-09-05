@@ -210,13 +210,17 @@ adds it here first, the way a new dependency is added to section 2 first.
   cell coordinates, and in text fields `Insert(char)` and the editing
   keys.
 - `KeyContext`: `Home { pane }`, `Notes { pane }`, `Review { step }`,
-  `Popup { kind }`, each with a `text_field: bool` overlay, and
-  `KeyContext::text_field()` to read it. When the overlay is set,
+  `Popup { kind }`, each with a text-field overlay, and
+  `KeyContext::text_field()` to read it. Home's overlay is a
+  `Option<Field>` rather than a bool, because the hint bar has to say
+  which field it is: adding keeps the field open after Enter and
+  renaming does not. When the overlay is set,
   printable keys become `Insert` and only `Enter`, `Escape`, `Tab`, `Up`,
   `Down`, the editing keys and the `Alt` shortcuts keep a name. The
   editing keys belong to the field rather than to the table, so they are
   never a row of the hint bar.
-- `Pane`, `NotesPane`, `ReviewStep` and `PopupKind`: what a context is of.
+- `Pane`, `NotesPane`, `ReviewStep`, `Field` and `PopupKind`: what a
+  context is of.
 - `action_for(Event, KeyContext) -> Option<Action>`.
 - `bindings(KeyContext) -> &[Binding]`: the rows of the key table for a
   context. The hint bar, the command palette and the help overlay are

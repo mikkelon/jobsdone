@@ -246,7 +246,7 @@ impl App {
         match self.page {
             Page::Home => KeyContext::Home {
                 pane: self.pane,
-                text_field: false,
+                field: None,
             },
             Page::Notes => KeyContext::Notes {
                 pane: self.notes_pane,

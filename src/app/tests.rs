@@ -82,7 +82,7 @@ fn the_hint_bar_has_a_context_to_draw_from() {
         app.key_context(),
         KeyContext::Home {
             pane: Pane::Day,
-            text_field: false
+            field: None
         }
     );
 }
@@ -242,7 +242,7 @@ fn a_popup_takes_the_keyboard_and_escape_gives_it_back() {
         app.page_context(),
         KeyContext::Home {
             pane: Pane::Day,
-            text_field: false
+            field: None
         },
         "the page underneath is what the palette lists"
     );
