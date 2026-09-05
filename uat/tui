@@ -18,7 +18,7 @@ set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ROOT="$(cd "$HERE/.." && pwd)"
-SESSION="${UAT_SESSION:-jobsdone-uat}"
+SESSION="${UAT_SESSION:-jobsdone-uat-$(basename "$ROOT")}"
 OUT="$HERE/out"
 STATE="$OUT/.state"
 DEFAULT_DATA="$OUT/data"
