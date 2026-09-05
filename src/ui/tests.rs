@@ -348,7 +348,7 @@ fn draw_answers_where_every_row_was_put() {
         .iter()
         .filter(|row| row.list == List::Backlog)
         .collect();
-    assert_eq!(backlog.len(), 12);
+    assert_eq!(backlog.len(), 14, "twelve tasks and the two schedules");
     assert_eq!(backlog[0].area.x, 60, "the right pane starts after it");
 }
 
@@ -585,6 +585,25 @@ fn the_move_card_names_the_task_and_the_days() {
     assert!(text.contains("Mon 8 Sep"));
     assert!(text.contains("Backlog"));
     assert!(text.contains("no day"));
+}
+
+#[test]
+fn the_backlog_lists_the_schedules_under_its_groups() {
+    let drawn = look(&app(), 120, 36);
+    let text = drawn.join("\n");
+
+    assert!(text.contains("REPEATING 2"), "a group of its own");
+    assert!(
+        drawn
+            .iter()
+            .any(|row| row.contains(" ↻  Ship invoice export") && row.ends_with("every Friday")),
+        "each schedule by title and rule"
+    );
+    assert!(
+        drawn
+            .iter()
+            .any(|row| row.contains(" ↻  Write standup notes") && row.ends_with("every work day"))
+    );
 }
 
 #[test]

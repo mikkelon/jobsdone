@@ -21,9 +21,9 @@
  [x] Pay electricity bill                            08:30 │ [ ] Feedback on the proposal         [waiting]  [◷ 15 Sep]
                                                            │ [ ] Parcel from the supplier                     [waiting]
  MOVED 1 ───────────────────────────────────────────────── │
- [→] Chase the hosting invoice                to Mon 8 Sep │
-                                                           │
-                                                           │
+ [→] Chase the hosting invoice                to Mon 8 Sep │ REPEATING 2 ──────────────────────────────────────────────
+                                                           │  ↻  Ship invoice export                       every Friday
+                                                           │  ↻  Write standup notes                     every work day
                                                            │
                                                            │
                                                            │
@@ -60,9 +60,9 @@
  [x] Pay electricity bill                                                08:30 │ [ ] Feedback on the proposal                             [waiting]  [◷ 15 Sep]
                                                                                │ [ ] Parcel from the supplier                                         [waiting]
  MOVED 1 ───────────────────────────────────────────────────────────────────── │
- [→] Chase the hosting invoice                                    to Mon 8 Sep │
-                                                                               │
-                                                                               │
+ [→] Chase the hosting invoice                                    to Mon 8 Sep │ REPEATING 2 ──────────────────────────────────────────────────────────────────
+                                                                               │  ↻  Ship invoice export                                           every Friday
+                                                                               │  ↻  Write standup notes                                         every work day
                                                                                │
                                                                                │
                                                                                │

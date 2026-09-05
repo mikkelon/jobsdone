@@ -250,7 +250,10 @@ def sample_today(g, focus='left', cursor=True, div=None, wide=False):
     group(g, rx, rw, y, 'Waiting', 3); y += 1
     task(g, rx, rw, y, 'Quote from the electrician', state='waiting', chips=[('wait', 'waiting')]); y += 1
     task(g, rx, rw, y, 'Feedback on the proposal', state='waiting', chips=[('wait', 'waiting'), ('rem', '◷ 15 Sep')]); y += 1
-    task(g, rx, rw, y, 'Parcel from the supplier', state='waiting', chips=[('wait', 'waiting')]); y += 1
+    task(g, rx, rw, y, 'Parcel from the supplier', state='waiting', chips=[('wait', 'waiting')]); y += 2
+    group(g, rx, rw, y, 'Repeating', 2); y += 1
+    for t, r in [('Ship invoice export', 'every Friday'), ('Write standup notes', 'every work day')]:
+        g.put(rx + 1, y, ' ↻ ', 'd'); g.put(rx + 5, y, t); g.rput(rx + rw - 1, y, r, 'd'); y += 1
     return lx, lw, rx, rw, y0, y1
 
 

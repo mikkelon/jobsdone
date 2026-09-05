@@ -255,9 +255,11 @@ adds it here first, the way a new dependency is added to section 2 first.
 - `App::key_context() -> KeyContext`, and `App::page_context()` for the
   context of the page under an open popup, which is the one the palette
   lists the commands of.
-- `Layout`: which pane and which row, with its task or note id, occupies
-  which cell rectangle, as a `narrow` flag, a `ListArea` per pane and a
-  `RowArea` per row, over a `Rect` of the terminal's own cells. `app` may
+- `Layout`: which pane and which row occupies which cell rectangle, as a
+  `narrow` flag, a `ListArea` per pane and a `RowArea` per row, over a
+  `Rect` of the terminal's own cells. A row is named by a `RowId`, which
+  is a task, a schedule or a note, because the backlog pane draws the
+  schedules under its tasks and the three number from one apiece. `app` may
   not name ratatui, so the rectangle is its own.
   `App::set_layout(Layout)` stores the last one and the mouse actions are
   resolved against it.
@@ -275,10 +277,10 @@ adds it here first, the way a new dependency is added to section 2 first.
   the next key, and whether `u` takes it back; `MoveChoice` is a row of
   the move card, its key and name from the key table and its day worked
   out here.
-- `Group`: which group of a pane a row is in. The domain decides what is
-  in each; the application needs the name because a key means something
-  different in each, and `ui` because a group is drawn under its own
-  rule.
+- `Group`: which group of a pane a row is in, the schedule list under the
+  backlog included. The domain decides what is in each; the application
+  needs the name because a key means something different in each, and
+  `ui` because a group is drawn under its own rule.
 
 ### `ui`
 

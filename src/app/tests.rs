@@ -64,14 +64,19 @@ fn add(app: &mut App, title: &str) -> Id {
     type_in(app, title);
     app.update(Action::Confirm);
     app.update(Action::Cancel);
-    app.cursor(app.focused()).expect("the task just added")
+    cursor(app, app.focused()).expect("the task just added")
+}
+
+/// The task the cursor is on, which is what these tests mean by it.
+fn cursor(app: &App, list: List) -> Option<Id> {
+    app.cursor(list).and_then(RowId::task)
 }
 
 /// The titles of a list, in the order they are drawn.
 fn titles(app: &App, list: List) -> Vec<String> {
     app.rows_of(list)
         .into_iter()
-        .filter_map(|(id, _)| app.model().task(id).map(|task| task.title.clone()))
+        .filter_map(|(id, _)| app.model().task(id.task()?).map(|task| task.title.clone()))
         .collect()
 }
 
@@ -472,7 +477,11 @@ fn space_closes_a_task_and_the_cursor_steps_to_the_next_one() {
         titles(&app, List::Day),
         ["Review Anna's PR", "Morning review"]
     );
-    assert_eq!(app.cursor(List::Day), Some(next), "and steps down the plan");
+    assert_eq!(
+        cursor(&app, List::Day),
+        Some(next),
+        "and steps down the plan"
+    );
     assert_eq!(hint(&app), "Closed \"Morning review\"");
     assert!(app.message().is_some_and(|message| message.undo));
 }
@@ -487,7 +496,7 @@ fn space_on_a_closed_task_reopens_it_at_the_end_of_the_plan() {
 
     // The cursor stepped on; go back to the closed row and reopen it.
     app.update(Action::Down);
-    assert_eq!(app.cursor(List::Day), Some(first));
+    assert_eq!(cursor(&app, List::Day), Some(first));
     app.update(Action::Close);
 
     assert_eq!(
@@ -495,7 +504,11 @@ fn space_on_a_closed_task_reopens_it_at_the_end_of_the_plan() {
         ["Review Anna's PR", "Morning review"]
     );
     assert_eq!(groups(&app, List::Day), [Group::Plan, Group::Plan]);
-    assert_eq!(app.cursor(List::Day), Some(first), "the cursor follows it");
+    assert_eq!(
+        cursor(&app, List::Day),
+        Some(first),
+        "the cursor follows it"
+    );
 }
 
 #[test]
@@ -555,7 +568,7 @@ fn j_and_k_reorder_within_a_group() {
     app.update(Action::MoveUp);
     assert_eq!(titles(&app, List::Day), ["One", "Three", "Two"]);
     assert_eq!(
-        app.cursor(List::Day),
+        cursor(&app, List::Day),
         Some(three),
         "the cursor goes with it"
     );
@@ -582,7 +595,7 @@ fn a_focus_item_reorders_among_the_focus_items() {
 
     app.update(Action::Focus);
     app.update(Action::Down);
-    assert_eq!(app.cursor(List::Day), Some(first));
+    assert_eq!(cursor(&app, List::Day), Some(first));
     app.update(Action::Focus);
 
     assert_eq!(
@@ -604,7 +617,7 @@ fn a_focus_item_reorders_among_the_focus_items() {
         ],
         "it swapped with the other focus item, over the plan row between them"
     );
-    assert_eq!(app.cursor(List::Day), Some(first));
+    assert_eq!(cursor(&app, List::Day), Some(first));
     assert_eq!(
         groups(&app, List::Day),
         [Group::Focus, Group::Focus, Group::Plan]
@@ -728,6 +741,32 @@ fn the_move_card_acts_on_the_row_it_was_opened_on() {
 
     assert_eq!(titles(&app, List::Backlog), ["Clean out the garage"]);
     assert_eq!(app.model().task(first).and_then(|task| task.day), None);
+}
+
+// ---- the schedules under the backlog ---------------------------------
+
+#[test]
+fn the_cursor_walks_on_to_the_schedules_and_a_task_key_says_so() {
+    let mut app = app_at(a_schedule_through("2025-09-04"), NOW);
+    app.update(Action::PaneRight);
+    let waiting = add(&mut app, "Quote from the electrician");
+    app.update(Action::Waiting);
+
+    assert_eq!(
+        groups(&app, List::Backlog),
+        [Group::Waiting, Group::Schedules]
+    );
+
+    app.update(Action::Down);
+    assert_eq!(
+        app.cursor(List::Backlog),
+        Some(RowId::Schedule(1)),
+        "the row under the last task is the schedule"
+    );
+
+    app.update(Action::Close);
+    assert_eq!(hint(&app), "That row is a repeat schedule, not a task.");
+    assert!(app.model().task(waiting).is_some_and(|task| task.is_open()));
 }
 
 // ---- the date card ---------------------------------------------------
@@ -886,7 +925,7 @@ fn w_moves_a_backlog_row_under_waiting_and_back() {
     );
     // The row moved between the groups of one pane; the cursor is a flag
     // behind, not a task behind.
-    assert_eq!(app.cursor(List::Backlog), Some(blocked));
+    assert_eq!(cursor(&app, List::Backlog), Some(blocked));
 
     app.update(Action::Waiting);
     assert_eq!(
@@ -917,7 +956,7 @@ fn w_on_a_day_task_sends_it_to_the_backlog_as_waiting() {
     // A move like any other: the pointer stays on the day and the cursor
     // steps to the next row of the group it left.
     assert_eq!(groups(&app, List::Day), [Group::Plan, Group::Moved]);
-    assert_eq!(app.cursor(List::Day), Some(next));
+    assert_eq!(cursor(&app, List::Day), Some(next));
 
     app.update(Action::Undo);
     assert_eq!(
@@ -953,7 +992,7 @@ fn x_deletes_without_asking_and_u_puts_it_back() {
     assert_eq!(titles(&app, List::Day), ["Review Anna's PR"]);
     assert_eq!(hint(&app), "Deleted \"Book dentist\"");
     assert!(app.message().is_some_and(|message| message.undo));
-    assert_eq!(app.cursor(List::Day), Some(kept));
+    assert_eq!(cursor(&app, List::Day), Some(kept));
 
     app.update(Action::Undo);
 
@@ -1035,19 +1074,23 @@ fn the_cursor_walks_the_list_by_id_and_stops_at_both_ends() {
     let ids: Vec<Id> = app
         .rows_of(List::Day)
         .into_iter()
-        .map(|(id, _)| id)
+        .filter_map(|(id, _)| id.task())
         .collect();
 
     app.update(Action::Up);
     app.update(Action::Up);
     app.update(Action::Up);
-    assert_eq!(app.cursor(List::Day), Some(ids[0]), "the top does not wrap");
+    assert_eq!(
+        cursor(&app, List::Day),
+        Some(ids[0]),
+        "the top does not wrap"
+    );
 
     for _ in 0..50 {
         app.update(Action::Down);
     }
     assert_eq!(
-        app.cursor(List::Day),
+        cursor(&app, List::Day),
         ids.last().copied(),
         "and neither does the bottom"
     );
@@ -1059,7 +1102,7 @@ fn each_pane_keeps_its_own_cursor() {
     add(&mut app, "One");
     add(&mut app, "Two");
     app.update(Action::Up);
-    let day = app.cursor(List::Day);
+    let day = cursor(&app, List::Day);
 
     app.update(Action::PaneRight);
     assert_eq!(app.pane(), Pane::Backlog);
@@ -1067,7 +1110,11 @@ fn each_pane_keeps_its_own_cursor() {
 
     app.update(Action::PaneLeft);
     assert_eq!(app.pane(), Pane::Day);
-    assert_eq!(app.cursor(List::Day), day, "coming back lands where it was");
+    assert_eq!(
+        cursor(&app, List::Day),
+        day,
+        "coming back lands where it was"
+    );
 }
 
 #[test]
@@ -1076,7 +1123,7 @@ fn a_cursor_on_a_row_another_window_took_away_clamps_to_the_first() {
     let mut app = app_at(store.clone(), NOW);
     add(&mut app, "One");
     let second = add(&mut app, "Two");
-    assert_eq!(app.cursor(List::Day), Some(second));
+    assert_eq!(cursor(&app, List::Day), Some(second));
 
     let mut elsewhere = app_at(store, NOW);
     elsewhere.update(Action::Down);
@@ -1085,8 +1132,8 @@ fn a_cursor_on_a_row_another_window_took_away_clamps_to_the_first() {
 
     assert_eq!(titles(&app, List::Day), ["One"]);
     assert_eq!(
-        app.cursor(List::Day),
-        app.rows_of(List::Day).first().map(|(id, _)| *id)
+        cursor(&app, List::Day),
+        app.rows_of(List::Day).first().and_then(|(id, _)| id.task())
     );
 }
 
@@ -1332,13 +1379,13 @@ fn the_arrows_move_the_selection_inside_a_popup_not_the_pane() {
     let mut app = started();
     add(&mut app, "One");
     add(&mut app, "Two");
-    let cursor = app.cursor(List::Day);
+    let was = cursor(&app, List::Day);
     app.update(Action::Commands);
 
     app.update(Action::Down);
     app.update(Action::Down);
     assert_eq!(app.popup().map(|popup| popup.selected), Some(2));
-    assert_eq!(app.cursor(List::Day), cursor, "the pane did not move");
+    assert_eq!(cursor(&app, List::Day), was, "the pane did not move");
 
     for _ in 0..99 {
         app.update(Action::Down);
@@ -1379,7 +1426,7 @@ fn a_click_outside_any_row_still_moves_the_keyboard_to_that_pane() {
         }],
         rows: Vec::new(),
     });
-    let cursor = app.cursor(List::Backlog);
+    let was = cursor(&app, List::Backlog);
 
     app.update(Action::MouseDown {
         column: 70,
@@ -1387,7 +1434,7 @@ fn a_click_outside_any_row_still_moves_the_keyboard_to_that_pane() {
     });
 
     assert_eq!(app.pane(), Pane::Backlog);
-    assert_eq!(app.cursor(List::Backlog), cursor);
+    assert_eq!(cursor(&app, List::Backlog), was);
 }
 
 #[test]
@@ -1396,7 +1443,7 @@ fn the_wheel_moves_the_cursor() {
     add(&mut app, "One");
     add(&mut app, "Two");
     app.update(Action::Up);
-    let first = app.cursor(List::Day);
+    let first = cursor(&app, List::Day);
 
     app.update(Action::Scroll {
         column: 4,
@@ -1404,7 +1451,7 @@ fn the_wheel_moves_the_cursor() {
         down: true,
     });
 
-    assert_ne!(app.cursor(List::Day), first);
+    assert_ne!(cursor(&app, List::Day), first);
 }
 
 #[test]
@@ -1463,7 +1510,7 @@ fn dragging_a_row_carries_it_the_way_the_keys_do() {
     app.update(Action::MouseUp { column: 4, row: 5 });
 
     assert_eq!(titles(&app, List::Day), ["Three", "One", "Two"]);
-    assert_eq!(app.cursor(List::Day), Some(three));
+    assert_eq!(cursor(&app, List::Day), Some(three));
     assert_eq!(
         app.model().task(one).map(|task| task.position),
         Some(1),
@@ -1494,7 +1541,7 @@ fn an_undo_that_no_longer_applies_is_dropped_and_says_so() {
     // task it would put back is not gone at all.
     let mut app = started();
     add(&mut app, "Book dentist");
-    let id = app.cursor(List::Day).expect("the task");
+    let id = cursor(&app, List::Day).expect("the task");
     let mut model = app.model().clone();
     model.undo.push(domain::UndoEntry {
         id: 99,

@@ -42,6 +42,44 @@ pub enum List {
     Notes,
 }
 
+/// Which row of a list the cursor is on.
+///
+/// A pane draws tasks and, under the backlog's groups, the schedules
+/// that make tasks; the notes page draws notes. An id alone would not
+/// say which of them a row is, and the three number from one apiece.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RowId {
+    Task(Id),
+    Schedule(Id),
+    Note(Id),
+}
+
+impl RowId {
+    /// The task the row is, if it is one.
+    pub fn task(self) -> Option<Id> {
+        match self {
+            RowId::Task(id) => Some(id),
+            _ => None,
+        }
+    }
+
+    /// The schedule the row is, if it is one.
+    pub fn schedule(self) -> Option<Id> {
+        match self {
+            RowId::Schedule(id) => Some(id),
+            _ => None,
+        }
+    }
+
+    /// The note the row is, if it is one.
+    pub fn note(self) -> Option<Id> {
+        match self {
+            RowId::Note(id) => Some(id),
+            _ => None,
+        }
+    }
+}
+
 /// Which group of a pane a row is in.
 ///
 /// The domain decides what is in each group; the application needs the
@@ -56,6 +94,9 @@ pub enum Group {
     Moved,
     Ordinary,
     Waiting,
+    /// The schedules the backlog pane lists under its two groups
+    /// (DOMAIN.md section 7). A row here is a schedule, not a task.
+    Schedules,
     Notes,
 }
 
@@ -210,7 +251,7 @@ pub struct ListArea {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RowArea {
     pub list: List,
-    pub id: Id,
+    pub id: RowId,
     pub area: Rect,
 }
 
@@ -244,9 +285,9 @@ impl Layout {
 /// The cursor of each list, by id.
 #[derive(Clone, Copy, Debug, Default)]
 struct Cursors {
-    day: Option<Id>,
-    backlog: Option<Id>,
-    notes: Option<Id>,
+    day: Option<RowId>,
+    backlog: Option<RowId>,
+    notes: Option<RowId>,
 }
 
 /// The views the screen is drawn from, recomputed whenever the model or
@@ -280,7 +321,7 @@ pub struct App {
     /// section 18).
     moving: Option<Id>,
     /// The row the mouse took hold of, while it holds it.
-    dragging: Option<(List, Id)>,
+    dragging: Option<(List, RowId)>,
     layout: Layout,
     /// Where the clock comes from. The application is the only module
     /// that reads it (ARCHITECTURE.md section 3), which is also what
@@ -601,9 +642,11 @@ impl App {
     /// order the cursor moves in, each with the group it is in. The
     /// groups and their order are the domain's (DOMAIN.md sections 6
     /// and 7).
-    fn rows_of(&self, list: List) -> Vec<(Id, Group)> {
+    fn rows_of(&self, list: List) -> Vec<(RowId, Group)> {
         let tasks = |rows: &[domain::Row], group| {
-            rows.iter().map(|row| (row.task, group)).collect::<Vec<_>>()
+            rows.iter()
+                .map(|row| (RowId::Task(row.task), group))
+                .collect::<Vec<_>>()
         };
         match list {
             List::Day => {
@@ -621,6 +664,11 @@ impl App {
                 [
                     tasks(&backlog.ordinary, Group::Ordinary),
                     tasks(&backlog.waiting, Group::Waiting),
+                    backlog
+                        .schedules
+                        .iter()
+                        .map(|row| (RowId::Schedule(row.schedule), Group::Schedules))
+                        .collect(),
                 ]
                 .concat()
             }
@@ -629,12 +677,12 @@ impl App {
                 .notes
                 .rows
                 .iter()
-                .map(|row| (row.note, Group::Notes))
+                .map(|row| (RowId::Note(row.note), Group::Notes))
                 .collect(),
         }
     }
 
-    fn group_of(&self, list: List, id: Id) -> Option<Group> {
+    fn group_of(&self, list: List, id: RowId) -> Option<Group> {
         self.rows_of(list)
             .into_iter()
             .find(|(row, _)| *row == id)
@@ -656,17 +704,22 @@ impl App {
             self.say("That row only points at the task; it has moved.", false);
             return None;
         }
-        Some(id)
+        let Some(task) = id.task() else {
+            self.say("That row is a repeat schedule, not a task.", false);
+            return None;
+        };
+        Some(task)
     }
 
     /// The row the cursor lands on when the one it is on leaves the list:
     /// the next of its group, then the one before it, then whatever is
     /// nearest.
-    fn neighbour_of(&self, list: List, id: Id) -> Option<Id> {
+    fn neighbour_of(&self, list: List, id: Id) -> Option<RowId> {
+        let id = RowId::Task(id);
         let rows = self.rows_of(list);
         let at = rows.iter().position(|(row, _)| *row == id)?;
         let group = rows[at].1;
-        let same = |(row, other): &&(Id, Group)| *other == group && *row != id;
+        let same = |(row, other): &&(RowId, Group)| *other == group && *row != id;
 
         rows[at + 1..]
             .iter()
@@ -766,7 +819,7 @@ impl App {
             return;
         };
         let list = self.focused();
-        let Some(group) = self.group_of(list, id) else {
+        let Some(group) = self.group_of(list, RowId::Task(id)) else {
             return;
         };
         if !group.is_ordered_by_hand() {
@@ -778,7 +831,7 @@ impl App {
             .rows_of(list)
             .into_iter()
             .filter(|(_, other)| *other == group)
-            .map(|(row, _)| row)
+            .filter_map(|(row, _)| row.task())
             .collect();
         let Some(at) = siblings.iter().position(|row| *row == id) else {
             return;
@@ -1157,7 +1210,7 @@ impl App {
                 if let Some(change) = self.run(Command::AddTask { title, place })
                     && let Some(added) = added_task(&change)
                 {
-                    self.set_cursor(list, added);
+                    self.set_cursor(list, RowId::Task(added));
                 }
                 if let Some(editor) = &mut self.editor {
                     editor.text.clear();
@@ -1319,7 +1372,7 @@ impl App {
     /// The cursor of a list, re-resolved against what the list holds now:
     /// a row that has gone clamps to the first one (ARCHITECTURE.md rule
     /// 6).
-    pub fn cursor(&self, list: List) -> Option<Id> {
+    pub fn cursor(&self, list: List) -> Option<RowId> {
         let rows = self.rows_of(list);
         let wanted = match list {
             List::Day => self.cursors.day,
@@ -1376,7 +1429,7 @@ impl App {
         };
     }
 
-    fn set_cursor(&mut self, list: List, id: Id) {
+    fn set_cursor(&mut self, list: List, id: RowId) {
         let slot = match list {
             List::Day => &mut self.cursors.day,
             List::Backlog => &mut self.cursors.backlog,
@@ -1401,7 +1454,7 @@ impl App {
         }
 
         let list = self.focused();
-        let ids: Vec<Id> = self.rows_of(list).into_iter().map(|(id, _)| id).collect();
+        let ids: Vec<RowId> = self.rows_of(list).into_iter().map(|(id, _)| id).collect();
         let Some(at) = self
             .cursor(list)
             .and_then(|id| ids.iter().position(|other| *other == id))
@@ -1498,10 +1551,13 @@ impl App {
         if group != self.group_of(list, over.id) || !group.is_some_and(Group::is_ordered_by_hand) {
             return;
         }
-        let Some(position) = self.model.live_task(over.id).map(|task| task.position) else {
+        let (Some(task), Some(under)) = (task.task(), over.id.task()) else {
             return;
         };
-        self.set_cursor(list, task);
+        let Some(position) = self.model.live_task(under).map(|task| task.position) else {
+            return;
+        };
+        self.set_cursor(list, RowId::Task(task));
         self.reorder_to(task, position);
     }
 
@@ -1611,7 +1667,7 @@ impl App {
             && let Some(added) = added_task(&change)
         {
             self.focus_on(List::Day);
-            self.set_cursor(List::Day, added);
+            self.set_cursor(List::Day, RowId::Task(added));
         }
     }
 

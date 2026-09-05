@@ -16,8 +16,8 @@ use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
 
-use crate::app::{App, Editor, Layout, List, ListArea, Page, Rect as Cells, RowArea};
-use crate::domain::{self, MonthDay, NoteRow, Place, Rule, Weekday};
+use crate::app::{App, Editor, Layout, List, ListArea, Page, Rect as Cells, RowArea, RowId};
+use crate::domain::{self, MonthDay, NoteRow, Place, Rule, ScheduleRow, Weekday};
 use crate::input::{self, Field, NotesPane, Pane, Side};
 
 mod popup;
@@ -212,6 +212,31 @@ fn rule_label(rule: &Rule) -> String {
             MonthDay::Last => "last of the month".to_owned(),
         },
         Rule::EveryNWeeks { n, .. } => format!("every {n} weeks"),
+    }
+}
+
+/// A repeat rule with the room a list row has, which is enough for a
+/// weekday's whole name when the rule names only one.
+fn schedule_label(rule: &Rule) -> String {
+    match rule {
+        Rule::Workdays => "every work day".to_owned(),
+        Rule::Weekly { weekdays } if weekdays.len() == 1 => {
+            format!("every {}", weekday_word(weekdays[0]))
+        }
+        Rule::EveryNWeeks { n, .. } if *n == 1 => "every week".to_owned(),
+        other => rule_label(other),
+    }
+}
+
+fn weekday_word(day: Weekday) -> &'static str {
+    match day {
+        Weekday::Mon => "Monday",
+        Weekday::Tue => "Tuesday",
+        Weekday::Wed => "Wednesday",
+        Weekday::Thu => "Thursday",
+        Weekday::Fri => "Friday",
+        Weekday::Sat => "Saturday",
+        Weekday::Sun => "Sunday",
     }
 }
 
@@ -483,6 +508,7 @@ enum Kind {
 /// The rows of one group of a pane.
 enum Content<'a> {
     Tasks(&'a [domain::Row], Kind),
+    Schedules(&'a [ScheduleRow]),
     Notes(&'a [NoteRow]),
 }
 
@@ -576,7 +602,10 @@ fn backlog_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
     let view = app.backlog();
     let mut sections = Vec::new();
 
-    if view.open > 0 || adding {
+    // The add line belongs to the first group, so it is drawn whenever
+    // the pane has anything at all: a backlog holding only schedules is
+    // not the empty state, but it still needs the key that fills it.
+    if view.open > 0 || adding || !view.schedules.is_empty() {
         sections.push(Section {
             label: "",
             count: None,
@@ -589,6 +618,18 @@ fn backlog_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
             label: "Waiting",
             count: Some(view.waiting_count),
             content: Content::Tasks(&view.waiting, Kind::Waiting),
+            add: None,
+        });
+    }
+
+    // The schedules under the two groups are a view of the rules, not of
+    // tasks: somewhere to see and edit them without a fourth place for a
+    // task to live (DOMAIN.md section 7).
+    if !view.schedules.is_empty() {
+        sections.push(Section {
+            label: "Repeating",
+            count: Some(view.schedules.len()),
+            content: Content::Schedules(&view.schedules),
             add: None,
         });
     }
@@ -634,6 +675,7 @@ enum Line<'a> {
     Blank,
     Rule(&'static str, Option<usize>),
     Task(&'a domain::Row, Kind),
+    Schedule(&'a ScheduleRow),
     Note(&'a NoteRow),
     Add(&'static str),
 }
@@ -652,6 +694,7 @@ fn lines_of<'a>(view: &'a PaneView<'a>) -> Vec<Line<'a>> {
             Content::Tasks(rows, kind) => {
                 lines.extend(rows.iter().map(|row| Line::Task(row, kind)));
             }
+            Content::Schedules(rows) => lines.extend(rows.iter().map(Line::Schedule)),
             Content::Notes(rows) => lines.extend(rows.iter().map(Line::Note)),
         }
         if let Some(add) = section.add {
@@ -719,8 +762,9 @@ fn pane(
     // cursor row.
     let anchor = lines.iter().position(|line| match line {
         Line::Add(_) => adding,
-        Line::Task(row, _) => !adding && on == Some(row.task),
-        Line::Note(row) => !adding && on == Some(row.note),
+        Line::Task(row, _) => !adding && on == Some(RowId::Task(row.task)),
+        Line::Note(row) => !adding && on == Some(RowId::Note(row.note)),
+        Line::Schedule(row) => !adding && on == Some(RowId::Schedule(row.schedule)),
         _ => false,
     });
     let first = scroll_to(&lines, anchor, height as usize);
@@ -745,7 +789,11 @@ fn pane(
             }
             Line::Note(row) => {
                 note_row(canvas, x, width, y, row);
-                row.note
+                RowId::Note(row.note)
+            }
+            Line::Schedule(row) => {
+                schedule_row(canvas, x, width, y, row);
+                RowId::Schedule(row.schedule)
             }
             Line::Task(row, kind) => {
                 let renaming = writing
@@ -755,7 +803,9 @@ fn pane(
                     Some(editor) => {
                         title_field(canvas, x, width, y, mark_of(row, *kind).0, editor);
                         // A row being typed into is not also a cursor row.
-                        layout.rows.push(row_area(list, row.task, column, y));
+                        layout
+                            .rows
+                            .push(row_area(list, RowId::Task(row.task), column, y));
                         continue;
                     }
                     None => task_row(
@@ -771,7 +821,7 @@ fn pane(
                         },
                     ),
                 }
-                row.task
+                RowId::Task(row.task)
             }
         };
         if on == Some(id) {
@@ -781,7 +831,7 @@ fn pane(
     }
 }
 
-fn row_area(list: List, id: i64, column: Column, y: u16) -> RowArea {
+fn row_area(list: List, id: RowId, column: Column, y: u16) -> RowArea {
     RowArea {
         list,
         id,
@@ -988,6 +1038,19 @@ fn field_text(canvas: &mut Canvas, x: u16, y: u16, width: u16, editor: &Editor) 
     let at = canvas.put(x, y, clip(&typed, width), plain());
     let at = canvas.put(at, y, CARET, bold());
     canvas.put(at, y, clip(&rest, width.saturating_sub(at - x)), plain());
+}
+
+/// ` ↻  Write standup notes                     every work day`
+fn schedule_row(canvas: &mut Canvas, x: u16, width: u16, y: u16, row: &ScheduleRow) {
+    let rule = schedule_label(&row.rule);
+    canvas.put(x + 1, y, " ↻ ", dim());
+    canvas.put(
+        x + 5,
+        y,
+        clip(&row.title, width.saturating_sub(8 + count(&rule))),
+        plain(),
+    );
+    canvas.rput(x + width - 1, y, &rule, dim());
 }
 
 /// ` ▪ Mention to Anna: CI runner b`

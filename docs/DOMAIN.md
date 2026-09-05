@@ -218,8 +218,12 @@ is still on D, `moved` = placed − kept:
 Header count: live open backlog tasks, and how many of them are waiting.
 
 Below the two groups the backlog pane lists the live, unstopped
-schedules by title and rule. That list is a view of section 10, not of
-tasks.
+schedules by title and rule (wireframes 03 and 07). That list is a view
+of section 10, not of tasks: the cursor reaches its rows, `R` on one
+opens the repeat card for that schedule, and a key that acts on a task
+answers that the row is not one. It is how a schedule is changed or
+stopped when no copy of it is on a screen, which for a monthly rule is
+most of the month.
 
 ## 8. Due and remind
 
