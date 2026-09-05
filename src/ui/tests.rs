@@ -1815,3 +1815,21 @@ fn a_day_header_keeps_its_counts_clear_of_its_label() {
         "the label, blank cells between, and only the counts there are"
     );
 }
+
+/// The row that ends a schedule has no next date to preview, and said so
+/// with the sentence for a rule that falls on no day, clipped mid-word
+/// (F11).
+#[test]
+fn stopping_a_repeat_says_what_stopping_does() {
+    let mut app = app();
+    app.update(Action::Repeat);
+    app.update(Action::StopRepeat);
+
+    for width in [120, 80] {
+        let text = look(&app, width, 36).join("\n");
+        assert!(
+            text.contains("No new copies; the ones already made stay."),
+            "at {width} columns, in full:\n{text}"
+        );
+    }
+}

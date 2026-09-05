@@ -565,8 +565,13 @@ fn repeat_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
         .iter()
         .map(|date| day_label(*date))
         .collect();
-    let next = if preview.is_empty() {
-        "Next: nothing; a repeat with no day never comes round".to_owned()
+    let next = if shapes.get(popup.selected) == Some(&Action::StopRepeat) {
+        // The one row that ends a schedule rather than describing one, so
+        // it has no next date to preview and says what stopping does
+        // instead (DOMAIN.md section 10).
+        "No new copies; the ones already made stay.".to_owned()
+    } else if preview.is_empty() {
+        "Next: nothing; this rule falls on no day.".to_owned()
     } else {
         format!("Next: {}", preview.join(" · "))
     };
