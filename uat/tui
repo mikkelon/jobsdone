@@ -61,14 +61,14 @@ cmd_start() {
 
 cmd_keys() {
     running || { echo "not running" >&2; exit 1; }
-    for k in "$@"; do tmux send-keys -t "$SESSION:" "$k"; sleep 0.08; done
+    for k in "$@"; do tmux send-keys -t "$SESSION:" -- "$k"; sleep 0.08; done
     settle
     echo "sent keys: $*"
 }
 
 cmd_type() {
     running || { echo "not running" >&2; exit 1; }
-    tmux send-keys -t "$SESSION:" -l "$1"
+    tmux send-keys -t "$SESSION:" -l -- "$1"
     settle
     echo "typed: $1"
 }
@@ -86,7 +86,7 @@ cmd_mouse() {
         wheel-down) seq=$'\e[<65;'"$col;$row"'M' ;;
         *) usage ;;
     esac
-    tmux send-keys -t "$SESSION:" -l "$seq"
+    tmux send-keys -t "$SESSION:" -l -- "$seq"
     settle
     echo "mouse $what at column $col row $row"
 }
