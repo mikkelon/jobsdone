@@ -111,9 +111,16 @@ Every test runs with `cargo test`. The domain is tested as pure functions
 over `Model` and `Change`; the storage module is tested against a
 temporary database.
 
-Module boundaries are checked by a unit test in the crate: it reads the
-`use crate::` lines of each top-level module and fails when one names a
-module the allowlist forbids. ARCHITECTURE.md owns the allowlist.
+Module boundaries are checked by a unit test in the crate. It reads every
+`.rs` file of each top-level module, not only its `use` lines, and fails
+when a file names a module or a crate the allowlist forbids: a fully
+qualified call in a body is a dependency too, and that is the form a
+`use`-line check would miss. ARCHITECTURE.md owns the allowlist and its
+section 6 owns the details.
+
+Test code lives in `src/<module>/tests.rs` rather than in an inline
+`#[cfg(test)] mod tests`, so the scanner never has to match braces to know
+whether it is looking at test code.
 
 Rejected:
 

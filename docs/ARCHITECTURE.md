@@ -49,7 +49,7 @@ means none. Names are separated by commas.
 | `app`      | domain, input         | jiff, tracing                  |
 | `ui`       | domain, app, input    | ratatui, jiff                  |
 | `terminal` | app, ui, input        | crossterm, ratatui, tracing    |
-| `main.rs`  | storage, app, terminal| tracing, xdg                   |
+| `main.rs`  | storage, app, terminal| jiff, tracing, tracing_subscriber, xdg |
 
 What the table says, read as a picture, arrows pointing at what is
 depended on:
@@ -61,8 +61,11 @@ depended on:
     main.rs -> app
 
 Module names in the table may be wrapped in backticks; the test strips
-them. `xdg` stands for whichever crate phase 4 picks for the XDG lookup;
-that phase edits the row to the real name.
+them, and normalises `-` to `_` so a crate is written the way a path writes
+it.
+
+`main.rs` reads the clock once, at startup, for the `now` that `App::new`
+takes; that is the only place outside `app` that names `jiff`.
 
 Two absences are deliberate:
 
@@ -86,6 +89,7 @@ and a date.
 task and schedule ids, never cursor positions.
 
 **`Change`** is what a command does, as a list of row writes:
+`Change { writes: Vec<Write> }`. The variants below are `Write`'s.
 
 | Variant                     | Meaning                                       |
 |-----------------------------|-----------------------------------------------|
@@ -115,8 +119,11 @@ an edit that a whole-row put already expresses.
 
 `commit` applies every write of a change in one transaction. `version` is
 `PRAGMA data_version`. `Conflict` is a unique or primary key violation;
-everything else is `Other` with SQLite's message. An in-memory `Store`
-for tests is a `Model` and `Model::apply`.
+everything else is `Other` with SQLite's message. `StoreError` implements
+`Display`, which is how `main.rs` reports a failed open without naming the
+type, and so without depending on `domain`. An in-memory `Store` for tests
+is a `Model` and `Model::apply`, and it lives in `domain/tests.rs` as
+`pub(crate)` so that every module's tests can drive an app through it.
 
 ### The path of one key press
 
@@ -215,8 +222,11 @@ adds it here first, the way a new dependency is added to section 2 first.
 
 ### `terminal`
 
-- `run(App) -> Result<(), StoreError>`: enters raw mode, installs the
-  panic hook, loops until `Flow::Quit`, restores the terminal.
+- `run(App) -> std::io::Result<()>`: enters raw mode, installs the panic
+  hook, loops until `Flow::Quit`, restores the terminal. The error type is
+  the terminal's own, not the store's: by rule 10 a failed commit becomes a
+  hint inside the loop and never escapes it, so `terminal` has no reason to
+  name a domain type and section 2 does not let it.
 
 ## 5. Seam rules
 
@@ -280,9 +290,25 @@ works from files, not from the compiler:
    never counted, nor is a module's path to itself. Bodies count, not
    only `use` lines: a fully qualified call is a dependency too.
 5. Internal roots must appear in the module's Internal column. External
-   roots must appear in its Crates column, except that a dev-dependency
-   is allowed anywhere inside `#[cfg(test)]` blocks and `tests.rs` files,
-   since it cannot reach the binary.
+   roots must appear in its Crates column, except that a dev-dependency is
+   allowed in a `tests.rs` file, since it cannot reach the binary.
+
+Test code therefore lives in `src/<module>/tests.rs` and nowhere else. An
+inline `#[cfg(test)] mod tests` would mean the scanner had to match braces
+to know what is test code, which is the point at which reading Rust with a
+scanner stops being reliable. The cost is that a unit test never sits beside
+the function it tests.
+
+Step 4 works on the source with comments, string and character literals
+removed, so a path named in a doc comment or in an error message is not read
+as a dependency. The whole check is a `cargo test` run, so it only reports on
+code that compiles.
+
+A second test, `seam_rules`, checks the four rules in section 5 that a
+scanner can decide: rule 2 (no clock under `domain`), rule 4 (no `&mut` state
+under `ui`), rule 5 (no `KeyCode` under `app`), and rule 10 (no `unwrap` or
+`expect` on the same line as a `commit`, outside test files). The other six
+rules are read by people.
 
 Because the test reads this document, changing a boundary means editing
 section 2, in the commit that needs it, with the reason in the message.
