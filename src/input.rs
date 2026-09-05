@@ -282,32 +282,37 @@ pub struct Binding {
 /// group, because [`bindings`] hands out a single slice and the order of
 /// the rows is the order of the hint bar.
 ///
-/// The day keys take their places in the bar as an argument, because on
-/// today they are worth no room and on any other day they are what the
-/// pane is for (wireframe 08).
+/// The day keys take their places in the bar as arguments, wide and
+/// narrow, because on today they are worth no room and on any other day
+/// they are what the pane is for (wireframe 08).
 macro_rules! home_table {
-    ($steps:expr, $today:expr, $goto:expr; $($own:expr),* $(,)?) => {
+    (
+        steps: $steps:expr, $steps_narrow:expr;
+        today: $today:expr, $today_narrow:expr;
+        go_to: $goto:expr, $goto_narrow:expr;
+        $($own:expr),* $(,)?
+    ) => {
         &[
             Binding {
                 keys: &[("[", Action::PrevDay), ("]", Action::NextDay)],
                 shown: "[ ]",
                 label: "prev/next day",
                 bar: $steps,
-                narrow: Bar::Off,
+                narrow: $steps_narrow,
             },
             Binding {
                 keys: &[(".", Action::Today)],
                 shown: ".",
                 label: "today",
                 bar: $today,
-                narrow: Bar::Off,
+                narrow: $today_narrow,
             },
             Binding {
                 keys: &[("g", Action::GoToDate)],
                 shown: "g",
                 label: "go to date",
                 bar: $goto,
-                narrow: Bar::Off,
+                narrow: $goto_narrow,
             },
             $($own,)*
             Binding {
@@ -380,9 +385,9 @@ macro_rules! home_table {
 }
 
 const HOME_DAY: &[Binding] = home_table![
-    Bar::Off,
-    Bar::Off,
-    Bar::Off;
+    steps: Bar::Off, Bar::Off;
+    today: Bar::Off, Bar::Off;
+    go_to: Bar::Off, Bar::Off;
     Binding {
         keys: &[("J", Action::MoveDown), ("K", Action::MoveUp)],
         shown: "J/K",
@@ -468,9 +473,9 @@ const HOME_DAY: &[Binding] = home_table![
 ];
 
 const HOME_BACKLOG: &[Binding] = home_table![
-    Bar::Off,
-    Bar::Off,
-    Bar::Off;
+    steps: Bar::Off, Bar::Off;
+    today: Bar::Off, Bar::Off;
+    go_to: Bar::Off, Bar::Off;
     Binding {
         keys: &[("space", Action::Close)],
         shown: "space",
@@ -547,9 +552,11 @@ const HOME_BACKLOG: &[Binding] = home_table![
 /// keys lead the bar; `t` puts a task from a day that has passed onto
 /// today, which on today itself would mean nothing (wireframe 08).
 const HOME_OTHER_DAY: &[Binding] = home_table![
-    Bar::Short(Side::Left, "day"),
-    Bar::Left,
-    Bar::Left;
+    steps: Bar::Short(Side::Left, "day"), Bar::Short(Side::Left, "day");
+    // The narrow bar calls the way home "back", as the notes page does,
+    // because `t to today` is beside it and means something else.
+    today: Bar::Left, Bar::Short(Side::Left, "back");
+    go_to: Bar::Left, Bar::Off;
     Binding {
         keys: &[("space", Action::Close)],
         shown: "space",
@@ -578,7 +585,7 @@ const HOME_OTHER_DAY: &[Binding] = home_table![
         bar: Bar::Left,
         narrow: Bar::Off,
     },
-    // A moved row is a pointer, so Enter goes to wherever the task is
+    // A pointer, so Enter goes to wherever the task is
     // now rather than doing anything to the row (DESIGN.md section 6).
     Binding {
         keys: &[("enter", Action::Confirm)],
@@ -613,9 +620,9 @@ const HOME_OTHER_DAY: &[Binding] = home_table![
 /// The list of days the backlog pane becomes while history is browsed.
 /// Its rows are days, so nothing that acts on a task is bound here.
 const HOME_DAYS: &[Binding] = home_table![
-    Bar::Short(Side::Left, "day"),
-    Bar::Left,
-    Bar::Left;
+    steps: Bar::Short(Side::Left, "day"), Bar::Short(Side::Left, "day");
+    today: Bar::Left, Bar::Short(Side::Left, "back");
+    go_to: Bar::Left, Bar::Off;
     Binding {
         keys: &[("enter", Action::Confirm)],
         shown: "⏎",

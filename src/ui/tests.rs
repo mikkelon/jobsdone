@@ -510,9 +510,10 @@ fn the_narrow_window_makes_the_day_and_the_day_list_its_tabs() {
 
     assert!(tabs.contains("MON 1 SEP"), "the tab is the day, not TODAY");
     assert!(tabs.contains("DAYS 11"), "and the backlog gives way to it");
-    assert!(
-        drawn[drawn.len() - 2].starts_with(" PAST DAY"),
-        "the hint bar names the context"
+    assert_eq!(
+        drawn[drawn.len() - 2],
+        " PAST DAY  [ ] day  . back  space close  t today  x del                  ? more",
+        "and the bar keeps the way home in it"
     );
 }
 

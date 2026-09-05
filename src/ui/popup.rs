@@ -281,12 +281,14 @@ fn card(canvas: &mut Canvas, x: u16, y: u16, width: u16, height: u16, title: &st
         super::clip(&format!(" {title} "), width.saturating_sub(4)),
         accent(),
     );
-    canvas.put(
-        at,
-        y,
-        super::clip(&format!("{about} "), (x + width).saturating_sub(at + 2)),
-        dim(),
-    );
+    if !about.is_empty() {
+        canvas.put(
+            at,
+            y,
+            super::clip(&format!("{about} "), (x + width).saturating_sub(at + 2)),
+            dim(),
+        );
+    }
 }
 
 /// The task a card is about, by the id it captured when it opened.
@@ -701,13 +703,20 @@ fn same(one: &Binding, other: &Binding) -> bool {
     one.shown == other.shown && one.label == other.label
 }
 
-/// Every row of a context that teaches a key, minus the ones that are
-/// everywhere.
-fn only(context: KeyContext, shared: &[&'static Binding]) -> Vec<Help> {
+/// Every row of a context that teaches a key.
+fn named(context: KeyContext) -> Vec<&'static Binding> {
     input::bindings(context)
         .iter()
         .filter(|binding| !binding.keys.is_empty())
-        .filter(|binding| !shared.iter().any(|common| same(common, binding)))
+        .collect()
+}
+
+/// The same, minus the rows already written somewhere the eye has been:
+/// the "everywhere" column, and the heading above this one.
+fn only(context: KeyContext, written: &[&'static Binding]) -> Vec<Help> {
+    named(context)
+        .into_iter()
+        .filter(|binding| !written.iter().any(|other| same(other, binding)))
         .map(Help::Key)
         .collect()
 }
@@ -723,10 +732,14 @@ fn columns() -> Vec<(&'static str, Vec<Help>)> {
         .filter(|binding| backlog.iter().any(|other| same(binding, other)))
         .collect();
 
+    // A heading takes the keys of the one above it as written already,
+    // so the same row is never twice in one column.
+    let mut above = shared.clone();
+    above.extend(named(context(Pane::Backlog)));
     let mut third = only(context(Pane::Backlog), &shared);
     third.push(Help::Blank);
     third.push(Help::Heading("DAYS"));
-    third.extend(only(browsing(Pane::Backlog), &shared));
+    third.extend(only(browsing(Pane::Backlog), &above));
     third.push(Help::Blank);
     third.push(Help::Heading("REVIEW"));
     third.extend(only(
@@ -737,10 +750,12 @@ fn columns() -> Vec<(&'static str, Vec<Help>)> {
         &shared,
     ));
 
+    let mut above = shared.clone();
+    above.extend(named(context(Pane::Day)));
     let mut second = only(context(Pane::Day), &shared);
     second.push(Help::Blank);
     second.push(Help::Heading("PAST DAY"));
-    second.extend(only(browsing(Pane::Day), &shared));
+    second.extend(only(browsing(Pane::Day), &above));
     second.push(Help::Blank);
     second.push(Help::Heading("NOTES"));
     second.extend(only(
