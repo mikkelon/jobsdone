@@ -537,6 +537,25 @@ fn a_hint_bar_too_full_for_its_right_end_leaves_it_out() {
 }
 
 #[test]
+fn the_day_list_keeps_its_last_word_under_its_last_day() {
+    let mut app = history();
+    app.update(Action::PaneRight);
+    for _ in 0..11 {
+        app.update(Action::Down);
+    }
+    // A window too short for the whole list, so it has scrolled.
+    let drawn = look(&app, 120, 20);
+    let body: Vec<&String> = drawn[5..17].iter().collect();
+
+    assert!(
+        body.last()
+            .is_some_and(|row| row.contains("days with nothing planned are skipped")),
+        "drawn:\n{}",
+        drawn.join("\n")
+    );
+}
+
+#[test]
 fn the_frame_keeps_its_one_cell_margin() {
     let drawn = look(&app(), 120, 36);
 

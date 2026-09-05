@@ -989,6 +989,12 @@ fn pane(
         Line::Day(row) => !adding && on == Some(RowId::Day(row.day)),
         _ => false,
     });
+    // The foot is the pane's last word about itself, so it follows the
+    // last row on screen rather than being scrolled off under it.
+    let anchor = match (anchor, view.foot) {
+        (Some(at), Some(_)) if at + 2 == lines.len() => Some(at + 1),
+        (anchor, _) => anchor,
+    };
     let first = scroll_to(lines.len(), anchor, height as usize);
 
     for (at, line) in lines.iter().skip(first).take(height as usize).enumerate() {

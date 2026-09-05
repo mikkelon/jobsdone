@@ -117,7 +117,8 @@ pub enum Group {
     /// The schedules the backlog pane lists under its two groups
     /// (DOMAIN.md section 7). A row here is a schedule, not a task.
     Schedules,
-    /// One stretch of the day list. A row here is a day, not a task.
+    /// The day list the backlog pane becomes while another day is shown.
+    /// A row here is a day, not a task.
     Days,
     Notes,
 }
