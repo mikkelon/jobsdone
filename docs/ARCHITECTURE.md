@@ -118,7 +118,10 @@ an edit that a whole-row put already expresses.
     enum StoreError { Conflict, Other(String) }
 
 `commit` applies every write of a change in one transaction. `version` is
-`PRAGMA data_version`. `Conflict` is a unique or primary key violation;
+`PRAGMA data_version`, which SQLite moves only for a write made on another
+connection, so it answers "did another instance change this" and never
+"did I". After its own commit the app re-reads it to keep the two in
+step. `Conflict` is a unique or primary key violation;
 everything else is `Other` with SQLite's message. `StoreError` implements
 `Display`, which is how `main.rs` reports a failed open without naming the
 type, and so without depending on `domain`. An in-memory `Store` for tests
