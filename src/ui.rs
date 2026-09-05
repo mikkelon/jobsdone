@@ -762,10 +762,20 @@ fn day_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
             }
             parts.join(" · ")
         }
-        _ => format!(
-            "{} planned · {} done · {} open · {} moved",
-            counts.planned, counts.done, counts.open, counts.moved
-        ),
+        // The whole record of the day, which is what a day that is not
+        // today is. A count of nothing is left out, the way today's are,
+        // so the header still has room for its date beside them.
+        _ => [
+            (counts.planned, "planned"),
+            (counts.done, "done"),
+            (counts.open, "open"),
+            (counts.moved, "moved"),
+        ]
+        .iter()
+        .filter(|(n, _)| *n > 0)
+        .map(|(n, name)| format!("{n} {name}"))
+        .collect::<Vec<_>>()
+        .join(" · "),
     };
 
     let (title, sub) = match shown {
@@ -1133,15 +1143,24 @@ fn empty_state(canvas: &mut Canvas, column: Column, empty: [&str; 2]) {
     canvas.put(middle(empty[1]), column.top + 3, empty[1], dim());
 }
 
+/// The blank cells a header keeps between what it names on the left and
+/// what it counts on the right, so the two are never read as one word.
+const HEADER_GAP: u16 = 2;
+
 /// `Today Fri 5 Sep                    6 open · 2 done · 1 moved`
 fn header(canvas: &mut Canvas, x: u16, width: u16, y: u16, view: &PaneView, focused: bool) {
     let title = if focused { accent() } else { bold() };
-    canvas.put(x + 1, y, &view.title, title);
+    let mut left = canvas.put(x + 1, y, &view.title, title);
     if !view.sub.is_empty() {
-        canvas.put(x + 2 + count(&view.title), y, &view.sub, dim());
+        left = canvas.put(x + 2 + count(&view.title), y, &view.sub, dim());
     }
     if !view.right.is_empty() {
-        canvas.rput(x + width - 1, y, &view.right, dim());
+        // The right end takes what is left of the line after the words on
+        // the left and the gap, so a long date and a long count run out
+        // of room rather than into each other.
+        let edge = x + width.saturating_sub(1);
+        let room = edge.saturating_sub(left + HEADER_GAP);
+        canvas.rput(edge, y, clip(&view.right, room), dim());
     }
 }
 

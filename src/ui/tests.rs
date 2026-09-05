@@ -1789,3 +1789,29 @@ fn a_field_of_wide_characters_puts_its_caret_where_the_cells_end() {
 
     assert!(row.contains("日本🙂▏語"), "{row:?}");
 }
+
+#[test]
+fn a_day_header_keeps_its_counts_clear_of_its_label() {
+    let mut model = Model::empty();
+    let tomorrow = on("2025-09-06");
+    model.tasks.insert(1, task(1, "Task", Some(tomorrow), 0));
+    model.placements.insert(
+        (1, tomorrow),
+        Placement {
+            task_id: 1,
+            day: tomorrow,
+            placed_at: at(NOW),
+            from_place: FromPlace::New,
+        },
+    );
+    let mut app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+    app.update(Action::NextDay);
+
+    let header: Vec<char> = look(&app, 120, 36).remove(3).chars().collect();
+    let pane: String = header[..59].iter().collect();
+    assert_eq!(
+        pane.trim_end(),
+        " Sat 6 Sep future day                   1 planned · 1 open",
+        "the label, blank cells between, and only the counts there are"
+    );
+}

@@ -171,8 +171,10 @@ back to today and `g` goes straight to a date.
 The header of a day that is not today is the date itself, with "past day"
 or "future day" beside it where today has the word "Today" before the
 date, and its counts are the whole record of the day rather than what is
-left of it: `8 planned · 3 done · 2 open · 3 moved`. The status line says
-how far off the day is and offers the one key home.
+left of it: `8 planned · 3 done · 2 open · 3 moved`. A count of nothing is
+left out, as today's are, and the counts keep two blank cells clear of
+the words on the left, so no header ever reads as one run-together word.
+The status line says how far off the day is and offers the one key home.
 
 A past day shows every task that was planned for it, in three states: closed
 (dim, with the time, in the Done group), still open (marked "on the pile",
