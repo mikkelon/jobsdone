@@ -640,6 +640,7 @@ impl App {
             Action::PaneRight => self.shift_pane(true, false),
             Action::NextPane => self.next_control(),
             Action::NotesPage => self.turn_the_page(),
+            Action::OpenReview => self.reopen_the_review(),
 
             Action::Commands => self.open(PopupKind::Palette, None),
             Action::Search => self.open(PopupKind::Search, None),
@@ -793,6 +794,20 @@ impl App {
         self.refresh();
         self.rest_the_review_cursor();
         true
+    }
+
+    /// `M`, and the palette row it teaches: the review again, on a day
+    /// it has already run on or after it was left half done.
+    fn reopen_the_review(&mut self) {
+        if self.review.is_some() {
+            return;
+        }
+        if !self.open_the_review(false) {
+            self.say(
+                "Nothing to review: the pile is empty and nothing is due.",
+                false,
+            );
+        }
     }
 
     /// The steps a review shows. The pile is the one it opened with; the

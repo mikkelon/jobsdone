@@ -636,6 +636,43 @@ fn a_title_is_edited_in_place_in_the_review() {
     assert_eq!(app.review().map(Review::progress), Some((0, 1)));
 }
 
+#[test]
+fn an_interrupted_review_is_picked_up_where_the_pile_now_stands() {
+    let mut app = app_at(
+        left_behind(&[
+            ("One", "2025-09-04"),
+            ("Two", "2025-09-04"),
+            ("Three", "2025-09-04"),
+        ]),
+        NOW,
+    );
+    app.update(Action::Close);
+    app.update(Action::Cancel);
+    assert!(app.review().is_none());
+    assert_eq!(app.review_count(), 2);
+
+    app.update(Action::OpenReview);
+
+    // The gate has been written today, so this is not the launch's
+    // review; what is left of the pile is what it opens on.
+    assert_eq!(step(&app), Some(ReviewStep::Pile));
+    assert_eq!(titles(&app, List::Review), ["Two", "Three"]);
+    assert_eq!(app.review().map(Review::progress), Some((0, 2)));
+}
+
+#[test]
+fn the_review_will_not_open_on_nothing() {
+    let mut app = started();
+
+    app.update(Action::OpenReview);
+
+    assert!(app.review().is_none());
+    assert_eq!(
+        hint(&app),
+        "Nothing to review: the pile is empty and nothing is due."
+    );
+}
+
 // ---- adding and renaming ---------------------------------------------
 
 #[test]

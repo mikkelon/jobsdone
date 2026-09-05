@@ -107,6 +107,9 @@ pub enum Action {
     Today,
     GoToDate,
     NotesPage,
+    /// The morning review again, after it was left or on a day it has
+    /// already run on.
+    OpenReview,
 
     // The cursor row.
     Close,
@@ -336,6 +339,15 @@ macro_rules! home_table {
                 keys: &[("n", Action::NotesPage)],
                 shown: "n",
                 label: "notes page",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+            // The review opens itself once a morning; this is how it is
+            // picked up again after it was left (DOMAIN.md section 13).
+            Binding {
+                keys: &[("M", Action::OpenReview)],
+                shown: "M",
+                label: "morning review",
                 bar: Bar::Off,
                 narrow: Bar::Off,
             },

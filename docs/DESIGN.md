@@ -105,6 +105,10 @@ Conventions, so the map is guessable:
 - Punctuation navigates: `[` `]` previous and next day, `.` today, `g` go
   to a date, `/` search, `:` command palette, `?` help, `n` notes page,
   `q` quit.
+- `M` opens the morning review again: the review opens itself once a day,
+  and this is how it is picked up after it was left half done. It is the
+  one uppercase key that is not about the cursor row, which is what makes
+  it hard to press by accident.
 - `Enter` confirms, `Escape` backs out one level, `u` undoes.
 - After a task is closed, moved or deleted the cursor steps to the next
   row of the group it left, so a list is worked down without moving the
