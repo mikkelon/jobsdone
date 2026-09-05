@@ -15,6 +15,7 @@ use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
+use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
 
 use crate::app::{App, Editor, Layout, List, ListArea, Page, Rect as Cells, RowArea, RowId};
 use crate::domain::{
@@ -96,10 +97,18 @@ impl Canvas<'_> {
 
     /// Writes `text` at `x`, and answers where the text ended, whether or
     /// not the edge of the area cut it short.
+    ///
+    /// A character is as many cells wide as the terminal will give it, so
+    /// a double-width one takes the cell beside it too and a combining
+    /// mark takes none at all.
     fn put(&mut self, x: u16, y: u16, text: &str, style: Style) -> u16 {
         let mut at = x;
         for symbol in text.chars() {
-            if at >= self.width() || y >= self.height() {
+            let width = cells(symbol);
+            if width == 0 {
+                continue;
+            }
+            if y >= self.height() || at.saturating_add(width) > self.width() {
                 break;
             }
             let position = Position::new(self.area.x + at, self.area.y + y);
@@ -108,7 +117,16 @@ impl Canvas<'_> {
                 cell.set_char(symbol);
                 cell.set_style(style);
             }
-            at = at.saturating_add(1);
+            // The cells a wide character covers are cleared and never
+            // written to, which is what ratatui's diff reads as "the one
+            // beside it owns this".
+            for beside in at + 1..at + width {
+                let position = Position::new(self.area.x + beside, self.area.y + y);
+                if let Some(cell) = self.buffer.cell_mut(position) {
+                    cell.reset();
+                }
+            }
+            at = at.saturating_add(width);
         }
         x.saturating_add(count(text))
     }
@@ -158,10 +176,16 @@ impl Canvas<'_> {
     }
 }
 
-/// How many cells a string takes. Every glyph the app draws is one cell
-/// wide.
+/// How many cells a string takes, which is not how many characters it
+/// has: a CJK character or an emoji takes two, a combining mark none.
 fn count(text: &str) -> u16 {
-    text.chars().count() as u16
+    UnicodeWidthStr::width(text) as u16
+}
+
+/// The same for one character, which is how a string is walked a cell at
+/// a time.
+fn cells(glyph: char) -> u16 {
+    UnicodeWidthChar::width(glyph).unwrap_or(0) as u16
 }
 
 // ---- dates, rules and places, as words -------------------------------
@@ -1516,18 +1540,24 @@ fn open_note(
     let first = scroll_to(lines.len(), caret.map(|(row, _)| row), height);
 
     for (at, (text, _)) in lines.iter().skip(first).take(height).enumerate() {
-        canvas.put(x + 2, column.top + at as u16, text, plain());
-    }
-    if let Some((row, glyph)) = caret
-        && row >= first
-        && row < first + height
-    {
-        canvas.put(
-            x + 2 + glyph as u16,
-            column.top + (row - first) as u16,
-            CARET,
-            bold(),
-        );
+        let y = column.top + at as u16;
+        // The caret is a cell of its own between two characters, the way
+        // it is in a field, so the character it is in front of is still
+        // drawn and a wide one is not cut in half.
+        match caret.filter(|(row, _)| *row == first + at) {
+            Some((_, glyph)) => {
+                let split = text
+                    .char_indices()
+                    .nth(glyph)
+                    .map_or(text.len(), |(at, _)| at);
+                let at = canvas.put(x + 2, y, &text[..split], plain());
+                let at = canvas.put(at, y, CARET, bold());
+                canvas.put(at, y, &text[split..], plain());
+            }
+            None => {
+                canvas.put(x + 2, y, text, plain());
+            }
+        }
     }
 }
 
@@ -1543,23 +1573,37 @@ fn stacked_rule(canvas: &mut Canvas, column: Column, view: &PaneView) {
 /// character of the body it starts at so that the caret can be found on
 /// it again.
 fn wrapped(body: &str, width: u16) -> Vec<(String, usize)> {
-    let width = width.max(1) as usize;
+    let width = width.max(1);
     let mut lines = Vec::new();
     let mut at = 0;
     for line in body.split('\n') {
         let glyphs: Vec<char> = line.chars().collect();
         let mut from = 0;
         loop {
-            if glyphs.len() - from <= width {
+            // How many characters of the rest the line has room for. A
+            // character wider than the whole pane still takes a line of
+            // its own rather than none.
+            let mut fits = 0;
+            let mut taken = 0;
+            while from + fits < glyphs.len() {
+                let cells = cells(glyphs[from + fits]);
+                if taken + cells > width {
+                    break;
+                }
+                taken += cells;
+                fits += 1;
+            }
+            let fits = fits.max(1);
+            if from + fits >= glyphs.len() {
                 lines.push((glyphs[from..].iter().collect(), at + from));
                 break;
             }
             // After the last space that fits, or through a word longer
             // than the pane.
-            let take = glyphs[from..from + width]
+            let take = glyphs[from..from + fits]
                 .iter()
                 .rposition(|glyph| *glyph == ' ')
-                .map_or(width, |space| space + 1);
+                .map_or(fits, |space| space + 1);
             lines.push((glyphs[from..from + take].iter().collect(), at + from));
             from += take;
         }
@@ -1569,7 +1613,7 @@ fn wrapped(body: &str, width: u16) -> Vec<(String, usize)> {
     lines
 }
 
-/// Which drawn line a caret is on, and how far along it.
+/// Which drawn line a caret is on, and how many characters along it.
 fn caret_at(lines: &[(String, usize)], caret: usize) -> (usize, usize) {
     let row = lines
         .iter()
@@ -1578,9 +1622,15 @@ fn caret_at(lines: &[(String, usize)], caret: usize) -> (usize, usize) {
     (row, caret - lines.get(row).map_or(0, |(_, start)| *start))
 }
 
+/// As much of `text` as fits in `width` cells. A character that would
+/// straddle the edge is left out whole.
 fn clip(text: &str, width: u16) -> &str {
-    match text.char_indices().nth(width as usize) {
-        Some((at, _)) => &text[..at],
-        None => text,
+    let mut taken = 0;
+    for (at, glyph) in text.char_indices() {
+        taken += cells(glyph);
+        if taken > width {
+            return &text[..at];
+        }
     }
+    text
 }

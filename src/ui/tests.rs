@@ -522,6 +522,29 @@ fn look(app: &App, width: u16, height: u16) -> Vec<String> {
     screen(app, width, height).0
 }
 
+/// The screen with the cell a double-width character owns beside it
+/// folded back into the character, so a row reads as the text it is. A
+/// character drawn a cell narrower than it is loses its neighbour here.
+fn glyphs(app: &App, width: u16, height: u16) -> Vec<String> {
+    let mut terminal = Terminal::new(TestBackend::new(width, height)).expect("a test terminal");
+    terminal
+        .draw(|frame| _ = draw(app, frame))
+        .expect("a frame");
+    let buffer = terminal.backend().buffer();
+    (0..height)
+        .map(|y| {
+            let mut row = String::new();
+            let mut x = 0;
+            while x < width {
+                let symbol = buffer[(x, y)].symbol();
+                row.push_str(symbol);
+                x += count(symbol).max(1);
+            }
+            row.trim_end().to_owned()
+        })
+        .collect()
+}
+
 fn lines(buffer: &Buffer) -> Vec<String> {
     let area = buffer.area();
     (0..area.height)
@@ -1695,4 +1718,74 @@ fn a_pane_longer_than_the_window_follows_the_cursor() {
         bottom.iter().any(|line| line.ends_with("Task 13")),
         "the window has moved down by exactly what it had to"
     );
+}
+
+#[test]
+fn a_title_of_wide_characters_keeps_every_character_and_its_chips() {
+    let mut model = Model::empty();
+    model.tasks.insert(
+        1,
+        Task {
+            due_on: Some(on("2025-09-30")),
+            ..task(1, "日本語 🙂 の報告", None, 0)
+        },
+    );
+    let app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+
+    let row = glyphs(&app, 120, 36)
+        .into_iter()
+        .find(|row| row.contains("[due 30 Sep]"))
+        .expect("the backlog row");
+
+    assert!(row.contains("[ ] 日本語 🙂 の報告"), "{row:?}");
+    assert!(
+        row.ends_with("[due 30 Sep]"),
+        "and the chip is where it was: {row:?}"
+    );
+}
+
+#[test]
+fn a_note_of_wide_characters_wraps_and_puts_its_caret_by_cells() {
+    let mut model = Model::empty();
+    model.notes.insert(
+        1,
+        Note {
+            id: 1,
+            body: "日本語です".to_owned(),
+            created_at: at(NOW),
+            updated_at: at(NOW),
+            deleted_at: None,
+        },
+    );
+    let mut app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+    app.update(Action::NotesPage);
+    app.update(Action::Confirm);
+    // Into the body, and back two characters, which is four cells.
+    app.update(Action::LineEnd);
+    app.update(Action::Left);
+    app.update(Action::Left);
+
+    let row = glyphs(&app, 120, 36)
+        .into_iter()
+        .find(|row| row.contains("日本語"))
+        .expect("the body");
+
+    assert!(row.contains("日本語▏です"), "{row:?}");
+}
+
+#[test]
+fn a_field_of_wide_characters_puts_its_caret_where_the_cells_end() {
+    let mut app = empty();
+    app.update(Action::Add);
+    for glyph in "日本🙂語".chars() {
+        app.update(Action::Insert(glyph));
+    }
+    app.update(Action::Left);
+
+    let row = glyphs(&app, 120, 36)
+        .into_iter()
+        .find(|row| row.contains('▏'))
+        .expect("the field");
+
+    assert!(row.contains("日本🙂▏語"), "{row:?}");
 }
