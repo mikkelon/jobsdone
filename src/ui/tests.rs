@@ -349,3 +349,50 @@ fn a_window_too_small_for_the_frame_draws_nothing_rather_than_panicking() {
     let drawn = look(&app(), 20, 4);
     assert!(drawn.iter().all(|row| row.is_empty()));
 }
+
+#[test]
+fn no_size_the_window_can_take_makes_the_drawing_panic() {
+    let mut app = app();
+    for action in [Action::Tick, Action::Commands, Action::Help, Action::Search] {
+        app.update(action);
+        for width in [1, 2, 23, 24, 25, 40, 99, 100, 101, 120, 200] {
+            for height in [1, 2, 8, 9, 10, 12, 36, 48, 90] {
+                look(&app, width, height);
+            }
+        }
+        app.update(Action::Cancel);
+    }
+}
+
+#[test]
+fn the_narrow_hint_bar_names_five_keys_and_defers_to_help() {
+    let mut app = app();
+
+    let day = look(&app, 80, 44);
+    assert_eq!(
+        day[42],
+        " TODAY  space done  f focus  a add  b backlog  x del                     ? more"
+    );
+
+    app.update(Action::PaneRight);
+    let backlog = look(&app, 80, 44);
+    assert!(backlog[42].starts_with(" BACKLOG  space done  t today  a add  x del"));
+    assert!(backlog[42].ends_with("? more"));
+    assert_eq!(backlog[2].chars().filter(|glyph| *glyph == '─').count(), 80);
+}
+
+#[test]
+fn the_narrow_tab_row_marks_the_tab_the_keyboard_is_on() {
+    let mut app = app();
+    let (_, layout) = screen(&app, 80, 44);
+    app.set_layout(layout);
+    assert_eq!(look(&app, 80, 44)[3], "  TODAY 6   BACKLOG 12   NOTES 4");
+
+    // Right from the backlog is the notes tab, not a pane of its own.
+    app.update(Action::PaneRight);
+    app.update(Action::PaneRight);
+    let notes = look(&app, 80, 44);
+    assert_eq!(app.page(), Page::Notes);
+    assert!(notes[1].starts_with(" Notes 4 notes"));
+    assert!(notes[5].contains("▪ Mention to Anna"));
+}

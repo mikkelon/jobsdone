@@ -307,15 +307,16 @@ impl App {
     /// a row that has gone clamps to the first one (ARCHITECTURE.md rule
     /// 6).
     pub fn cursor(&self, list: List) -> Option<Id> {
+        let view = self.view(list);
         let wanted = match list {
             List::Day => self.cursors.day,
             List::Backlog => self.cursors.backlog,
             List::Notes => self.cursors.notes,
         };
-        let mut rows = self.view(list).rows().map(|row| row.id);
         match wanted {
-            Some(id) if self.view(list).rows().any(|row| row.id == id) => Some(id),
-            _ => rows.next(),
+            Some(id) if view.rows().any(|row| row.id == id) => Some(id),
+            // The row has gone since, so the cursor clamps to the first.
+            _ => view.rows().next().map(|row| row.id),
         }
     }
 

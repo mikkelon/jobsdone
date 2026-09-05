@@ -26,6 +26,9 @@ mod tests;
 /// section 1).
 const NARROW: u16 = 100;
 
+/// The tabs a narrow window has, in the order `h` and `l` walk them.
+const TABS: [&str; 3] = ["TODAY", "BACKLOG", "NOTES"];
+
 /// The notes page gives the open note the width; the list is a fixed
 /// column beside it rather than half the window.
 const NOTES_DIVIDER: u16 = 44;
@@ -224,58 +227,60 @@ pub fn draw(app: &App, frame: &mut Frame) -> Layout {
     layout
 }
 
+/// A status-line segment at the weight most of them have.
+fn quiet(text: &str) -> (String, Style) {
+    (text.to_owned(), dim())
+}
+
 /// Which day, how to move between days, and the only global indicators.
+///
+/// A narrow window keeps the indicators and drops the words around them.
 fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
     let fixture = app.fixture();
     let review = fixture.review_count();
-    let counted = Style::new().fg(Color::Red).add_modifier(Modifier::BOLD);
+    // Red only while there is something on the pile: a zero is a count,
+    // not an alert.
+    let pile = if review > 0 {
+        Style::new().fg(Color::Red).add_modifier(Modifier::BOLD)
+    } else {
+        dim()
+    };
+    let day = (format!("Today · {}", demo::TODAY_LABEL), bold());
+    let notes = format!("{} notes", fixture.note_count());
 
-    let (left, right) = match app.page() {
-        Page::Home if narrow => (
+    let (left, right) = match (app.page(), narrow) {
+        (Page::Home, true) => (
+            vec![quiet("‹"), day, quiet("›")],
             vec![
-                ("‹".to_owned(), dim()),
-                (format!("Today · {}", demo::TODAY_LABEL), bold()),
-                ("›".to_owned(), dim()),
-            ],
-            vec![
-                (
-                    format!("● {review}"),
-                    if review > 0 { counted } else { dim() },
-                ),
-                ("/".to_owned(), dim()),
-                (":".to_owned(), dim()),
-                ("?".to_owned(), dim()),
+                (format!("● {review}"), pile),
+                quiet("/"),
+                quiet(":"),
+                quiet("?"),
             ],
         ),
-        Page::Home => (
+        (Page::Home, false) => (
             vec![
-                ("‹".to_owned(), dim()),
-                (format!("Today · {}", demo::TODAY_LABEL), bold()),
-                ("›".to_owned(), dim()),
-                ("[ ] day".to_owned(), dim()),
-                ("g go to date".to_owned(), dim()),
+                quiet("‹"),
+                day,
+                quiet("›"),
+                quiet("[ ] day"),
+                quiet("g go to date"),
             ],
             vec![
-                (
-                    format!("● {review} in review"),
-                    if review > 0 { counted } else { dim() },
-                ),
-                (format!("{} notes n", fixture.note_count()), dim()),
-                ("/ search".to_owned(), dim()),
-                (": commands".to_owned(), dim()),
-                ("?".to_owned(), dim()),
+                (format!("● {review} in review"), pile),
+                quiet(&format!("{notes} n")),
+                quiet("/ search"),
+                quiet(": commands"),
+                quiet("?"),
             ],
         ),
-        Page::Notes => (
+        (Page::Notes, _) => (
+            vec![("Notes".to_owned(), bold()), quiet(&notes)],
             vec![
-                ("Notes".to_owned(), bold()),
-                (format!("{} notes", fixture.note_count()), dim()),
-            ],
-            vec![
-                ("n or esc back to today".to_owned(), dim()),
-                ("/".to_owned(), dim()),
-                (":".to_owned(), dim()),
-                ("?".to_owned(), dim()),
+                quiet("n or esc back to today"),
+                quiet("/"),
+                quiet(":"),
+                quiet("?"),
             ],
         ),
     };
@@ -320,7 +325,7 @@ fn tab_row(canvas: &mut Canvas, app: &App, y: u16) {
         (Page::Home, Pane::Backlog) => 1,
     };
     let mut x = 1;
-    for (at, (name, count)) in app.fixture().tabs().into_iter().enumerate() {
+    for (at, (name, count)) in TABS.iter().zip(app.fixture().tabs()).enumerate() {
         let style = if at == here {
             accent().add_modifier(Modifier::REVERSED)
         } else {
@@ -338,60 +343,62 @@ fn two_panes(canvas: &mut Canvas, app: &App, rows: &Rows, layout: &mut Layout) {
         Page::Home => width / 2 - 1,
         Page::Notes => NOTES_DIVIDER.min(width / 2),
     };
-    let (left, right) = (divider, width - divider - 1);
-    let height = rows.bottom - rows.top + 1;
-
-    canvas.put(divider, rows.headers + 1, "┬", dim());
-    canvas.vline(divider, rows.top, height, dim());
-
-    let (first, second) = match app.page() {
-        Page::Home => (List::Day, List::Backlog),
-        Page::Notes => (List::Notes, List::Notes),
+    let left = Column {
+        x: 0,
+        width: divider,
     };
+    let right = Column {
+        x: divider + 1,
+        width: width - divider - 1,
+    };
+
+    canvas.put(divider, rows.headers + 1, "\u{252c}", dim());
+    canvas.vline(divider, rows.top, rows.bottom - rows.top + 1, dim());
+
     let on_left = match app.page() {
         Page::Home => app.pane() == Pane::Day,
         Page::Notes => app.notes_pane() == NotesPane::List,
     };
-
-    pane(canvas, app, first, 0, left, rows, on_left, layout);
     match app.page() {
-        Page::Home => pane(
-            canvas,
-            app,
-            second,
-            divider + 1,
-            right,
-            rows,
-            !on_left,
-            layout,
-        ),
-        Page::Notes => open_note(canvas, app, divider + 1, right, rows, !on_left),
-    }
-}
-
-fn one_pane(canvas: &mut Canvas, app: &App, rows: &Rows, layout: &mut Layout) {
-    let width = canvas.width();
-    match app.page() {
-        Page::Home => pane(canvas, app, app.focused(), 0, width, rows, true, layout),
+        Page::Home => {
+            pane(canvas, app, List::Day, left, rows, on_left, layout);
+            pane(canvas, app, List::Backlog, right, rows, !on_left, layout);
+        }
         Page::Notes => {
-            // The list and the open note stack in the one tab.
-            pane(canvas, app, List::Notes, 0, width, rows, true, layout);
+            pane(canvas, app, List::Notes, left, rows, on_left, layout);
+            open_note(canvas, app, right, rows, !on_left);
         }
     }
 }
 
+/// A narrow window shows one list and makes the others tabs. On the notes
+/// page the list and the open note stack in the one tab.
+fn one_pane(canvas: &mut Canvas, app: &App, rows: &Rows, layout: &mut Layout) {
+    let whole = Column {
+        x: 0,
+        width: canvas.width(),
+    };
+    pane(canvas, app, app.focused(), whole, rows, true, layout);
+}
+
+/// The columns a pane occupies.
+#[derive(Clone, Copy)]
+struct Column {
+    x: u16,
+    width: u16,
+}
+
 /// A pane: its header, then its groups, then whatever is left blank.
-#[allow(clippy::too_many_arguments)]
 fn pane(
     canvas: &mut Canvas,
     app: &App,
     list: List,
-    x: u16,
-    width: u16,
+    column: Column,
     rows: &Rows,
     focused: bool,
     layout: &mut Layout,
 ) {
+    let Column { x, width } = column;
     let view = app.view(list);
     // A narrow window puts the tab row where the pane headers would be.
     if !layout.narrow {
@@ -551,7 +558,8 @@ fn note_row(canvas: &mut Canvas, x: u16, width: u16, y: u16, row: &Row) {
 }
 
 /// The open note: a plain multi-line text area and nothing else on it.
-fn open_note(canvas: &mut Canvas, app: &App, x: u16, width: u16, rows: &Rows, focused: bool) {
+fn open_note(canvas: &mut Canvas, app: &App, column: Column, rows: &Rows, focused: bool) {
+    let Column { x, width } = column;
     let view = app.fixture().open_note();
     header(canvas, x, width, rows.headers, view, focused);
 

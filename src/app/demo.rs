@@ -199,12 +199,13 @@ impl Fixture {
         }
     }
 
-    /// The counts the narrow tab row shows.
-    pub fn tabs(self) -> [(&'static str, usize); 3] {
+    /// The counts beside the three tabs of a narrow window: open tasks
+    /// today, open tasks in the backlog, notes.
+    pub fn tabs(self) -> [usize; 3] {
         [
-            ("TODAY", self.day().rows().filter(is_open).count()),
-            ("BACKLOG", self.backlog().rows().filter(is_open).count()),
-            ("NOTES", self.notes().rows().count()),
+            self.day().rows().filter(is_open).count(),
+            self.backlog().rows().filter(is_open).count(),
+            self.notes().rows().count(),
         ]
     }
 
