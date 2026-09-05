@@ -552,6 +552,29 @@ fn every_colour_is_one_the_terminal_themes() {
         Color::DarkGray,
     ];
 
+    let mut review = reviewing();
+    let mut terminal = Terminal::new(TestBackend::new(120, 36)).expect("a test terminal");
+    for action in [Action::Tick, Action::Confirm, Action::Cancel] {
+        review.update(action);
+        terminal
+            .draw(|frame| {
+                draw(&review, frame);
+            })
+            .expect("a frame");
+        for cell in terminal.backend().buffer().content() {
+            assert!(
+                ALLOWED.contains(&cell.fg),
+                "{:?} is not a theme colour",
+                cell.fg
+            );
+            assert!(
+                ALLOWED.contains(&cell.bg),
+                "{:?} is not a theme colour",
+                cell.bg
+            );
+        }
+    }
+
     let mut app = app();
     let mut terminal = Terminal::new(TestBackend::new(120, 36)).expect("a test terminal");
     for action in [
@@ -607,6 +630,29 @@ fn the_cursor_row_is_reversed_and_keeps_its_colours() {
         .expect("a frame");
     let buffer = terminal.backend().buffer();
     assert!(buffer[(1, 7)].modifier.contains(Modifier::REVERSED));
+}
+
+#[test]
+fn a_pile_left_behind_is_counted_in_red() {
+    // Escape leaves the review, and the home screen counts what is left
+    // of the pile until it is dealt with (DESIGN.md section 1).
+    let mut app = reviewing();
+    app.update(Action::Cancel);
+    let mut terminal = Terminal::new(TestBackend::new(120, 36)).expect("a test terminal");
+    terminal
+        .draw(|frame| {
+            draw(&app, frame);
+        })
+        .expect("a frame");
+
+    let text = look(&app, 120, 36).join("\n");
+    assert!(
+        text.contains("● 5 in review"),
+        "two of the seven were dealt with"
+    );
+    let buffer = terminal.backend().buffer();
+    let at = look(&app, 120, 36)[1].find('●').expect("the count") as u16;
+    assert_eq!(buffer[(at, 1)].fg, Color::Red);
 }
 
 #[test]
