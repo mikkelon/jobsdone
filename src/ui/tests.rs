@@ -1997,6 +1997,16 @@ fn a_step_with_nothing_to_decide_says_so_and_draws_no_bar() {
         !text.contains('█'),
         "and no bar over a total of none: {text}"
     );
+    for outcome in ["Pull onto today", "Keep in backlog", "Mark waiting"] {
+        assert!(
+            !text.contains(outcome),
+            "and no outcome for a row nobody is asked about: {outcome}\n{text}"
+        );
+    }
+    assert!(
+        text.contains("Start the day"),
+        "the one thing to press stays: {text}"
+    );
 }
 
 /// Adding leaves the field open after Enter, and the hint bar went on

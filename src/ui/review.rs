@@ -299,7 +299,13 @@ fn a_title_being_typed(
 /// panel cannot offer one the dispatcher does not have.
 fn panel(canvas: &mut Canvas, review: &Review, column: Column) {
     let Column { x, width, top, .. } = column;
+    let (handled, total) = review.progress();
+    // A step whose rows are all information asks nothing, so the panel
+    // offers no outcomes: they are the keys for the row the cursor is on,
+    // and beside a row nobody is being asked about, each one would act on
+    // the wrong thing (DESIGN.md section 5).
     let outcomes = input::decisions(review.step());
+    let outcomes = if total == 0 { &outcomes[..0] } else { outcomes };
 
     for (at, outcome) in outcomes.iter().enumerate() {
         let y = top + at as u16;
@@ -310,12 +316,15 @@ fn panel(canvas: &mut Canvas, review: &Review, column: Column) {
         }
     }
 
-    let (handled, total) = review.progress();
     let said = match review.step() {
         ReviewStep::Pile => "handled",
         ReviewStep::Surfaced => "decided",
     };
-    let y = top + outcomes.len() as u16 + 1;
+    let y = if outcomes.is_empty() {
+        top
+    } else {
+        top + outcomes.len() as u16 + 1
+    };
     if total == 0 {
         // Nothing was asked, so there is nothing to be part-way through:
         // a full bar over a total of none read as a step already done.
