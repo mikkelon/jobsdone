@@ -1158,6 +1158,11 @@ impl App {
         ) else {
             return;
         };
+        // Clearing is a date the task carries; the move card's day is a
+        // place, and there is no such thing as moving a task to no day.
+        if draft.kind == DateKind::Move && date.is_none() {
+            return;
+        }
         self.popup = None;
         match draft.kind {
             DateKind::Due => {

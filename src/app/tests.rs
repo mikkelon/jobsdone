@@ -1039,6 +1039,18 @@ fn text_that_is_not_a_date_is_refused_rather_than_guessed() {
 }
 
 #[test]
+fn clearing_is_not_a_day_the_move_card_can_send_a_task_to() {
+    let (mut app, task) = with_a_backlog_task("Clean out the garage");
+
+    app.update(Action::MoveToDay);
+    app.update(Action::GoToDate);
+    app.update(Action::ClearDate);
+
+    assert!(app.popup().is_some(), "the card is still asking");
+    assert_eq!(app.model().task(task).and_then(|task| task.day), None);
+}
+
+#[test]
 fn the_move_cards_pick_a_date_moves_the_task_to_the_day() {
     let (mut app, task) = with_a_backlog_task("Clean out the garage");
 

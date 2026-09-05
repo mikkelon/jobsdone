@@ -248,8 +248,9 @@ preferences file.
 | Command palette and help    | `wireframes/11-palette-help.html` | panels  |
 | Empty states                | `wireframes/12-empty.html`        | panels  |
 
-User flows A to G (the morning, plan today, work through the day, park with
-a date, wait on someone, recurring task, look back, floating or tiled) are
-drawn on `wireframes/index.html`. Every screen is also saved as plain text
+The user flows are drawn on `wireframes/index.html`: the morning (A), plan
+today (B), work through the day (C), park with a date (D), wait on someone
+(D2), a recurring task (E), look back (F), find something closed (F2), and
+floating or tiled (G). Every screen is also saved as plain text
 next to its HTML, and screenshots, including the home screen in three
 Omarchy themes, are in `wireframes/screenshots/`.
