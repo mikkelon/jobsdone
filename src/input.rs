@@ -144,10 +144,23 @@ pub enum Action {
     LineEnd,
 
     // The mouse, in cell coordinates.
-    MouseDown { column: u16, row: u16 },
-    MouseUp { column: u16, row: u16 },
-    MouseDrag { column: u16, row: u16 },
-    Scroll { column: u16, row: u16, down: bool },
+    MouseDown {
+        column: u16,
+        row: u16,
+    },
+    MouseUp {
+        column: u16,
+        row: u16,
+    },
+    MouseDrag {
+        column: u16,
+        row: u16,
+    },
+    Scroll {
+        column: u16,
+        row: u16,
+        down: bool,
+    },
 }
 
 /// Which end of the hint bar a row sits at.
@@ -729,7 +742,7 @@ const HOME_ADDING: &[Binding] = &[
     Binding {
         keys: &[],
         shown: "type",
-        label: "the text is the whole task",
+        label: "the whole task",
         bar: Bar::Left,
         narrow: Bar::Off,
     },
@@ -750,13 +763,6 @@ const HOME_ADDING: &[Binding] = &[
 ];
 
 const HOME_RENAMING: &[Binding] = &[
-    Binding {
-        keys: &[],
-        shown: "type",
-        label: "the text is the whole task",
-        bar: Bar::Left,
-        narrow: Bar::Off,
-    },
     Binding {
         keys: &[("enter", Action::Confirm)],
         shown: "⏎",

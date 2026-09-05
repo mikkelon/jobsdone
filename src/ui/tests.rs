@@ -9,6 +9,7 @@ use ratatui::{Terminal, TerminalOptions, Viewport};
 
 use crate::app::App;
 use crate::domain::tests::MemStore;
+use crate::domain::{FromPlace, Model, Note, Placement, Schedule, Task, Weekday};
 use crate::input::Action;
 
 /// The wireframes are the source of truth for the layout, so the test is a
@@ -16,11 +17,200 @@ use crate::input::Action;
 /// DESIGN.md names.
 const WIREFRAMES: &str = "wireframes";
 
+/// The day the wireframes are drawn on, which is a real Friday.
+const NOW: &str = "2025-09-05T09:00:00+02:00[Europe/Copenhagen]";
+
+fn at(text: &str) -> Zoned {
+    text.parse().expect("a zoned timestamp")
+}
+
+fn on(text: &str) -> Date {
+    text.parse().expect("a civil date")
+}
+
+/// An app on an empty database, which is what a first launch looks like.
+fn empty() -> App {
+    App::new(Box::new(MemStore::new()), &at(NOW)).expect("an app")
+}
+
+/// A task with everything a wireframe row does not say about it left off.
+fn task(id: i64, title: &str, day: Option<Date>, position: usize) -> Task {
+    Task {
+        id,
+        title: title.to_owned(),
+        day,
+        position,
+        focus: false,
+        waiting: false,
+        closed_at: None,
+        due_on: None,
+        remind_on: None,
+        schedule_id: None,
+        scheduled_on: None,
+        created_at: at(NOW),
+        deleted_at: None,
+    }
+}
+
+/// The model wireframe 03 is a picture of: today's plan, the backlog, two
+/// tasks left on past days and four notes.
+fn wireframe_model() -> Model {
+    let today = on("2025-09-05");
+    let monday = on("2025-09-08");
+    let mut model = Model::empty();
+
+    let mut put = |task: Task| {
+        model.tasks.insert(task.id, task);
+    };
+
+    put(Task {
+        focus: true,
+        schedule_id: Some(1),
+        scheduled_on: Some(today),
+        ..task(1, "Ship invoice export", Some(today), 0)
+    });
+    put(Task {
+        focus: true,
+        ..task(2, "Reply to the tender questions", Some(today), 1)
+    });
+    put(task(3, "Fix the flaky migration test", Some(today), 2));
+    put(Task {
+        remind_on: Some(today),
+        ..task(4, "Book dentist", Some(today), 3)
+    });
+    put(Task {
+        schedule_id: Some(2),
+        scheduled_on: Some(today),
+        ..task(5, "Write standup notes", Some(today), 4)
+    });
+    put(task(6, "Review Anna's PR", Some(today), 5));
+    put(Task {
+        closed_at: Some(at("2025-09-05T08:12:00+02:00[Europe/Copenhagen]")),
+        ..task(7, "Morning review", Some(today), 6)
+    });
+    put(Task {
+        closed_at: Some(at("2025-09-05T08:30:00+02:00[Europe/Copenhagen]")),
+        ..task(8, "Pay electricity bill", Some(today), 7)
+    });
+    // Planned for today, and now on Monday: the Moved group.
+    put(task(9, "Chase the hosting invoice", Some(monday), 0));
+
+    let backlog = [
+        "Migrate CI to the new runners",
+        "Write the Q4 planning doc",
+        "Clean out the garage",
+        "Renew passport",
+        "Try the new keyboard layout",
+        "Read the Hyprland plugin docs",
+        "Cancel unused subscriptions",
+        "Sort photo backups",
+        "Update the household budget",
+    ];
+    for (at, title) in backlog.iter().enumerate() {
+        put(task(101 + at as i64, title, None, at));
+    }
+    for (at, title) in [
+        "Quote from the electrician",
+        "Feedback on the proposal",
+        "Parcel from the supplier",
+    ]
+    .iter()
+    .enumerate()
+    {
+        put(Task {
+            waiting: true,
+            ..task(110 + at as i64, title, None, 9 + at)
+        });
+    }
+    put(Task {
+        due_on: Some(on("2025-09-12")),
+        ..task(101, "Migrate CI to the new runners", None, 0)
+    });
+    put(Task {
+        due_on: Some(on("2025-09-30")),
+        ..task(102, "Write the Q4 planning doc", None, 1)
+    });
+    put(Task {
+        remind_on: Some(on("2025-10-01")),
+        ..task(104, "Renew passport", None, 3)
+    });
+    put(Task {
+        waiting: true,
+        remind_on: Some(on("2025-09-15")),
+        ..task(111, "Feedback on the proposal", None, 10)
+    });
+
+    // Two tasks left behind on past days: the review count, and nothing
+    // else on this screen.
+    put(task(201, "Ring the accountant", Some(on("2025-09-03")), 0));
+    put(task(
+        202,
+        "Send the meter reading",
+        Some(on("2025-09-01")),
+        0,
+    ));
+
+    for (task_id, day, from) in [
+        (3, today, FromPlace::Backlog),
+        (9, today, FromPlace::New),
+        (9, monday, FromPlace::Day(today)),
+    ] {
+        model.placements.insert(
+            (task_id, day),
+            Placement {
+                task_id,
+                day,
+                placed_at: at("2025-09-05T08:00:00+02:00[Europe/Copenhagen]"),
+                from_place: from,
+            },
+        );
+    }
+
+    for (id, title, rule) in [
+        (
+            1,
+            "Ship invoice export",
+            Rule::Weekly {
+                weekdays: vec![Weekday::Fri],
+            },
+        ),
+        (2, "Write standup notes", Rule::Workdays),
+    ] {
+        model.schedules.insert(
+            id,
+            Schedule {
+                id,
+                title: title.to_owned(),
+                rule,
+                generated_through: today,
+                stopped_on: None,
+                created_at: at(NOW),
+            },
+        );
+    }
+
+    for (id, body) in [
+        (1, "Mention to Anna: CI runner budget"),
+        (2, "Draft reply to tender Q3"),
+        (3, "nordic ltd PO 4471, due 30 days"),
+        (4, "rsync -av --delete ~/work nas:/bk"),
+    ] {
+        model.notes.insert(
+            id,
+            Note {
+                id,
+                body: body.to_owned(),
+                created_at: at(NOW),
+                updated_at: at(NOW),
+                deleted_at: None,
+            },
+        );
+    }
+    model
+}
+
 fn app() -> App {
-    let now: Zoned = "2026-09-05T09:00:00+02:00[Europe/Copenhagen]"
-        .parse()
-        .expect("a zoned timestamp");
-    App::new(Box::new(MemStore::new()), &now).expect("an app")
+    App::new(Box::new(MemStore::holding(wireframe_model())), &at(NOW)).expect("an app")
 }
 
 /// Renders and answers the screen as lines, trailing blanks trimmed the
@@ -207,7 +397,14 @@ fn every_colour_is_one_the_terminal_themes() {
 
     let mut app = app();
     let mut terminal = Terminal::new(TestBackend::new(120, 36)).expect("a test terminal");
-    for action in [Action::Tick, Action::Commands, Action::Help, Action::Search] {
+    for action in [
+        Action::Tick,
+        Action::Commands,
+        Action::Help,
+        Action::Search,
+        Action::MoveToDay,
+        Action::Add,
+    ] {
         app.update(action);
         terminal
             .draw(|frame| {
@@ -298,7 +495,7 @@ fn search_says_when_nothing_matches_and_offers_to_add_it() {
 }
 
 #[test]
-fn search_groups_what_it_finds() {
+fn search_groups_what_it_finds_and_says_where_each_one_is() {
     let mut app = app();
     app.update(Action::Search);
     for typed in "invoice".chars() {
@@ -306,36 +503,118 @@ fn search_groups_what_it_finds() {
     }
     let text = look(&app, 120, 36).join("\n");
 
-    assert!(text.contains("9 matches"));
+    assert!(text.contains("2 matches"));
     assert!(text.contains("OPEN"));
-    assert!(text.contains("CLOSED"));
     assert!(text.contains("Ship invoice export"));
+    assert!(text.contains("today · focus · ↻"));
+    assert!(text.contains("Chase the hosting invoice"));
+    assert!(text.contains("Mon 8 Sep"));
 }
 
 #[test]
 fn an_empty_list_names_the_keys_that_fill_it() {
-    let mut app = app();
-    app.show_empty();
-    let text = look(&app, 120, 36).join("\n");
+    let text = look(&empty(), 120, 36).join("\n");
 
     assert!(text.contains("Nothing planned."));
     assert!(text.contains("a add a task · l then t pull from the backlog"));
     assert!(text.contains("Backlog is empty."));
     assert!(text.contains("a add · b on a day task sends it here"));
     assert!(text.contains("nothing planned"), "and the header says so");
+    assert!(
+        text.contains("● 0 in review"),
+        "a zero is a count, not an alert"
+    );
 }
 
 #[test]
-fn the_notes_page_gives_the_open_note_the_width() {
+fn the_add_line_becomes_the_field_that_is_typed_into() {
+    let mut app = empty();
+    app.update(Action::Add);
+    for typed in "Call the landlord about the leak".chars() {
+        app.update(Action::Insert(typed));
+    }
+    let drawn = look(&app, 120, 36);
+
+    assert!(drawn[5].starts_with(" PLAN ────"));
+    assert!(
+        drawn[6].contains("+  Call the landlord about the leak▏"),
+        "the field is where the add line was: {:?}",
+        drawn[6]
+    );
+    assert!(
+        drawn[34].contains("⏎ add & keep typing"),
+        "and the hint bar says what Enter does: {:?}",
+        drawn[34]
+    );
+}
+
+#[test]
+fn a_title_is_edited_in_the_row_it_belongs_to() {
+    let mut app = app();
+    app.update(Action::Edit);
+    let drawn = look(&app, 120, 36);
+
+    assert!(drawn[6].contains("[ ] Ship invoice export▏"));
+    assert!(drawn[34].contains("⏎ save"));
+    assert!(drawn[34].contains("esc cancel"));
+}
+
+#[test]
+fn the_hint_bar_says_what_just_happened_and_offers_to_undo_it() {
+    let mut app = app();
+    app.update(Action::Delete);
+    let drawn = look(&app, 120, 36);
+
+    assert_eq!(
+        drawn[34].trim_end(),
+        " TODAY  Deleted \"Ship invoice export\"  u  undo"
+    );
+}
+
+#[test]
+fn the_move_card_names_the_task_and_the_days() {
+    let mut app = app();
+    app.update(Action::MoveToDay);
+    let text = look(&app, 120, 36).join("\n");
+
+    assert!(text.contains("Move Ship invoice export"));
+    assert!(text.contains("Today"));
+    assert!(text.contains("Fri 5 Sep"));
+    assert!(text.contains("Next work day"));
+    assert!(text.contains("Mon 8 Sep"));
+    assert!(text.contains("Backlog"));
+    assert!(text.contains("no day"));
+}
+
+#[test]
+fn the_copy_question_spells_both_answers_out() {
+    let mut app = app();
+    app.update(Action::Edit);
+    app.update(Action::Insert('!'));
+    app.update(Action::Confirm);
+    let text = look(&app, 120, 36).join("\n");
+
+    assert!(text.contains("Rename Ship invoice export"));
+    assert!(text.contains("This task repeats. Rename:"));
+    assert!(text.contains("This copy"));
+    assert!(text.contains("This and future copies"));
+}
+
+#[test]
+fn the_notes_page_lists_the_notes_and_says_the_rest_is_later() {
     let mut app = app();
     app.update(Action::NotesPage);
     let drawn = look(&app, 120, 36);
 
     assert!(drawn[1].contains("Notes 4 notes"));
     assert!(drawn[1].contains("n or esc back to today"));
-    assert!(drawn[3].contains("Note Thu 4 Sep 16:40"));
-    assert!(drawn[5].contains("▪ Mention to Anna"));
-    assert!(drawn[5].contains("Mention to Anna:"));
+    assert!(drawn[5].contains("▪ rsync -av --delete ~/work na"));
+    assert!(
+        drawn
+            .join("\n")
+            .contains("Opening a note is not built yet."),
+        "the list is there; the note beside it is phase 11's"
+    );
     let divider = drawn[4].chars().position(|glyph| glyph == '┬');
     assert_eq!(
         divider,
@@ -353,7 +632,14 @@ fn a_window_too_small_for_the_frame_draws_nothing_rather_than_panicking() {
 #[test]
 fn no_size_the_window_can_take_makes_the_drawing_panic() {
     let mut app = app();
-    for action in [Action::Tick, Action::Commands, Action::Help, Action::Search] {
+    for action in [
+        Action::Tick,
+        Action::Commands,
+        Action::Help,
+        Action::Search,
+        Action::MoveToDay,
+        Action::Add,
+    ] {
         app.update(action);
         for width in [1, 2, 23, 24, 25, 40, 99, 100, 101, 120, 200] {
             for height in [1, 2, 8, 9, 10, 12, 36, 48, 90] {
@@ -394,7 +680,7 @@ fn the_narrow_tab_row_marks_the_tab_the_keyboard_is_on() {
     let notes = look(&app, 80, 44);
     assert_eq!(app.page(), Page::Notes);
     assert!(notes[1].starts_with(" Notes 4 notes"));
-    assert!(notes[5].contains("▪ Mention to Anna"));
+    assert!(notes[5].contains("▪ rsync"));
 }
 
 /// The colour and attribute parameters of every `ESC [ … m` written, with

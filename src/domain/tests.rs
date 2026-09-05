@@ -1949,10 +1949,22 @@ fn a_deleted_note_comes_back() {
 fn the_note_list_is_newest_first_and_shows_the_first_line() {
     let mut world = World::at("2026-09-07T09:00:00");
     world.must(Command::CreateNote);
-    let first = world.model.notes.keys().copied().next_back().expect("a note");
+    let first = world
+        .model
+        .notes
+        .keys()
+        .copied()
+        .next_back()
+        .expect("a note");
     world.clock("2026-09-07T10:00:00");
     world.must(Command::CreateNote);
-    let second = world.model.notes.keys().copied().next_back().expect("a note");
+    let second = world
+        .model
+        .notes
+        .keys()
+        .copied()
+        .next_back()
+        .expect("a note");
 
     world.must(Command::EditNote {
         note: first,

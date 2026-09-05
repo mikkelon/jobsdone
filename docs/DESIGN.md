@@ -106,6 +106,10 @@ Conventions, so the map is guessable:
   to a date, `/` search, `:` command palette, `?` help, `n` notes page,
   `q` quit.
 - `Enter` confirms, `Escape` backs out one level, `u` undoes.
+- After a task is closed, moved or deleted the cursor steps to the next
+  row of the group it left, so a list is worked down without moving the
+  cursor by hand. Everything else leaves the cursor on the task it acted
+  on, which is how a reordered row is followed up or down the list.
 - Where a text field has focus (search, the palette, the date card, an
   open note, a title being edited), every letter and digit types. Only
   `Enter`, `Escape`, `↑`/`↓` and `Tab` keep their meaning there. The few
@@ -183,6 +187,12 @@ No action asks "are you sure". Delete, close, move, and review decisions
 apply immediately and offer `u` in the hint bar until the next key. Editing
 is always in place; the only forms are the three small cards (date, repeat,
 move).
+
+A field on a row is a mode like any other, so its keys are in the hint
+bar rather than beside it: while a title is being typed the bar says what
+Enter does there, "add & keep typing" when adding and "save" when
+renaming. What just happened takes the same line over until the next key,
+which is where the offer of `u` is.
 
 The one deliberate question: editing the title of a recurring copy asks
 whether the change is for this copy or this and future copies, because
