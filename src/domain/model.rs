@@ -258,7 +258,10 @@ pub enum Write {
     PutTask(Task),
     PutPlacement(Placement),
     /// Only ever from the undo of the move that wrote the row.
-    DeletePlacement { task: Id, day: Date },
+    DeletePlacement {
+        task: Id,
+        day: Date,
+    },
     PutSchedule(Schedule),
     /// Only ever from the undo of the CreateSchedule that wrote the row,
     /// when the schedule's only copy is the task being unlinked.

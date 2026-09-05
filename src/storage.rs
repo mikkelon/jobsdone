@@ -370,8 +370,13 @@ fn command_text(command: &Command) -> Result<String, StoreError> {
 }
 
 fn parse<T: std::str::FromStr>(text: &str, column: usize) -> rusqlite::Result<T> {
-    text.parse()
-        .map_err(|_| bad(column, Type::Text, format!("{text:?} is not the right shape")))
+    text.parse().map_err(|_| {
+        bad(
+            column,
+            Type::Text,
+            format!("{text:?} is not the right shape"),
+        )
+    })
 }
 
 fn date_of(row: &Row<'_>, column: usize) -> rusqlite::Result<Option<jiff::civil::Date>> {

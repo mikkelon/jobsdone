@@ -242,7 +242,9 @@ pub fn pile(model: &Model, today: Date) -> Pile {
         .into_iter()
         .map(|day| PileDay {
             day,
-            age: day.until(today).map_or(0, |span| i64::from(span.get_days())),
+            age: day
+                .until(today)
+                .map_or(0, |span| i64::from(span.get_days())),
             rows: model
                 .place(Place::Day(day))
                 .into_iter()
