@@ -241,7 +241,10 @@ adds it here first, the way a new dependency is added to section 2 first.
   - `shown`: how those keys are written when the row is named, `J/K` or
     `tab h/l`. A row with no keys at all, "type to filter", is a line of
     the hint bar and nothing else;
-  - `label`: what the row is called, in all three places;
+  - `label`: what the row is called, in all three places. It is empty on
+    a caption row, a row with no key that names the rows after it, which
+    is how the hint bar in an open note says "in the list:" over the
+    keys that work once the keyboard is back on the list;
   - `bar` and `narrow`: where the hint bar puts the row when the window
     has two panes and when it has collapsed to tabs, as a `Bar` of `Off`,
     `Left`, `Right`, or `Short(Side, name)` where the bar is tight.
@@ -270,14 +273,17 @@ adds it here first, the way a new dependency is added to section 2 first.
   `today`, `model`, the views `day`, `backlog`, `notes` and
   `review_count`, `page`, `pane`, `notes_pane`, `focused`, `popup`,
   `editor`, `message`, `cursor`, `palette_rows`, `search_results`,
-  `move_choices`, `date_choices`, `repeat_preview` and `layout`.
+  `move_choices`, `date_choices`, `repeat_preview`, `draft` and `layout`.
   `Page` is `Home` or `Notes`; `List` is `Day`, `Backlog` or `Notes`, one
   cursor each, held by id; `Popup` carries the kind, the text typed into
-  it, the caret, the selected row, the task it is about, and the `Draft` a
-  card is building before Enter turns it into a command, which for the
-  date card is the day it is on and which of its two controls has the
+  it, the caret, the selected row, the row it is about, and the `Card` it
+  is building before Enter turns it into a command, which for the date
+  card is the day it is on and which of its two controls has the
   keyboard, and for the repeat card the parameters of every shape, so
-  that stepping through them loses nothing; `Editor` is a title being typed on a row; `Message` is what the hint bar says until
+  that stepping through them loses nothing; `Editor` is a title being
+  typed on a row; `Draft` is the note the keyboard is in, as its id, the
+  body being typed and the caret in characters; `Message` is what the
+  hint bar says until
   the next key, and whether `u` takes it back; `MoveChoice` is a row of
   the move card, its key and name from the key table and its day worked
   out here.
@@ -328,10 +334,15 @@ Each rule, and what breaking it looks like in a diff.
    gained** when the stored version differs. Broken by: a command sent
    to `apply` without the version check in front of it.
 8. **Uncommitted text lives only in the app.** A title being edited, the
-   search string, the palette filter and a note body between keystrokes
-   are application state. Each becomes one command on Enter; for note
-   bodies phase 11 decides when. Broken by: a half-typed string reaching
-   `apply`.
+   search string, the palette filter, a card being filled in and a note
+   body between keystrokes are application state. Each becomes one
+   command on Enter, except a note body, which has no Enter of its own:
+   it becomes an `EditNote` on the first tick after it changes and again
+   whenever the note is left, so at most a quarter of a second of typing
+   is ever at risk and no keystroke costs a write. The save follows the
+   tick's reload, so a note another window threw away is not written
+   back; the draft is dropped instead. Broken by: a half-typed string
+   reaching `apply`.
 9. **The launch sequence belongs to `app`.** `main.rs` opens and migrates
    the database, builds the `App`, and calls `terminal::run`. Broken by:
    a domain call in `main.rs`.

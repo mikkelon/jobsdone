@@ -1,0 +1,174 @@
+#!/usr/bin/env bash
+# Drive jobsdone in a tmux pane of a fixed size, for acceptance testing by
+# hand or by an agent. Every subcommand prints what it did; `screen` prints
+# the screen as text and writes text, ANSI and PNG captures to uat/out/.
+#
+#   uat/tui start [--size 120x36] [--fresh] [--data DIR]   build and launch
+#   uat/tui keys KEY...        tmux key names: a j k Enter Escape Space Tab Up Down BSpace C-c
+#   uat/tui type "text"        the string, literally, character by character
+#   uat/tui mouse click|press|release|drag|wheel-up|wheel-down COL ROW   1-based cells
+#   uat/tui screen [NAME]      capture and print; files land in uat/out/NAME.{txt,ansi,png}
+#   uat/tui resize COLSxROWS   resize the window while the app runs
+#   uat/tui restart            quit with q and start again, keeping the data
+#   uat/tui sql "SQL"          run SQL against the scratch database
+#   uat/tui log [N]            last N lines of the app's log
+#   uat/tui status             is the app running, in what size, on what data
+#   uat/tui stop               kill the app and the tmux session
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$HERE/.." && pwd)"
+SESSION="${UAT_SESSION:-jobsdone-uat}"
+OUT="$HERE/out"
+STATE="$OUT/.state"
+DEFAULT_DATA="$OUT/data"
+BIN="$ROOT/target/debug/jobsdone"
+SETTLE="${UAT_SETTLE:-0.35}"
+
+usage() { sed -n '2,17p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+
+data_dir() { [ -f "$STATE/data" ] && cat "$STATE/data" || echo "$DEFAULT_DATA"; }
+running() { tmux has-session -t "=$SESSION" 2>/dev/null; }
+settle() { sleep "$SETTLE"; }
+
+cmd_start() {
+    local size="120x36" fresh=0 data="$DEFAULT_DATA"
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --size) size="$2"; shift 2 ;;
+            --fresh) fresh=1; shift ;;
+            --data) data="$2"; shift 2 ;;
+            *) usage ;;
+        esac
+    done
+    if running; then echo "already running; use restart or stop" >&2; exit 1; fi
+    mkdir -p "$OUT" "$STATE"
+    (cd "$ROOT" && cargo build -q)
+    if [ "$fresh" = 1 ]; then rm -rf "$data"; fi
+    mkdir -p "$data"
+    echo "$data" > "$STATE/data"
+    echo "$size" > "$STATE/size"
+    local cols="${size%x*}" rows="${size#*x}"
+    tmux new-session -d -s "$SESSION" -x "$cols" -y "$rows" \
+        -e JOBSDONE_DATA_DIR="$data" -e XDG_STATE_HOME="$data/state" \
+        -e JOBSDONE_LOG=debug -e TERM=xterm-256color \
+        "$BIN; echo '[jobsdone exited '\$?']'; sleep 3600"
+    tmux set-option -w -t "$SESSION:" window-size manual >/dev/null
+    tmux resize-window -t "$SESSION:" -x "$cols" -y "$rows" 2>/dev/null || true
+    sleep 0.8
+    echo "started $size, data in $data"
+}
+
+cmd_keys() {
+    running || { echo "not running" >&2; exit 1; }
+    for k in "$@"; do tmux send-keys -t "$SESSION:" -- "$k"; sleep 0.08; done
+    settle
+    echo "sent keys: $*"
+}
+
+cmd_type() {
+    running || { echo "not running" >&2; exit 1; }
+    tmux send-keys -t "$SESSION:" -l -- "$1"
+    settle
+    echo "typed: $1"
+}
+
+# SGR mouse encoding, which is what the app asks the terminal for.
+cmd_mouse() {
+    running || { echo "not running" >&2; exit 1; }
+    local what="$1" col="$2" row="$3" seq
+    case "$what" in
+        press)      seq=$'\e[<0;'"$col;$row"'M' ;;
+        release)    seq=$'\e[<0;'"$col;$row"'m' ;;
+        click)      seq=$'\e[<0;'"$col;$row"'M'$'\e[<0;'"$col;$row"'m' ;;
+        drag)       seq=$'\e[<32;'"$col;$row"'M' ;;
+        wheel-up)   seq=$'\e[<64;'"$col;$row"'M' ;;
+        wheel-down) seq=$'\e[<65;'"$col;$row"'M' ;;
+        *) usage ;;
+    esac
+    tmux send-keys -t "$SESSION:" -l -- "$seq"
+    settle
+    echo "mouse $what at column $col row $row"
+}
+
+cmd_screen() {
+    running || { echo "not running" >&2; exit 1; }
+    local name="${1:-$(date +%H%M%S)}"
+    mkdir -p "$OUT"
+    tmux capture-pane -t "$SESSION:" -p > "$OUT/$name.txt"
+    tmux capture-pane -t "$SESSION:" -p -e > "$OUT/$name.ansi"
+    local size; size="$(tmux display-message -t "$SESSION:" -p '#{pane_width}x#{pane_height}')"
+    python3 "$HERE/render.py" "$OUT/$name.ansi" "$OUT/$name.png" "$size" 2>&1 | sed 's/^/render: /' >&2 || true
+    echo "screen $size -> uat/out/$name.txt .ansi .png"
+    python3 - "$OUT/$name.txt" "${size%x*}" <<'PY'
+import sys
+lines = open(sys.argv[1], encoding="utf-8", errors="replace").read().split("\n")
+w = int(sys.argv[2])
+print("┌" + "─" * w + "┐")
+for line in lines[: len(lines) - 1 if lines and lines[-1] == "" else len(lines)]:
+    print("│" + line.ljust(w)[:w] + "│")
+print("└" + "─" * w + "┘")
+PY
+}
+
+cmd_resize() {
+    running || { echo "not running" >&2; exit 1; }
+    local cols="${1%x*}" rows="${1#*x}"
+    tmux resize-window -t "$SESSION:" -x "$cols" -y "$rows"
+    echo "$1" > "$STATE/size"
+    sleep 0.6
+    echo "resized to $1"
+}
+
+cmd_stop() {
+    if running; then
+        tmux send-keys -t "$SESSION:" Escape Escape q 2>/dev/null || true
+        sleep 0.3
+        tmux kill-session -t "=$SESSION" 2>/dev/null || true
+        echo "stopped"
+    else
+        echo "not running"
+    fi
+}
+
+cmd_restart() {
+    local size data
+    size="$(cat "$STATE/size" 2>/dev/null || echo 120x36)"
+    data="$(data_dir)"
+    cmd_stop >/dev/null
+    cmd_start --size "$size" --data "$data"
+}
+
+cmd_sql() {
+    local db; db="$(data_dir)/jobsdone.db"
+    [ -f "$db" ] || { echo "no database at $db" >&2; exit 1; }
+    sqlite3 -header -column "$db" "$1"
+}
+
+cmd_log() {
+    local n="${1:-40}"
+    tail -n "$n" "$(data_dir)/state/jobsdone/jobsdone.log" 2>/dev/null || echo "no log yet"
+}
+
+cmd_status() {
+    if running; then
+        echo "running: $(tmux display-message -t "$SESSION:" -p '#{pane_width}x#{pane_height}'), data in $(data_dir)"
+    else
+        echo "not running"
+    fi
+}
+
+case "${1:-}" in
+    start) shift; cmd_start "$@" ;;
+    keys) shift; cmd_keys "$@" ;;
+    type) shift; cmd_type "$@" ;;
+    mouse) shift; cmd_mouse "$@" ;;
+    screen) shift; cmd_screen "$@" ;;
+    resize) shift; cmd_resize "$@" ;;
+    restart) cmd_restart ;;
+    sql) shift; cmd_sql "$@" ;;
+    log) shift; cmd_log "$@" ;;
+    status) cmd_status ;;
+    stop) cmd_stop ;;
+    *) usage ;;
+esac

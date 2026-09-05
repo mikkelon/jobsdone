@@ -72,6 +72,11 @@ fn cursor(app: &App, list: List) -> Option<Id> {
     app.cursor(list).and_then(RowId::task)
 }
 
+/// The note the cursor is on, on the notes page.
+fn note_cursor(app: &App) -> Option<Id> {
+    app.cursor(List::Notes).and_then(RowId::note)
+}
+
 /// The titles of a list, in the order they are drawn.
 fn titles(app: &App, list: List) -> Vec<String> {
     app.rows_of(list)
@@ -1367,13 +1372,251 @@ fn n_turns_the_page_and_turns_it_back() {
 }
 
 #[test]
-fn the_notes_page_says_it_is_not_built_yet() {
+fn esc_leaves_the_notes_page_the_way_n_does() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    app.update(Action::Cancel);
+
+    assert_eq!(app.page(), Page::Home);
+}
+
+#[test]
+fn a_makes_a_note_and_puts_the_cursor_on_it() {
     let mut app = started();
     app.update(Action::NotesPage);
     app.update(Action::Add);
 
-    assert_eq!(hint(&app), "The notes page is not built yet.");
-    assert!(app.editor().is_none());
+    let first = note_cursor(&app).expect("the note just made");
+    assert_eq!(app.notes().count, 1);
+    assert_eq!(hint(&app), "Added a note");
+    assert!(app.editor().is_none(), "a note is not a title being typed");
+
+    // The newest note is at the top of the list, and the cursor follows.
+    app.update(Action::Add);
+    let second = note_cursor(&app).expect("the second note");
+    assert_ne!(second, first);
+    assert_eq!(
+        app.rows_of(List::Notes)
+            .into_iter()
+            .filter_map(|(id, _)| id.note())
+            .collect::<Vec<_>>(),
+        [second, first]
+    );
+}
+
+#[test]
+fn x_throws_a_note_away_and_u_brings_it_back() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    app.update(Action::Add);
+    app.update(Action::Add);
+    let top = note_cursor(&app).expect("a note");
+
+    app.update(Action::Delete);
+    assert_eq!(app.notes().count, 1);
+    assert_eq!(hint(&app), "Deleted a note");
+    assert!(app.message().is_some_and(|message| message.undo));
+    assert_ne!(note_cursor(&app), Some(top), "the cursor steps on");
+
+    app.update(Action::Undo);
+    assert_eq!(app.notes().count, 2);
+}
+
+/// A note made, opened and typed into, which is the whole of writing one.
+fn note_saying(app: &mut App, body: &str) -> Id {
+    app.update(Action::Add);
+    type_in(app, body);
+    note_cursor(app).expect("the note just made")
+}
+
+#[test]
+fn a_new_note_opens_for_typing_straight_away() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    let note = note_saying(&mut app, "remember to mention X");
+
+    assert_eq!(app.notes_pane(), NotesPane::Note);
+    assert_eq!(
+        app.key_context(),
+        KeyContext::Notes {
+            pane: NotesPane::Note,
+            text_field: true
+        },
+        "every letter types in an open note"
+    );
+    let draft = app.draft().expect("the note being typed");
+    assert_eq!(
+        (draft.note, draft.text.as_str()),
+        (note, "remember to mention X")
+    );
+}
+
+#[test]
+fn a_note_body_is_written_on_the_next_tick() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    let note = note_saying(&mut app, "remember to mention X");
+
+    assert_eq!(
+        app.model().note(note).map(|note| note.body.as_str()),
+        Some(""),
+        "the typing is in the application until the pause"
+    );
+
+    app.update(Action::Tick);
+    assert_eq!(
+        app.model().note(note).map(|note| note.body.as_str()),
+        Some("remember to mention X"),
+        "a quarter of a second of typing at most is ever at risk"
+    );
+    assert!(app.message().is_none(), "a saved body is not news");
+}
+
+#[test]
+fn leaving_a_note_writes_what_was_typed() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    let note = note_saying(&mut app, "remember to mention X");
+    app.update(Action::Cancel);
+
+    assert_eq!(app.notes_pane(), NotesPane::List);
+    assert!(app.draft().is_none());
+    assert_eq!(
+        app.model().note(note).map(|note| note.body.as_str()),
+        Some("remember to mention X")
+    );
+
+    // And again, reopened: the caret waits at the end of what is there.
+    app.update(Action::Confirm);
+    let draft = app.draft().expect("the note open again");
+    assert_eq!(draft.text, "remember to mention X");
+    assert_eq!(draft.caret, 21);
+}
+
+#[test]
+fn a_note_survives_the_page_being_left_and_the_program_quitting() {
+    let store = MemStore::new();
+    let mut app = app_at(store.clone(), NOW);
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "first");
+    app.update(Action::NotesPage);
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "second");
+    assert_eq!(app.update(Action::Quit), Flow::Quit);
+
+    // What another window loads is what was typed, both times.
+    let again = app_at(store, NOW);
+    let bodies: Vec<&str> = again
+        .notes()
+        .rows
+        .iter()
+        .filter_map(|row| again.model().note(row.note))
+        .map(|note| note.body.as_str())
+        .collect();
+    assert_eq!(bodies, ["second", "first"]);
+}
+
+#[test]
+fn enter_is_a_line_of_the_note_and_the_caret_walks_it() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    let note = note_saying(&mut app, "one");
+    app.update(Action::Insert('\n'));
+    type_in(&mut app, "two");
+
+    // Up keeps the column it can; Home and End are the line's own ends.
+    app.update(Action::Up);
+    assert_eq!(app.draft().expect("the note").caret, 3);
+    app.update(Action::LineStart);
+    assert_eq!(app.draft().expect("the note").caret, 0);
+    app.update(Action::Down);
+    assert_eq!(app.draft().expect("the note").caret, 4);
+    app.update(Action::LineEnd);
+    assert_eq!(app.draft().expect("the note").caret, 7);
+
+    app.update(Action::Tick);
+    assert_eq!(
+        app.model().note(note).map(|note| note.body.as_str()),
+        Some("one\ntwo")
+    );
+}
+
+#[test]
+fn the_note_the_cursor_is_on_is_the_one_that_opens() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "first");
+    app.update(Action::Cancel);
+    let second = note_saying(&mut app, "second");
+    app.update(Action::Cancel);
+
+    // The newest is at the top, and the list cursor is on it.
+    app.update(Action::Down);
+    app.update(Action::Confirm);
+    let draft = app.draft().expect("a note");
+    assert_ne!(draft.note, second);
+    assert_eq!(draft.text, "first");
+}
+
+#[test]
+fn tab_walks_from_the_list_into_the_note_and_back() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    let note = note_saying(&mut app, "half a thought");
+    app.update(Action::PaneLeft);
+
+    assert_eq!(app.notes_pane(), NotesPane::List);
+    assert_eq!(
+        app.model().note(note).map(|note| note.body.as_str()),
+        Some("half a thought"),
+        "leaving by the pane key writes it too"
+    );
+
+    app.update(Action::PaneRight);
+    assert_eq!(app.notes_pane(), NotesPane::Note);
+    assert!(app.draft().is_some());
+}
+
+#[test]
+fn a_note_another_window_threw_away_stops_being_typed_into() {
+    let store = MemStore::new();
+    let mut app = app_at(store.clone(), NOW);
+    let mut elsewhere = app_at(store, NOW);
+    app.update(Action::NotesPage);
+    let note = note_saying(&mut app, "half a thought");
+
+    elsewhere.update(Action::NotesPage);
+    elsewhere.update(Action::Tick);
+    elsewhere.update(Action::Delete);
+    assert_eq!(
+        elsewhere.notes().count,
+        0,
+        "the other window did throw it away"
+    );
+
+    app.update(Action::Tick);
+    assert!(app.draft().is_none(), "there is nothing left to write to");
+    assert_eq!(app.notes_pane(), NotesPane::List);
+    assert!(app.model().note(note).is_some_and(|note| !note.is_live()));
+    assert!(app.message().is_none(), "and no complaint about it");
+}
+
+#[test]
+fn a_key_for_tasks_says_so_on_the_notes_page() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    app.update(Action::Close);
+
+    assert_eq!(hint(&app), "That key is for tasks, and this page is notes.");
+}
+
+#[test]
+fn x_on_an_empty_notes_page_says_there_is_nothing_there() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    app.update(Action::Delete);
+
+    assert_eq!(hint(&app), "There is no note here yet.");
 }
 
 // ---- popups ----------------------------------------------------------

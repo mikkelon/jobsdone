@@ -498,7 +498,10 @@ The empty result offers to add the typed text as a task on today.
 | deleted_at | instant or none |
 
 The list is ordered by `created_at`, newest first, and editing does not
-move a note. The list row shows the first line of the body.
+move a note. The list row shows the first line of the body and
+`created_at`, which the screen renders as an age. It is the age of the
+note rather than of its last edit, because that is the order the list is
+already in.
 
 ## 16. Several instances
 

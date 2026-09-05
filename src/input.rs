@@ -236,7 +236,8 @@ pub struct Binding {
     /// line of the hint bar and nothing else.
     pub shown: &'static str,
     /// What the row is called, in the hint bar, the palette and the help
-    /// overlay.
+    /// overlay. Empty only on a caption row, which names the rows beside
+    /// it in the bar rather than a key of its own.
     pub label: &'static str,
     /// Where the hint bar puts it when both panes are on screen.
     pub bar: Bar,
@@ -520,8 +521,10 @@ const NOTES_LIST: &[Binding] = &[
         bar: Bar::Left,
         narrow: Bar::Short(Side::Left, "del"),
     },
+    // `esc` leaves the page as well, which is what the status line
+    // promises; `n` is the key the bar has room to name.
     Binding {
-        keys: &[("n", Action::NotesPage)],
+        keys: &[("n", Action::NotesPage), ("esc", Action::Cancel)],
         shown: "n",
         label: "back to today",
         bar: Bar::Left,
@@ -536,6 +539,18 @@ const NOTES_LIST: &[Binding] = &[
         shown: "tab h/l",
         label: "pane",
         bar: Bar::Right,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[
+            ("j", Action::Down),
+            ("k", Action::Up),
+            ("down", Action::Down),
+            ("up", Action::Up),
+        ],
+        shown: "j/k",
+        label: "move",
+        bar: Bar::Off,
         narrow: Bar::Off,
     },
     Binding {
@@ -590,11 +605,64 @@ const NOTES_NOTE: &[Binding] = &[
         bar: Bar::Left,
         narrow: Bar::Short(Side::Left, "back"),
     },
+    // A note is a text area, so Enter is a line of it rather than
+    // something to confirm.
+    Binding {
+        keys: &[("enter", Action::Insert('\n'))],
+        shown: "⏎",
+        label: "new line",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("up", Action::Up), ("down", Action::Down)],
+        shown: "↑/↓",
+        label: "move",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
     Binding {
         keys: &[("tab", Action::NextPane)],
         shown: "tab",
         label: "pane",
         bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    // The list's keys, named but not bound: here every letter types, so
+    // these rows say where they work instead of claiming to work here.
+    Binding {
+        keys: &[],
+        shown: "in the list:",
+        label: "",
+        bar: Bar::Right,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[],
+        shown: "⏎",
+        label: "open",
+        bar: Bar::Right,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[],
+        shown: "a",
+        label: "new",
+        bar: Bar::Right,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[],
+        shown: "x",
+        label: "delete",
+        bar: Bar::Right,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[],
+        shown: "n",
+        label: "back to today",
+        bar: Bar::Right,
         narrow: Bar::Off,
     },
 ];

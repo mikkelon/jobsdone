@@ -151,12 +151,15 @@ pub struct NotesView {
     pub count: usize,
 }
 
-/// A note as the list draws it: its first line stands for the whole body.
+/// A note as the list draws it: its first line stands for the whole body,
+/// and the instant it was made is the age beside it. The list is in that
+/// order, so it is the age of the note rather than of its last edit
+/// (DOMAIN.md section 15).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct NoteRow {
     pub note: Id,
     pub first_line: String,
-    pub updated_at: Zoned,
+    pub created_at: Zoned,
 }
 
 // ---- the views -------------------------------------------------------
@@ -399,7 +402,7 @@ pub fn notes(model: &Model) -> NotesView {
             .map(|note| NoteRow {
                 note: note.id,
                 first_line: note.body.lines().next().unwrap_or_default().to_owned(),
-                updated_at: note.updated_at.clone(),
+                created_at: note.created_at.clone(),
             })
             .collect(),
     }

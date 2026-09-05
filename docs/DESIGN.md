@@ -218,6 +218,11 @@ nothing else on it. There is no drawing, no formatting, no pop-out window:
 the app itself is usually a floating window opened for a moment, so a note
 is already on top whenever it is needed.
 
+A note has no title, so the list row is the first line of the body and how
+long ago the note was made, which is the order the list is in. The number
+of notes is already in the status line, so the list header names the key
+that makes another one instead.
+
 ## 10. Empty states name the key that fills them
 
 An empty list says what it is for and the one or two keys that put

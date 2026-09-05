@@ -2006,6 +2006,7 @@ fn a_deleted_note_comes_back() {
 #[test]
 fn the_note_list_is_newest_first_and_shows_the_first_line() {
     let mut world = World::at("2026-09-07T09:00:00");
+    let made = world.now.clone();
     world.must(Command::CreateNote);
     let first = world
         .model
@@ -2037,6 +2038,10 @@ fn the_note_list_is_newest_first_and_shows_the_first_line() {
         "the newest note is at the top, and editing did not move it"
     );
     assert_eq!(view.rows[1].first_line, "Mention to Anna:");
+    assert_eq!(
+        view.rows[1].created_at, made,
+        "the row carries when the note was made, not when it was last typed in"
+    );
 
     world.must(Command::DeleteNote { note: second });
     let view = notes(&world.model);
