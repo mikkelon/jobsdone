@@ -235,7 +235,8 @@ day walked to in the calendar, a repeat rule.
 A field on a row is a mode like any other, so its keys are in the hint
 bar rather than beside it: while a title is being typed the bar says what
 Enter does there, "add & keep typing" when adding and "save" when
-renaming. What just happened takes the same line over until the next key,
+renaming. A line longer than the field scrolls with the caret rather than
+clipping at its end, so what is being typed is always the part on screen. What just happened takes the same line over until the next key,
 which is where the offer of `u` is.
 
 The one deliberate question: editing the title of a recurring copy asks

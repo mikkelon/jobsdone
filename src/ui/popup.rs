@@ -56,13 +56,11 @@ fn divide(canvas: &mut Canvas, x: u16, y: u16, width: u16) {
 }
 
 /// `:  wa▏`, with the caret where the next character goes.
-fn input(canvas: &mut Canvas, x: u16, y: u16, prompt: &str, popup: &Popup) {
+fn input(canvas: &mut Canvas, x: u16, y: u16, width: u16, prompt: &str, popup: &Popup) {
     canvas.put(x + 2, y, prompt, bold());
-    let typed: String = popup.text.chars().take(popup.caret).collect();
-    let rest: String = popup.text.chars().skip(popup.caret).collect();
-    let at = canvas.put(x + 5, y, &typed, plain());
-    let at = canvas.put(at, y, "▏", bold());
-    canvas.put(at, y, &rest, plain());
+    // From under the prompt to the box's other side.
+    let room = width.saturating_sub(7);
+    super::caret_line(canvas, x + 5, y, room, &popup.text, popup.caret);
 }
 
 /// A footer of key-and-label pairs, in the accent so a key never looks
@@ -106,7 +104,7 @@ fn palette(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     let (x, y) = place(canvas, rows, width, height);
 
     frame(canvas, x, y, width, height);
-    input(canvas, x, y + 1, ":", popup);
+    input(canvas, x, y + 1, width, ":", popup);
     divide(canvas, x, y + 2, width);
     canvas.put(x + 2, y + 3, input::name(app.page_context()), dim());
 
@@ -175,7 +173,7 @@ fn search(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     let (x, y) = place(canvas, rows, width, height);
 
     frame(canvas, x, y, width, height);
-    input(canvas, x, y + 1, "/", popup);
+    input(canvas, x, y + 1, width, "/", popup);
     canvas.rput(
         x + width - 2,
         y + 1,
@@ -388,12 +386,10 @@ fn date_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     }
 
     // What has been typed, and the day it and the calendar agree on.
-    let typed: String = popup.text.chars().take(popup.caret).collect();
-    let rest: String = popup.text.chars().skip(popup.caret).collect();
-    let at = canvas.put(x + 3, y + 2, &typed, plain());
-    let at = canvas.put(at, y + 2, "▏", bold());
-    canvas.put(at, y + 2, &rest, plain());
-    canvas.rput(x + width - 2, y + 2, &day_label(draft.on), dim());
+    let day = day_label(draft.on);
+    let room = width.saturating_sub(6 + count(&day));
+    super::caret_line(canvas, x + 3, y + 2, room, &popup.text, popup.caret);
+    canvas.rput(x + width - 2, y + 2, &day, dim());
 
     for (at, choice) in choices.iter().enumerate() {
         let row = y + 4 + at as u16;

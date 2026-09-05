@@ -1439,11 +1439,32 @@ fn add_field(canvas: &mut Canvas, x: u16, width: u16, y: u16, editor: &Editor) {
 
 /// The text of a field with its caret where the next character goes.
 fn field_text(canvas: &mut Canvas, x: u16, y: u16, width: u16, editor: &Editor) {
-    let typed: String = editor.text.chars().take(editor.caret).collect();
-    let rest: String = editor.text.chars().skip(editor.caret).collect();
-    let at = canvas.put(x, y, clip(&typed, width), plain());
+    caret_line(canvas, x, y, width, &editor.text, editor.caret);
+}
+
+/// A line being typed, in `width` cells, scrolled so that the caret is
+/// always on it: what is before the caret gives up its beginning until
+/// the caret fits, and what is after it is cut off at the end of the line
+/// (DESIGN.md section 8).
+fn caret_line(canvas: &mut Canvas, x: u16, y: u16, width: u16, text: &str, caret: usize) {
+    let before: String = text.chars().take(caret).collect();
+    let after: String = text.chars().skip(caret).collect();
+
+    // The caret has a cell of its own, so the text before it has one
+    // fewer than the line.
+    let mut over = (count(&before) + 1).saturating_sub(width);
+    let mut from = 0;
+    for glyph in before.chars() {
+        if over == 0 {
+            break;
+        }
+        over = over.saturating_sub(cells(glyph));
+        from += glyph.len_utf8();
+    }
+
+    let at = canvas.put(x, y, &before[from..], plain());
     let at = canvas.put(at, y, CARET, bold());
-    canvas.put(at, y, clip(&rest, width.saturating_sub(at - x)), plain());
+    canvas.put(at, y, clip(&after, (x + width).saturating_sub(at)), plain());
 }
 
 /// ` ↻  Write standup notes                     every work day`

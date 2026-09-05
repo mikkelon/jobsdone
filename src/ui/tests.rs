@@ -1858,3 +1858,29 @@ fn a_count_of_one_puts_its_noun_in_the_singular() {
     let empty = look(&empty(), 120, 36).join("\n");
     assert!(empty.contains("0 notes"), "{empty}");
 }
+
+/// A title longer than the row showed its beginning while the caret was
+/// off the end of the line, so the person could not see what they typed.
+#[test]
+fn a_field_longer_than_its_line_scrolls_to_keep_the_caret_on_it() {
+    let mut app = empty();
+    app.update(Action::Add);
+    for typed in "The quick brown fox jumps over the lazy dog and keeps on going END".chars() {
+        app.update(Action::Insert(typed));
+    }
+
+    let field = look(&app, 120, 36)
+        .into_iter()
+        .find(|row| row.contains('▏'))
+        .expect("the add field");
+    assert!(field.contains("going END▏"), "the end of it: {field:?}");
+    assert!(!field.contains("The quick"), "and not the start: {field:?}");
+
+    // Back to the beginning, and the line comes with it.
+    app.update(Action::LineStart);
+    let field = look(&app, 120, 36)
+        .into_iter()
+        .find(|row| row.contains('▏'))
+        .expect("the add field");
+    assert!(field.contains("▏The quick brown fox"), "{field:?}");
+}
