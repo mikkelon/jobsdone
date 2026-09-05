@@ -15,7 +15,8 @@ use ratatui::Frame;
 use ratatui::buffer::Buffer;
 use ratatui::layout::{Position, Rect};
 use ratatui::style::{Color, Modifier, Style};
-use unicode_width::{UnicodeWidthChar, UnicodeWidthStr};
+use unicode_segmentation::UnicodeSegmentation;
+use unicode_width::UnicodeWidthStr;
 
 use crate::app::{App, Editor, Layout, List, ListArea, Page, Rect as Cells, RowArea, RowId};
 use crate::domain::{
@@ -98,12 +99,15 @@ impl Canvas<'_> {
     /// Writes `text` at `x`, and answers where the text ended, whether or
     /// not the edge of the area cut it short.
     ///
-    /// A character is as many cells wide as the terminal will give it, so
-    /// a double-width one takes the cell beside it too and a combining
-    /// mark takes none at all.
+    /// The unit is the grapheme cluster, which is what a person calls a
+    /// character and what a terminal draws in one place: an `e` and the
+    /// combining accent after it go into one cell together, and a family
+    /// emoji made of four people and three joiners goes into two. A
+    /// cluster is as many cells wide as the terminal will give it, so a
+    /// double-width one takes the cell beside it too.
     fn put(&mut self, x: u16, y: u16, text: &str, style: Style) -> u16 {
         let mut at = x;
-        for symbol in text.chars() {
+        for symbol in text.graphemes(true) {
             let width = cells(symbol);
             if width == 0 {
                 continue;
@@ -114,7 +118,7 @@ impl Canvas<'_> {
             let position = Position::new(self.area.x + at, self.area.y + y);
             if let Some(cell) = self.buffer.cell_mut(position) {
                 cell.reset();
-                cell.set_char(symbol);
+                cell.set_symbol(symbol);
                 cell.set_style(style);
             }
             // The cells a wide character covers are cleared and never
@@ -189,10 +193,11 @@ fn count(text: &str) -> u16 {
     UnicodeWidthStr::width(text) as u16
 }
 
-/// The same for one character, which is how a string is walked a cell at
-/// a time.
-fn cells(glyph: char) -> u16 {
-    UnicodeWidthChar::width(glyph).unwrap_or(0) as u16
+/// The same for one grapheme cluster, which is how a string is walked a
+/// cell at a time. A cluster whose only characters are combining marks
+/// has no cell of its own; every other one has one or two.
+fn cells(glyph: &str) -> u16 {
+    UnicodeWidthStr::width(glyph) as u16
 }
 
 // ---- dates, rules and places, as words -------------------------------
@@ -1451,24 +1456,28 @@ fn field_text(canvas: &mut Canvas, x: u16, y: u16, width: u16, editor: &Editor) 
 /// the caret fits, and what is after it is cut off at the end of the line
 /// (DESIGN.md section 8).
 fn caret_line(canvas: &mut Canvas, x: u16, y: u16, width: u16, text: &str, caret: usize) {
-    let before: String = text.chars().take(caret).collect();
-    let after: String = text.chars().skip(caret).collect();
+    if width == 0 {
+        return;
+    }
+    let split = glyph_at(text, caret);
+    let before = &text[..split];
+    let after = &text[split..];
 
     // The caret has a cell of its own, so the text before it has one
     // fewer than the line.
-    let mut over = (count(&before) + 1).saturating_sub(width);
+    let mut over = (count(before) + 1).saturating_sub(width);
     let mut from = 0;
-    for glyph in before.chars() {
+    for glyph in before.graphemes(true) {
         if over == 0 {
             break;
         }
         over = over.saturating_sub(cells(glyph));
-        from += glyph.len_utf8();
+        from += glyph.len();
     }
 
     let at = canvas.put(x, y, &before[from..], plain());
     let at = canvas.put(at, y, CARET, bold());
-    canvas.put(at, y, clip(&after, (x + width).saturating_sub(at)), plain());
+    canvas.put(at, y, clip(after, (x + width).saturating_sub(at)), plain());
 }
 
 /// ` ↻  Write standup notes                     every work day`
@@ -1595,10 +1604,7 @@ fn open_note(
         // drawn and a wide one is not cut in half.
         match caret.filter(|(row, _)| *row == first + at) {
             Some((_, glyph)) => {
-                let split = text
-                    .char_indices()
-                    .nth(glyph)
-                    .map_or(text.len(), |(at, _)| at);
+                let split = glyph_at(text, glyph);
                 let at = canvas.put(x + 2, y, &text[..split], plain());
                 let at = canvas.put(at, y, CARET, bold());
                 canvas.put(at, y, &text[split..], plain());
@@ -1626,11 +1632,11 @@ fn wrapped(body: &str, width: u16) -> Vec<(String, usize)> {
     let mut lines = Vec::new();
     let mut at = 0;
     for line in body.split('\n') {
-        let glyphs: Vec<char> = line.chars().collect();
+        let glyphs: Vec<&str> = line.graphemes(true).collect();
         let mut from = 0;
         loop {
-            // How many characters of the rest the line has room for. A
-            // character wider than the whole pane still takes a line of
+            // How many clusters of the rest the line has room for. A
+            // cluster wider than the whole pane still takes a line of
             // its own rather than none.
             let mut fits = 0;
             let mut taken = 0;
@@ -1644,16 +1650,16 @@ fn wrapped(body: &str, width: u16) -> Vec<(String, usize)> {
             }
             let fits = fits.max(1);
             if from + fits >= glyphs.len() {
-                lines.push((glyphs[from..].iter().collect(), at + from));
+                lines.push((glyphs[from..].concat(), at + from));
                 break;
             }
             // After the last space that fits, or through a word longer
             // than the pane.
             let take = glyphs[from..from + fits]
                 .iter()
-                .rposition(|glyph| *glyph == ' ')
+                .rposition(|glyph| *glyph == " ")
                 .map_or(fits, |space| space + 1);
-            lines.push((glyphs[from..from + take].iter().collect(), at + from));
+            lines.push((glyphs[from..from + take].concat(), at + from));
             from += take;
         }
         // The newline the split took off.
@@ -1662,7 +1668,7 @@ fn wrapped(body: &str, width: u16) -> Vec<(String, usize)> {
     lines
 }
 
-/// Which drawn line a caret is on, and how many characters along it.
+/// Which drawn line a caret is on, and how many clusters along it.
 fn caret_at(lines: &[(String, usize)], caret: usize) -> (usize, usize) {
     let row = lines
         .iter()
@@ -1671,15 +1677,24 @@ fn caret_at(lines: &[(String, usize)], caret: usize) -> (usize, usize) {
     (row, caret - lines.get(row).map_or(0, |(_, start)| *start))
 }
 
-/// As much of `text` as fits in `width` cells. A character that would
-/// straddle the edge is left out whole.
+/// As much of `text` as fits in `width` cells. A cluster that would
+/// straddle the edge is left out whole, with the marks that belong to
+/// it.
 fn clip(text: &str, width: u16) -> &str {
     let mut taken = 0;
-    for (at, glyph) in text.char_indices() {
+    for (at, glyph) in text.grapheme_indices(true) {
         taken += cells(glyph);
         if taken > width {
             return &text[..at];
         }
     }
     text
+}
+
+/// The byte offset a caret counted in clusters points at, so that a line
+/// can be cut where the caret is without cutting a cluster in half.
+fn glyph_at(text: &str, caret: usize) -> usize {
+    text.grapheme_indices(true)
+        .nth(caret)
+        .map_or(text.len(), |(at, _)| at)
 }

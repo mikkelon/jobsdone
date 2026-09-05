@@ -48,7 +48,13 @@ like it belongs to the first two.
   labels are dim capitals with a rule. Focus items are bold. Done and
   waiting rows are dim.
 - Popups are lazygit-style: a centred box drawn over the panes, accent
-  border, no dimming of what is behind.
+  border, no dimming of what is behind. Centred means centred in the pane
+  area, between the rule under the pane headers and the rule over the
+  hint bar: a card is about what is in the panes, so that is what it sits
+  in the middle of, and the status line and the hint bar keep saying what
+  they said. A window shorter than the card is the exception: the box
+  keeps its size and covers the hint bar rather than shrinking, because
+  its own footer names every key that works while it is open.
 - No window chrome of its own: the top line is a status line, the bottom
   line a hint bar.
 
@@ -164,7 +170,10 @@ have been answered, and the one thing to press. A step whose rows are all
 information, the copies a schedule started this morning, asks nothing, so
 it says what it is instead of counting none of it: "2 starting today,
 nothing to decide", and no progress bar, because there is nothing to be
-part-way through. Under 100 columns the
+part-way through. It lists no outcomes either: the panel names the keys
+for the row the cursor is on, and beside rows nobody is being asked
+about, an outcome is a key that would act on the wrong thing. What is
+left is the one thing to press, "Start the day ⏎". Under 100 columns the
 panel goes and the list has the window; the hint bar already names every
 key the panel named, and the status line carries the progress. A row
 that has been answered stays where it was, checked and dim, saying what

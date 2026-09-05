@@ -459,6 +459,18 @@ fn crowded() -> App {
 /// A row carrying every chip at once, more than any one task can really
 /// be: waiting and on a past day are exclusive, but the drawing may not
 /// depend on that.
+/// A day holding one task whose title is longer than any box that draws
+/// it, which is what search had no width for (F15). Search with nothing
+/// typed matches it, so the sweep draws it in the box at every size.
+fn long_titled() -> App {
+    let mut model = Model::empty();
+    model.tasks.insert(
+        1,
+        task(1, &"0123456789".repeat(8), Some(on("2025-09-05")), 0),
+    );
+    App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app")
+}
+
 fn every_chip() -> domain::Row {
     domain::Row {
         task: 1,
@@ -1445,7 +1457,7 @@ fn a_window_too_small_for_the_frame_draws_nothing_rather_than_panicking() {
 
 #[test]
 fn no_size_the_window_can_take_makes_the_drawing_panic() {
-    for mut app in [app(), crowded()] {
+    for mut app in [app(), crowded(), long_titled()] {
         for action in [
             Action::Tick,
             Action::Commands,
@@ -1985,6 +1997,16 @@ fn a_step_with_nothing_to_decide_says_so_and_draws_no_bar() {
         !text.contains('█'),
         "and no bar over a total of none: {text}"
     );
+    for outcome in ["Pull onto today", "Keep in backlog", "Mark waiting"] {
+        assert!(
+            !text.contains(outcome),
+            "and no outcome for a row nobody is asked about: {outcome}\n{text}"
+        );
+    }
+    assert!(
+        text.contains("Start the day"),
+        "the one thing to press stays: {text}"
+    );
 }
 
 /// Adding leaves the field open after Enter, and the hint bar went on
@@ -2010,4 +2032,269 @@ fn the_hint_bar_does_not_offer_a_key_the_open_field_would_type() {
     app.update(Action::Close);
     let bar = look(&app, 120, 36).remove(34);
     assert!(bar.contains("u  undo"), "{bar:?}");
+}
+
+/// The search box ran its query under the match count, so the end of a
+/// long query and its caret were both lost (F14).
+#[test]
+fn a_long_query_scrolls_with_its_caret_and_stops_before_the_count() {
+    let mut app = app();
+    app.update(Action::Search);
+    let typed = "0123456789".repeat(8);
+    for glyph in typed.chars() {
+        app.update(Action::Insert(glyph));
+    }
+
+    for width in [120, 60] {
+        let box_row = look(&app, width, 36)
+            .into_iter()
+            .find(|row| row.contains("matches"))
+            .unwrap_or_else(|| panic!("the search box at {width}"));
+        assert!(
+            box_row.contains('▏'),
+            "the caret is on it at {width}: {box_row:?}"
+        );
+        let (query, count) = box_row.split_once('▏').expect("the caret");
+        assert!(
+            query.ends_with("6789"),
+            "the end of what was typed at {width}: {box_row:?}"
+        );
+        assert!(
+            count.starts_with("  0 matches "),
+            "a gap, then the count with nothing of the query under it, \
+             at {width}: {box_row:?}"
+        );
+    }
+}
+
+/// A result longer than the box was drawn from its left edge onwards, so
+/// it ran through the location beside it and out through the right
+/// border of the card (F15).
+#[test]
+fn a_long_result_stops_before_its_location_and_the_border() {
+    let app = long_titled();
+    let mut app = app;
+    app.update(Action::Search);
+
+    for width in [120, 80] {
+        let drawn = look(&app, width, 36);
+        let top = drawn
+            .iter()
+            .position(|row| row.contains('┌'))
+            .unwrap_or_else(|| panic!("the top of the box at {width}"));
+        let right = drawn[top]
+            .chars()
+            .position(|glyph| glyph == '┐')
+            .expect("the corner");
+        let found = drawn[top..]
+            .iter()
+            .find(|row| row.contains("[ ] 0123"))
+            .unwrap_or_else(|| panic!("the result at {width}"));
+
+        assert_eq!(
+            found.chars().nth(right),
+            Some('│'),
+            "the border is on the result row too at {width}: {found:?}"
+        );
+        let inside: String = found.chars().take(right).collect();
+        assert!(
+            inside.trim_end().ends_with("  today"),
+            "the location has its own room at {width}: {found:?}"
+        );
+        assert!(
+            !inside.contains("0today"),
+            "and the title stops before it at {width}: {found:?}"
+        );
+    }
+}
+
+/// `café` with the accent as a combining mark of its own, and a family
+/// emoji made of four people and three joiners. One is a cluster of two
+/// characters a cell wide, the other a cluster of seven two cells wide,
+/// and neither is anything at all a character at a time (F6).
+const CLUSTERS: &str = "cafe\u{301} \u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}";
+
+/// The one row of the screen a caret is on.
+fn typing(app: &App) -> String {
+    glyphs(app, 120, 36)
+        .into_iter()
+        .find(|row| row.contains('▏'))
+        .expect("the line being typed")
+}
+
+/// Every field was edited a character at a time, so the accent of a
+/// decomposed `é` was dropped on the way to the screen and the caret
+/// could land inside a family emoji and take it apart (F6).
+#[test]
+fn a_title_of_clusters_keeps_its_marks_and_steps_over_them_whole() {
+    let mut app = empty();
+    app.update(Action::Add);
+    for typed in CLUSTERS.chars() {
+        app.update(Action::Insert(typed));
+    }
+    assert!(
+        typing(&app).contains(&format!("{CLUSTERS}▏")),
+        "what was typed, with its caret after it: {:?}",
+        typing(&app)
+    );
+
+    // One step left is the whole family, not one of the four people in
+    // it; one more is the space.
+    app.update(Action::Left);
+    assert!(
+        typing(&app)
+            .contains("cafe\u{301} ▏\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}"),
+        "the caret in front of the family: {:?}",
+        typing(&app)
+    );
+    app.update(Action::Left);
+    app.update(Action::Insert('X'));
+    assert!(
+        typing(&app).contains("cafe\u{301}X▏ \u{1F468}\u{200D}"),
+        "a letter beside the accent, which keeps it: {:?}",
+        typing(&app)
+    );
+
+    app.update(Action::Confirm);
+    let title = app
+        .model()
+        .tasks
+        .values()
+        .map(|task| task.title.clone())
+        .next()
+        .expect("the task");
+    assert_eq!(
+        title, "cafe\u{301}X \u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}",
+        "every code point, in the order they were typed"
+    );
+}
+
+/// The same in the search box, over a task whose stored title has the
+/// same clusters in it.
+#[test]
+fn a_query_of_clusters_finds_the_row_it_is_stored_in() {
+    let mut model = Model::empty();
+    model
+        .tasks
+        .insert(1, task(1, CLUSTERS, Some(on("2025-09-05")), 0));
+    let mut app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+    app.update(Action::Search);
+    for typed in CLUSTERS.chars() {
+        app.update(Action::Insert(typed));
+    }
+
+    let found = glyphs(&app, 120, 36)
+        .into_iter()
+        .find(|row| row.contains("[ ] cafe\u{301}"))
+        .expect("the result");
+    assert!(
+        found.contains(&format!("[ ] {CLUSTERS}")),
+        "the stored title, drawn whole: {found:?}"
+    );
+    assert!(
+        typing(&app).contains(&format!("{CLUSTERS}▏")),
+        "and the query it was found by: {:?}",
+        typing(&app)
+    );
+
+    app.update(Action::Left);
+    app.update(Action::Insert('X'));
+    assert!(
+        typing(&app).contains("cafe\u{301} X▏\u{1F468}\u{200D}"),
+        "a letter typed in front of the family: {:?}",
+        typing(&app)
+    );
+    assert_eq!(
+        app.model().task(1).map(|task| task.title.clone()),
+        Some(CLUSTERS.to_owned()),
+        "and the stored title is untouched"
+    );
+}
+
+/// And in an open note, whose body wraps by cluster as well.
+#[test]
+fn a_note_of_clusters_wraps_and_saves_them_whole() {
+    let mut app = empty();
+    app.update(Action::NotesPage);
+    app.update(Action::Add);
+    for typed in CLUSTERS.chars() {
+        app.update(Action::Insert(typed));
+    }
+    assert!(
+        typing(&app).contains(&format!("{CLUSTERS}▏")),
+        "the body being typed: {:?}",
+        typing(&app)
+    );
+
+    app.update(Action::Left);
+    app.update(Action::Left);
+    app.update(Action::Insert('X'));
+    assert!(
+        typing(&app).contains("cafe\u{301}X▏ \u{1F468}\u{200D}"),
+        "a letter beside the accent: {:?}",
+        typing(&app)
+    );
+
+    // A note is written on the first tick after it changes.
+    app.update(Action::Tick);
+    let body = app
+        .model()
+        .notes
+        .values()
+        .map(|note| note.body.clone())
+        .next()
+        .expect("the note");
+    assert_eq!(
+        body,
+        "cafe\u{301}X \u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}"
+    );
+}
+
+/// Where a centred box is centred (DESIGN.md section 2): the pane area,
+/// between the rule under the pane headers and the rule over the hint
+/// bar, with the same room above it as below.
+#[test]
+fn a_card_is_centred_in_the_pane_area_between_the_two_rules() {
+    let mut app = app();
+    app.update(Action::Repeat);
+
+    for height in [36, 48] {
+        let drawn = look(&app, 120, height);
+        let top = drawn
+            .iter()
+            .position(|row| row.contains('┌'))
+            .unwrap_or_else(|| panic!("the top of the card at {height}"));
+        let foot = drawn
+            .iter()
+            .rposition(|row| row.contains('└'))
+            .unwrap_or_else(|| panic!("the foot of the card at {height}"));
+
+        // The first and last row the panes have.
+        let first = 5;
+        let last = height as usize - 4;
+        let above = top - first;
+        let below = last - foot;
+        assert!(
+            above.abs_diff(below) <= 1,
+            "the same room above and below at {height}: {above} and {below}"
+        );
+    }
+}
+
+/// A window shorter than the card keeps the card whole and lets it cover
+/// the hint bar, because the card's own footer names its keys.
+#[test]
+fn a_card_taller_than_the_window_covers_the_hint_bar_whole() {
+    let mut app = app();
+    app.update(Action::Repeat);
+
+    let drawn = look(&app, 60, 20);
+    assert!(
+        drawn.iter().any(|row| row.contains('┌')),
+        "the top of the card: {drawn:?}"
+    );
+    assert!(
+        drawn.iter().any(|row| row.contains("⏎ save")),
+        "and its footer, which is where its keys are: {drawn:?}"
+    );
 }

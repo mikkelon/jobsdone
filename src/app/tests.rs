@@ -2685,3 +2685,33 @@ fn j_and_k_reorder_the_backlog_too() {
     app.update(Action::MoveDown);
     assert_eq!(titles(&app, List::Backlog), ["One", "Two", "Three"]);
 }
+
+/// Backspace, Delete and the arrow keys took a code point at a time, so
+/// one press could leave half a family emoji or an accent with nothing
+/// to sit on. The unit is the grapheme cluster (F6).
+#[test]
+fn the_editing_keys_take_a_whole_cluster_at_a_time() {
+    let family = "\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}";
+    let mut app = started();
+    app.update(Action::Add);
+    type_in(&mut app, &format!("cafe\u{301}{family}!"));
+
+    // Three clusters back from the end is the `f`, not the middle of the
+    // family.
+    for _ in 0..3 {
+        app.update(Action::Left);
+    }
+    app.update(Action::Backspace);
+    app.update(Action::DeleteForward);
+    app.update(Action::Confirm);
+
+    let title = app
+        .model()
+        .task(cursor(&app, app.focused()).expect("the task"))
+        .map(|task| task.title.clone());
+    assert_eq!(
+        title,
+        Some(format!("ca{family}!")),
+        "Backspace took the `f` and Delete the whole `e` with its accent"
+    );
+}
