@@ -302,7 +302,8 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
         dim()
     };
     let day = (format!("Today · {}", day_label(app.today())), bold());
-    let notes = format!("{} notes", app.notes().count);
+    let count = app.notes().count;
+    let notes = format!("{count} note{}", if count == 1 { "" } else { "s" });
 
     let (left, right) = match (app.page(), narrow) {
         (Page::Home, true) => (
@@ -417,10 +418,14 @@ fn two_panes(canvas: &mut Canvas, app: &App, rows: &Rows, layout: &mut Layout) {
     let left = Column {
         x: 0,
         width: divider,
+        top: rows.top,
+        bottom: rows.bottom,
     };
     let right = Column {
         x: divider + 1,
         width: width - divider - 1,
+        top: rows.top,
+        bottom: rows.bottom,
     };
 
     canvas.put(divider, rows.headers + 1, "\u{252c}", dim());
@@ -437,26 +442,59 @@ fn two_panes(canvas: &mut Canvas, app: &App, rows: &Rows, layout: &mut Layout) {
         }
         Page::Notes => {
             pane(canvas, app, List::Notes, left, rows, on_left, layout);
-            open_note(canvas, right, rows, !on_left);
+            open_note(canvas, app, right, Some(rows.headers), !on_left);
         }
     }
 }
 
 /// A narrow window shows one list and makes the others tabs. On the notes
-/// page the list and the open note stack in the one tab.
+/// page the list and the open note stack in the one tab, with the note's
+/// header as the rule between them.
 fn one_pane(canvas: &mut Canvas, app: &App, rows: &Rows, layout: &mut Layout) {
     let whole = Column {
         x: 0,
         width: canvas.width(),
+        top: rows.top,
+        bottom: rows.bottom,
     };
-    pane(canvas, app, app.focused(), whole, rows, true, layout);
+    // Too short to stack the note under the list: the list is the tab.
+    if app.page() != Page::Notes || whole.height() < 6 {
+        pane(canvas, app, app.focused(), whole, rows, true, layout);
+        return;
+    }
+
+    // The list keeps to what it has to draw, and never more than half the
+    // tab, so the note has the rest.
+    let wanted = lines_of(&notes_pane(app)).len() as u16;
+    let height = wanted.clamp(2, whole.height() / 2);
+    let list = Column {
+        bottom: whole.top + height - 1,
+        ..whole
+    };
+    let note = Column {
+        top: list.bottom + 2,
+        ..whole
+    };
+    let on_list = app.notes_pane() == NotesPane::List;
+    pane(canvas, app, List::Notes, list, rows, on_list, layout);
+    open_note(canvas, app, note, None, !on_list);
 }
 
-/// The columns a pane occupies.
+/// The cells a pane occupies: its columns, and the first and last row of
+/// its body. Two panes side by side have the same rows; the notes page in
+/// one tab stacks them, so the rows are the pane's own.
 #[derive(Clone, Copy)]
 struct Column {
     x: u16,
     width: u16,
+    top: u16,
+    bottom: u16,
+}
+
+impl Column {
+    fn height(self) -> u16 {
+        (self.bottom + 1).saturating_sub(self.top)
+    }
 }
 
 /// Everything about a row that is not in the row: which group it is in,
@@ -608,20 +646,32 @@ fn backlog_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
     }
 }
 
-/// The notes list. Phase 11 opens a note; until then the list is the page.
+/// The notes list, and under it the row that makes another one. They are
+/// two groups rather than one so that a blank row separates them, which is
+/// what keeps the list a list.
 fn notes_pane(app: &App) -> PaneView<'_> {
     let view = app.notes();
     PaneView {
         title: "Notes",
         sub: String::new(),
-        right: view.count.to_string(),
+        // The count is in the status line; the header names the key that
+        // fills the list instead (DESIGN.md section 9).
+        right: "a new".to_owned(),
         // The new-note row is the whole empty state (DESIGN.md section 10).
-        sections: vec![Section {
-            label: "",
-            count: None,
-            content: Content::Notes(&view.rows),
-            add: Some("new note"),
-        }],
+        sections: vec![
+            Section {
+                label: "",
+                count: None,
+                content: Content::Notes(&view.rows),
+                add: None,
+            },
+            Section {
+                label: "",
+                count: None,
+                content: Content::Notes(&[]),
+                add: Some("new note"),
+            },
+        ],
         empty: ["", ""],
     }
 }
@@ -664,8 +714,8 @@ fn lines_of<'a>(view: &'a PaneView<'a>) -> Vec<Line<'a>> {
 /// The first line drawn, which is as far down as it has to be for the
 /// cursor to be on screen and no further. A pane has no scroll position
 /// of its own: the cursor is what it follows (DESIGN.md section 4).
-fn scroll_to(lines: &[Line], anchor: Option<usize>, height: usize) -> usize {
-    let last = lines.len().saturating_sub(height);
+fn scroll_to(lines: usize, anchor: Option<usize>, height: usize) -> usize {
+    let last = lines.saturating_sub(height);
     let anchor = anchor.unwrap_or(0);
     (anchor + 1).saturating_sub(height).min(last)
 }
@@ -681,7 +731,7 @@ fn pane(
     focused: bool,
     layout: &mut Layout,
 ) {
-    let Column { x, width } = column;
+    let Column { x, width, .. } = column;
     let writing = app.editor().filter(|editor| editor.list == list);
     let adding = writing.is_some_and(|editor| editor.field == Field::Adding);
     let view = match list {
@@ -694,19 +744,19 @@ fn pane(
     if !layout.narrow {
         header(canvas, x, width, rows.headers, &view, focused);
     }
-    let height = rows.bottom - rows.top + 1;
+    let height = column.height();
     layout.lists.push(ListArea {
         list,
         area: Cells {
             x,
-            y: rows.top,
+            y: column.top,
             width,
             height,
         },
     });
 
     if view.sections.is_empty() {
-        empty_state(canvas, column, rows.top, view.empty);
+        empty_state(canvas, column, view.empty);
         return;
     }
 
@@ -723,10 +773,10 @@ fn pane(
         Line::Note(row) => !adding && on == Some(row.note),
         _ => false,
     });
-    let first = scroll_to(&lines, anchor, height as usize);
+    let first = scroll_to(lines.len(), anchor, height as usize);
 
     for (at, line) in lines.iter().skip(first).take(height as usize).enumerate() {
-        let y = rows.top + at as u16;
+        let y = column.top + at as u16;
         let id = match line {
             Line::Blank => continue,
             Line::Rule(label, count) => {
@@ -744,7 +794,7 @@ fn pane(
                 continue;
             }
             Line::Note(row) => {
-                note_row(canvas, x, width, y, row);
+                note_row(canvas, x, width, y, row, today);
                 row.note
             }
             Line::Task(row, kind) => {
@@ -796,10 +846,10 @@ fn row_area(list: List, id: i64, column: Column, y: u16) -> RowArea {
 
 /// What an empty list is for, and the one or two keys that fill it
 /// (DESIGN.md section 10). No illustration, no encouragement.
-fn empty_state(canvas: &mut Canvas, column: Column, top: u16, empty: [&str; 2]) {
+fn empty_state(canvas: &mut Canvas, column: Column, empty: [&str; 2]) {
     let middle = |text: &str| column.x + column.width.saturating_sub(count(text)) / 2;
-    canvas.put(middle(empty[0]), top + 2, empty[0], dim());
-    canvas.put(middle(empty[1]), top + 3, empty[1], dim());
+    canvas.put(middle(empty[0]), column.top + 2, empty[0], dim());
+    canvas.put(middle(empty[1]), column.top + 3, empty[1], dim());
 }
 
 /// `Today Fri 5 Sep                    6 open · 2 done · 1 moved`
@@ -820,11 +870,16 @@ fn group_rule(canvas: &mut Canvas, x: u16, width: u16, y: u16, label: &str, n: O
         Some(n) => format!("{} {n}", label.to_uppercase()),
         None => label.to_uppercase(),
     };
-    canvas.put(x + 1, y, &text, dim());
+    rule(canvas, x, width, y, &text);
+}
+
+/// A named line across a pane.
+fn rule(canvas: &mut Canvas, x: u16, width: u16, y: u16, text: &str) {
+    canvas.put(x + 1, y, text, dim());
     canvas.hline(
-        x + 2 + count(&text),
+        x + 2 + count(text),
         y,
-        width.saturating_sub(3 + count(&text)),
+        width.saturating_sub(3 + count(text)),
         dim(),
     );
 }
@@ -907,7 +962,7 @@ fn meta_of(row: &domain::Row, kind: Kind, today: Date, moving: bool) -> String {
 
 /// `[ ] Book dentist                          [◷ today]`
 fn task_row(canvas: &mut Canvas, column: Column, y: u16, row: &domain::Row, look: Look) {
-    let Column { x, width } = column;
+    let Column { x, width, .. } = column;
     let Look {
         kind,
         today,
@@ -976,8 +1031,8 @@ fn field_text(canvas: &mut Canvas, x: u16, y: u16, width: u16, editor: &Editor) 
     canvas.put(at, y, clip(&rest, width.saturating_sub(at - x)), plain());
 }
 
-/// ` ▪ Mention to Anna: CI runner b`
-fn note_row(canvas: &mut Canvas, x: u16, width: u16, y: u16, row: &NoteRow) {
+/// ` ▪ Mention to Anna: CI runner b                        yesterday`
+fn note_row(canvas: &mut Canvas, x: u16, width: u16, y: u16, row: &NoteRow, today: Date) {
     canvas.put(x + 1, y, " ▪ ", dim());
     canvas.put(
         x + 4,
@@ -985,20 +1040,146 @@ fn note_row(canvas: &mut Canvas, x: u16, width: u16, y: u16, row: &NoteRow) {
         clip(&row.first_line, width.saturating_sub(16)),
         plain(),
     );
+    let made = domain::working_day(&row.created_at);
+    canvas.rput(x + width - 1, y, &age(made, today), dim());
 }
 
-/// The open note. Phase 11 puts a text area here; until then the pane is
-/// the header and nothing else.
-fn open_note(canvas: &mut Canvas, column: Column, rows: &Rows, focused: bool) {
+/// How long ago a note was made, counted in working days so that one
+/// written at one in the morning is still yesterday's (DOMAIN.md section
+/// 2). Past a couple of months the words stop being shorter than the date.
+fn age(made: Date, today: Date) -> String {
+    let days = made
+        .until(today)
+        .map_or(0, |span| i64::from(span.get_days()));
+    match days {
+        ..=0 => "today".to_owned(),
+        1 => "yesterday".to_owned(),
+        2..=6 => format!("{days} days"),
+        7..=13 => "last week".to_owned(),
+        14..=55 => format!("{} weeks", days / 7),
+        _ => made.strftime("%-d %b").to_string(),
+    }
+}
+
+/// The open note: the day it was made, and the body as a plain text area
+/// with a caret in it. Nothing else is on it (DESIGN.md section 9).
+///
+/// `header` is the row the pane's header goes on; a narrow window has none
+/// and puts the same words on the rule above the note instead.
+fn open_note(
+    canvas: &mut Canvas,
+    app: &App,
+    column: Column,
+    header_row: Option<u16>,
+    focused: bool,
+) {
+    let Column { x, width, .. } = column;
+    let open = app.cursor(List::Notes);
+    let made = app
+        .notes()
+        .rows
+        .iter()
+        .find(|row| Some(row.note) == open)
+        .map(|row| row.created_at.strftime("%a %-d %b %H:%M").to_string());
+
     let view = PaneView {
         title: "Note",
-        sub: String::new(),
-        right: String::new(),
+        sub: made.clone().unwrap_or_default(),
+        // The way out, on the pane the way out is from.
+        right: if focused && made.is_some() {
+            "esc back".to_owned()
+        } else {
+            String::new()
+        },
         sections: Vec::new(),
-        empty: ["Opening a note is not built yet.", "n back to today"],
+        empty: ["No notes yet.", "a writes one"],
     };
-    header(canvas, column.x, column.width, rows.headers, &view, focused);
-    empty_state(canvas, column, rows.top, view.empty);
+    match header_row {
+        Some(y) => header(canvas, x, width, y, &view, focused),
+        None => stacked_rule(canvas, column, &view),
+    }
+
+    let Some(open) = open else {
+        empty_state(canvas, column, view.empty);
+        return;
+    };
+    // What is being typed, or the note as it was last saved.
+    let draft = app.draft().filter(|draft| draft.note == open);
+    let body = match draft {
+        Some(draft) => draft.text.clone(),
+        None => app
+            .model()
+            .note(open)
+            .map_or_else(String::new, |note| note.body.clone()),
+    };
+
+    // The body has the pane from its second column to its last.
+    let lines = wrapped(&body, width.saturating_sub(2));
+    let caret = draft.map(|draft| caret_at(&lines, draft.caret));
+    let height = column.height() as usize;
+    let first = scroll_to(lines.len(), caret.map(|(row, _)| row), height);
+
+    for (at, (text, _)) in lines.iter().skip(first).take(height).enumerate() {
+        canvas.put(x + 2, column.top + at as u16, text, plain());
+    }
+    if let Some((row, glyph)) = caret
+        && row >= first
+        && row < first + height
+    {
+        canvas.put(
+            x + 2 + glyph as u16,
+            column.top + (row - first) as u16,
+            CARET,
+            bold(),
+        );
+    }
+}
+
+/// In one tab the note has no header of its own, so its name and day
+/// become the rule between it and the list.
+fn stacked_rule(canvas: &mut Canvas, column: Column, view: &PaneView) {
+    let text = format!("{} {}", view.title, view.sub);
+    rule(canvas, column.x, column.width, column.top - 1, text.trim());
+}
+
+/// A note body as the lines it is drawn on: every line of the body broken
+/// at the width of the pane, on a space where there is one, each with the
+/// character of the body it starts at so that the caret can be found on
+/// it again.
+fn wrapped(body: &str, width: u16) -> Vec<(String, usize)> {
+    let width = width.max(1) as usize;
+    let mut lines = Vec::new();
+    let mut at = 0;
+    for line in body.split('\n') {
+        let glyphs: Vec<char> = line.chars().collect();
+        let mut from = 0;
+        loop {
+            if glyphs.len() - from <= width {
+                lines.push((glyphs[from..].iter().collect(), at + from));
+                break;
+            }
+            // After the last space that fits, or through a word longer
+            // than the pane.
+            let take = glyphs[from..from + width]
+                .iter()
+                .rposition(|glyph| *glyph == ' ')
+                .map_or(width, |space| space + 1);
+            lines.push((glyphs[from..from + take].iter().collect(), at + from));
+            from += take;
+        }
+        // The newline the split took off.
+        at += glyphs.len() + 1;
+    }
+    lines
+}
+
+/// Which drawn line a caret is on, and how far along it.
+fn caret_at(lines: &[(String, usize)], caret: usize) -> (usize, usize) {
+    let row = lines
+        .iter()
+        .rposition(|(_, start)| *start <= caret)
+        .unwrap_or_default();
+    (row, caret - lines.get(row).map_or(0, |(_, start)| *start))
 }
 
 fn clip(text: &str, width: u16) -> &str {

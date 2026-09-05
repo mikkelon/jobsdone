@@ -189,25 +189,47 @@ fn wireframe_model() -> Model {
         );
     }
 
-    for (id, body) in [
-        (1, "Mention to Anna: CI runner budget"),
-        (2, "Draft reply to tender Q3"),
-        (3, "nordic ltd PO 4471, due 30 days"),
-        (4, "rsync -av --delete ~/work nas:/bk"),
+    for (id, made, body) in [
+        (1, "2025-09-04T16:40:00", NOTE),
+        (
+            2,
+            "2025-09-03T11:20:00",
+            "Draft reply to tender Q3: \"We can",
+        ),
+        (3, "2025-09-03T09:05:00", "nordic ltd PO 4471, due 30 days"),
+        (
+            4,
+            "2025-08-29T14:00:00",
+            "rsync -av --delete ~/work nas:/bk",
+        ),
     ] {
+        let made = at(&format!("{made}+02:00[Europe/Copenhagen]"));
         model.notes.insert(
             id,
             Note {
                 id,
                 body: body.to_owned(),
-                created_at: at(NOW),
-                updated_at: at(NOW),
+                created_at: made.clone(),
+                updated_at: made,
                 deleted_at: None,
             },
         );
     }
     model
 }
+
+/// The note wireframe 10 has open, which is also the first row of its
+/// list: several lines, a blank one among them.
+const NOTE: &str = "Mention to Anna:
+- CI runner budget
+- Friday demo slot
+- ask about the retro format
+
+Also: the tender deadline moved to the 12th, check with legal first.
+
+Draft:
+Hi Anna, two things before Friday. The CI runner budget needs a decision
+this week, and I would like the demo slot after lunch rather than before.";
 
 fn app() -> App {
     App::new(Box::new(MemStore::holding(wireframe_model())), &at(NOW)).expect("an app")
@@ -601,26 +623,114 @@ fn the_copy_question_spells_both_answers_out() {
 }
 
 #[test]
-fn the_notes_page_lists_the_notes_and_says_the_rest_is_later() {
+fn the_notes_list_is_newest_first_with_the_age_of_each_note() {
     let mut app = app();
     app.update(Action::NotesPage);
     let drawn = look(&app, 120, 36);
+    let wanted = wireframe("10-scratchpad", 0, 36);
 
     assert!(drawn[1].contains("Notes 4 notes"));
     assert!(drawn[1].contains("n or esc back to today"));
-    assert!(drawn[5].contains("▪ rsync -av --delete ~/work na"));
-    assert!(
-        drawn
-            .join("\n")
-            .contains("Opening a note is not built yet."),
-        "the list is there; the note beside it is phase 11's"
-    );
     let divider = drawn[4].chars().position(|glyph| glyph == '┬');
     assert_eq!(
         divider,
         Some(44),
         "the list is a column, not half the window"
     );
+
+    // The list, its ages and the row that makes another note, against the
+    // wireframe's own column. Its first row is the one note whose body the
+    // wireframe draws in full beside it, so only its text differs.
+    assert_eq!(
+        left(&drawn[5]),
+        "  ▪ Mention to Anna:              yesterday"
+    );
+    for row in [6, 7, 8, 9, 10] {
+        assert_eq!(left(&drawn[row]), left(&wanted[row]), "row {row}");
+    }
+}
+
+#[test]
+fn the_open_note_is_a_text_area_beside_the_list() {
+    let mut app = app();
+    app.update(Action::NotesPage);
+    app.update(Action::Confirm);
+    let drawn = look(&app, 120, 36);
+    let wanted = wireframe("10-scratchpad", 0, 36);
+
+    // The header of the note is the day and the time it was made.
+    assert_eq!(drawn[3], wanted[3], "the two headers");
+    // The body, beside the list, wrapped where the writer wrapped it.
+    for row in 5..=14 {
+        assert_eq!(right(&drawn[row]), right(&wanted[row]), "row {row}");
+    }
+    assert_eq!(drawn[34], wanted[34], "the hint bar of the note");
+}
+
+#[test]
+fn one_tab_stacks_the_list_and_the_note() {
+    let mut app = app();
+    app.update(Action::NotesPage);
+    app.update(Action::Confirm);
+    let drawn = look(&app, 80, 44);
+
+    // The list keeps to its own rows, and the note's header becomes the
+    // rule between the two.
+    assert!(drawn[5].starts_with("  ▪ Mention to Anna:"));
+    assert!(drawn[10].starts_with("  +  new note"));
+    assert!(
+        drawn[11].starts_with(" Note Thu 4 Sep 16:40 ─────"),
+        "{:?}",
+        drawn[11]
+    );
+    assert_eq!(drawn[12], "  Mention to Anna:");
+    assert_eq!(drawn[42], " NOTE  type to edit  esc back");
+}
+
+#[test]
+fn a_note_written_in_the_small_hours_is_as_old_as_the_evening_it_came_from() {
+    let mut model = wireframe_model();
+    if let Some(note) = model.notes.get_mut(&1) {
+        // Half past one on the Friday, which is Thursday's working day.
+        note.created_at = at("2025-09-05T01:30:00+02:00[Europe/Copenhagen]");
+    }
+    let mut app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+    app.update(Action::NotesPage);
+
+    assert!(look(&app, 120, 36)[5].contains("yesterday"));
+}
+
+#[test]
+fn a_page_with_no_notes_on_it_names_the_key_that_makes_one() {
+    let mut app = empty();
+    app.update(Action::NotesPage);
+    let drawn = look(&app, 120, 36);
+
+    assert!(drawn[1].starts_with(" Notes 0 notes"));
+    assert!(drawn[6].starts_with("  +  new note"), "{:?}", drawn[6]);
+    assert!(drawn.join("\n").contains("No notes yet."));
+
+    // And one note in is one note, not "1 notes".
+    app.update(Action::Add);
+    assert!(look(&app, 120, 36)[1].starts_with(" Notes 1 note "));
+}
+
+/// Everything to the right of the divider, which is the open note.
+fn right(row: &str) -> String {
+    row.chars()
+        .skip(44)
+        .collect::<String>()
+        .trim_end()
+        .to_owned()
+}
+
+/// The 44 columns the notes list has, without the pane beside it.
+fn left(row: &str) -> String {
+    row.chars()
+        .take(44)
+        .collect::<String>()
+        .trim_end()
+        .to_owned()
 }
 
 #[test]
@@ -647,6 +757,22 @@ fn no_size_the_window_can_take_makes_the_drawing_panic() {
             }
         }
         app.update(Action::Cancel);
+    }
+}
+
+#[test]
+fn no_size_the_notes_page_can_take_makes_the_drawing_panic() {
+    let mut app = app();
+    app.update(Action::NotesPage);
+    // The list, then the note open under it, then the list again.
+    for action in [Action::Confirm, Action::Insert('x'), Action::Cancel] {
+        app.update(action);
+        assert_eq!(app.page(), Page::Notes);
+        for width in [1, 2, 23, 24, 25, 40, 45, 99, 100, 101, 120, 200] {
+            for height in [1, 2, 8, 9, 10, 11, 12, 13, 36, 48, 90] {
+                look(&app, width, height);
+            }
+        }
     }
 }
 
@@ -680,7 +806,7 @@ fn the_narrow_tab_row_marks_the_tab_the_keyboard_is_on() {
     let notes = look(&app, 80, 44);
     assert_eq!(app.page(), Page::Notes);
     assert!(notes[1].starts_with(" Notes 4 notes"));
-    assert!(notes[5].contains("▪ rsync"));
+    assert!(notes[5].contains("▪ Mention to Anna:"));
 }
 
 /// The colour and attribute parameters of every `ESC [ … m` written, with
