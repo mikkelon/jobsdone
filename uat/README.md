@@ -73,3 +73,35 @@ that only fails at a real 05:00 rollover is not one this can catch.
   to the column. `wireframes/index.html` names the user flows A to G.
 - A difference from a wireframe is a finding unless a doc explains it.
   A doc that contradicts another doc is a finding too.
+
+## The clean machine
+
+`uat/vm` is a clean Omarchy in QEMU, for the questions this machine
+cannot answer: does the install work from nothing, and does the keybind
+open the app floating and centred on a desktop with no personal config.
+Run it with no arguments for the command list.
+
+A person installs Omarchy once, from the ISO at omarchy.org, and seals
+the result:
+
+    uat/vm install --user tester     the installer opens in a window; pick the US keyboard layout
+    curl -fsS http://10.0.2.2:8123/prepare.sh | bash     in a guest terminal after the first boot
+    uat/vm seal                      powers off and freezes the base image
+
+The base image is then read-only. Every `fresh` boots a throwaway
+overlay on top of it and returns when the desktop is up, about twenty
+seconds; `save NAME` keeps an overlay worth returning to, such as one
+with rustup installed, and `restore NAME` boots it again. Images live
+under `~/.local/share/jobsdone-uat/vm`, with the guest user and disk
+passphrase in `config` there, outside the repository.
+
+The guest differs from a truly clean machine in what a test machine
+needs: passwordless sudo, autologin kept, idle lock off, and ssh let
+through ufw. It has no Rust toolchain.
+
+An agent drives it three ways: `ssh` for anything inside, with
+`hyprctl` and `grim` working because the session's environment is set;
+`keys` and `type` for the virtual keyboard, so a keybind is pressed
+exactly as a person would press it; `shot` for the whole screen. With
+`--show`, QEMU opens a window instead and the guest's resolution
+follows that window's size.

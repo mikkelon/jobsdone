@@ -1,0 +1,464 @@
+#!/usr/bin/env bash
+# A clean Omarchy machine in QEMU, for trying the install and the desktop
+# integration where nothing is set up yet. A person installs Omarchy once;
+# every `fresh` after that boots a throwaway copy of that install.
+#
+#   uat/vm install [--iso PATH] [--user NAME]   create the base disk and boot the installer in a window
+#   uat/vm seal                                 after the guest is prepared: power off and freeze the base
+#   uat/vm fresh [--show]                       discard the working copy, boot a clean one, wait for ssh
+#   uat/vm start [--show]                       boot the working copy as it was left
+#   uat/vm stop                                 power the guest off (hard kill after 30 s)
+#   uat/vm save NAME                            keep the stopped working copy under a name (e.g. with-rust)
+#   uat/vm restore NAME                         make a saved copy the working copy, then boot it
+#   uat/vm saves                                list the saved copies
+#   uat/vm ssh [COMMAND...]                     a shell, or one command, in the guest with hyprctl and grim working
+#   uat/vm push                                 copy the working tree to ~/jobsdone in the guest
+#   uat/vm shot [NAME]                          screenshot of the whole virtual display -> uat/out/vm/NAME.png
+#   uat/vm keys KEY...                          press keys on the virtual keyboard: ret esc spc super-shift-j
+#   uat/vm type "text"                          type a string on the virtual keyboard (US layout)
+#   uat/vm serial [N]                           last N lines of the guest's serial console
+#   uat/vm status                               what is running, on what
+#
+# Images live in $UAT_VM_DIR, default ~/.local/share/jobsdone-uat/vm. The
+# base image is the one thing worth keeping; everything else is rebuilt.
+# If the guest's disk is encrypted, put `passphrase=...` in $UAT_VM_DIR/config
+# and the driver types it at the boot prompt.
+set -euo pipefail
+
+HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+ROOT="$(cd "$HERE/.." && pwd)"
+VM_DIR="${UAT_VM_DIR:-${XDG_DATA_HOME:-$HOME/.local/share}/jobsdone-uat/vm}"
+OUT="$HERE/out/vm"
+
+BASE="$VM_DIR/base.qcow2"
+BASE_VARS="$VM_DIR/base-vars.fd"
+WORK="$VM_DIR/work.qcow2"
+VARS="$VM_DIR/vars.fd"
+QMP="$VM_DIR/qmp.sock"
+PIDFILE="$VM_DIR/pid"
+SERIAL="$VM_DIR/serial.log"
+CONFIG="$VM_DIR/config"
+KEY="$VM_DIR/id_ed25519"
+SERVE="$VM_DIR/serve"
+SAVES="$VM_DIR/saves"
+
+OVMF_CODE="${UAT_VM_OVMF_CODE:-/usr/share/edk2/x64/OVMF_CODE.4m.fd}"
+OVMF_VARS="${UAT_VM_OVMF_VARS:-/usr/share/edk2/x64/OVMF_VARS.4m.fd}"
+DISK_SIZE="${UAT_VM_DISK:-40G}"
+MEMORY="${UAT_VM_MEMORY:-6G}"
+CPUS="${UAT_VM_CPUS:-6}"
+SSH_PORT="${UAT_VM_SSH_PORT:-2222}"
+SERVE_PORT="${UAT_VM_SERVE_PORT:-8123}"
+VNC_DISPLAY="${UAT_VM_VNC:-1}"        # VNC on 127.0.0.1:590$VNC_DISPLAY while headless
+RESOLUTION="${UAT_VM_RESOLUTION:-1920x1080}"
+
+usage() { sed -n '2,24p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
+die() { echo "vm: $*" >&2; exit 1; }
+qmp() { python3 "$HERE/qmp.py" "$QMP" "$@"; }
+
+config_value() { [ -f "$CONFIG" ] && sed -n "s/^$1=//p" "$CONFIG" || echo ""; }
+guest_user() { config_value user; }
+
+running() {
+    [ -f "$PIDFILE" ] && kill -0 "$(cat "$PIDFILE")" 2>/dev/null
+}
+
+need_tools() {
+    command -v qemu-system-x86_64 >/dev/null || die "qemu-system-x86_64 not found; install qemu-desktop"
+    command -v qemu-img >/dev/null || die "qemu-img not found; install qemu-desktop"
+    [ -f "$OVMF_CODE" ] || die "$OVMF_CODE not found; install edk2-ovmf"
+}
+
+# The render node QEMU draws the guest's GPU on. Nvidia's node is skipped
+# because virgl on it is unreliable; the first other node wins.
+render_node() {
+    [ -n "${UAT_VM_RENDER:-}" ] && { echo "$UAT_VM_RENDER"; return; }
+    local node vendor
+    for node in /dev/dri/renderD*; do
+        vendor="$(cat "/sys/class/drm/$(basename "$node")/device/vendor" 2>/dev/null || echo "")"
+        [ "$vendor" = "0x10de" ] && continue
+        echo "$node"; return
+    done
+    echo "/dev/dri/renderD128"
+}
+
+# Launches QEMU in the background. $1 is the disk, $2 "show" for a window or
+# "headless" for VNC only; further arguments are appended (the install CD).
+launch() {
+    local disk="$1" mode="$2"; shift 2
+    need_tools
+    running && die "already running (pid $(cat "$PIDFILE")); stop it first"
+    mkdir -p "$VM_DIR"
+    rm -f "$QMP" "$SERIAL"
+    local display
+    if [ "$mode" = show ]; then
+        display=(-display gtk,gl=on,show-cursor=on)
+    else
+        display=(-display "egl-headless,rendernode=$(render_node)" -vnc "127.0.0.1:$VNC_DISPLAY")
+    fi
+    local xres="${RESOLUTION%x*}" yres="${RESOLUTION#*x}"
+    setsid qemu-system-x86_64 \
+        -name jobsdone-uat -enable-kvm -machine q35,accel=kvm -cpu host -smp "$CPUS" -m "$MEMORY" \
+        -drive if=pflash,format=raw,readonly=on,file="$OVMF_CODE" \
+        -drive if=pflash,format=raw,file="$VARS" \
+        -drive file="$disk",if=virtio,format=qcow2,discard=unmap \
+        -device virtio-vga-gl,xres="$xres",yres="$yres" \
+        "${display[@]}" \
+        -device virtio-keyboard-pci -device virtio-tablet-pci \
+        -device intel-hda -device hda-duplex \
+        -netdev user,id=net0,hostfwd=tcp:127.0.0.1:"$SSH_PORT"-:22 -device virtio-net-pci,netdev=net0 \
+        -qmp unix:"$QMP",server,nowait \
+        -serial file:"$SERIAL" \
+        -pidfile "$PIDFILE" \
+        -no-reboot \
+        "$@" >"$VM_DIR/qemu.log" 2>&1 &
+    local tries=0
+    until [ -S "$QMP" ] || [ $tries -ge 50 ]; do sleep 0.1; tries=$((tries + 1)); done
+    [ -S "$QMP" ] || { cat "$VM_DIR/qemu.log" >&2; die "qemu did not start"; }
+    echo "$mode" > "$VM_DIR/mode"
+}
+
+wait_for_exit() {
+    local pid; pid="$(cat "$PIDFILE" 2>/dev/null || echo "")"
+    [ -n "$pid" ] || return 0
+    while kill -0 "$pid" 2>/dev/null; do sleep 1; done
+}
+
+ssh_base() {
+    local user; user="$(guest_user)"
+    [ -n "$user" ] || die "no guest user recorded in $CONFIG"
+    echo ssh -i "$KEY" -p "$SSH_PORT" -o StrictHostKeyChecking=no \
+        -o UserKnownHostsFile="$VM_DIR/known_hosts" -o LogLevel=ERROR \
+        -o ConnectTimeout=5 "$user@127.0.0.1"
+}
+
+# What every ssh command runs first, so hyprctl and grim find the session
+# Hyprland started at autologin.
+GUEST_ENV='export XDG_RUNTIME_DIR="${XDG_RUNTIME_DIR:-/run/user/$(id -u)}";
+sig="$(ls -1t "$XDG_RUNTIME_DIR/hypr" 2>/dev/null | head -1)"; [ -n "$sig" ] && export HYPRLAND_INSTANCE_SIGNATURE="$sig";
+wd="$(ls -1 "$XDG_RUNTIME_DIR"/wayland-[0-9]* 2>/dev/null | grep -v lock | head -1)"; [ -n "$wd" ] && export WAYLAND_DISPLAY="$(basename "$wd")";
+export PATH="$HOME/.cargo/bin:$HOME/.local/bin:/usr/share/omarchy/bin:$PATH";'
+
+LUKS_PROMPT="A password is required to access the root volume"
+
+# An encrypted guest stops at a passphrase prompt before anything else
+# comes up. The prompt is echoed on the serial console, so that is the cue.
+unlock_if_asked() {
+    local passphrase waited=0
+    passphrase="$(config_value passphrase)"
+    while [ $waited -lt 60 ]; do
+        if grep -q "$LUKS_PROMPT" "$SERIAL" 2>/dev/null; then
+            [ -n "$passphrase" ] || die "the guest asks for its disk passphrase; add passphrase=... to $CONFIG"
+            sleep 1
+            qmp type "$passphrase"
+            qmp keys ret
+            echo "typed the disk passphrase"
+            return 0
+        fi
+        # shellcheck disable=SC2046
+        $(ssh_base) -o BatchMode=yes true 2>/dev/null && return 0
+        sleep 1; waited=$((waited + 1))
+    done
+    return 0
+}
+
+wait_for_ssh() {
+    local limit="${1:-180}" waited=0
+    # shellcheck disable=SC2046
+    until $(ssh_base) -o BatchMode=yes true 2>/dev/null; do
+        [ $waited -ge "$limit" ] && die "guest did not answer on ssh within ${limit}s; see 'uat/vm serial'"
+        sleep 2; waited=$((waited + 2))
+    done
+}
+
+# sshd answers well before autologin has brought Hyprland up; a screenshot
+# or hyprctl call before that would see nothing.
+wait_for_desktop() {
+    local limit="${1:-90}" waited=0
+    # shellcheck disable=SC2046
+    until [ "$($(ssh_base) -o BatchMode=yes -- "$GUEST_ENV hyprctl monitors -j 2>/dev/null" 2>/dev/null)" != "" ]; do
+        [ $waited -ge "$limit" ] && die "Hyprland did not come up within ${limit}s; try 'uat/vm shot' and 'uat/vm ssh journalctl -b -u sddm'"
+        sleep 2; waited=$((waited + 2))
+    done
+}
+
+# The commands the guest needs once, run by the person at the guest's
+# keyboard during `install`. Served to the guest over the user-mode network,
+# where the host is 10.0.2.2.
+write_prepare_script() {
+    mkdir -p "$SERVE"
+    cp "$KEY.pub" "$SERVE/id_ed25519.pub"
+    cat > "$SERVE/prepare.sh" <<EOF
+#!/bin/bash
+# Prepares a fresh Omarchy install to be driven from the host.
+set -e
+mkdir -p ~/.ssh && chmod 700 ~/.ssh
+curl -fsS http://10.0.2.2:$SERVE_PORT/id_ed25519.pub >> ~/.ssh/authorized_keys
+chmod 600 ~/.ssh/authorized_keys
+sudo systemctl enable --now sshd
+# Omarchy's firewall denies incoming by default; the host's ssh must get in.
+sudo ufw allow 22/tcp
+# A test machine: no password for sudo, so an agent can install packages.
+echo "\$USER ALL=(ALL) NOPASSWD: ALL" | sudo tee /etc/sudoers.d/90-uat >/dev/null
+sudo chmod 440 /etc/sudoers.d/90-uat
+# Boot straight to the desktop every time, not only the first time.
+sudo rm -f /etc/systemd/system/graphical.target.wants/omarchy-provision-autologin-once.service \\
+           /etc/systemd/system/omarchy-provision-autologin-once.service
+printf '[Autologin]\nUser=%s\nSession=omarchy.desktop\n' "\$USER" | sudo tee /etc/sddm.conf.d/autologin.conf >/dev/null
+# Never lock or blank while someone is looking at a screenshot.
+omarchy-toggle-idle stay-awake >/dev/null 2>&1 || true
+echo "prepared; now run 'uat/vm seal' on the host"
+EOF
+}
+
+serve_start() {
+    (cd "$SERVE" && setsid python3 -m http.server --bind 127.0.0.1 "$SERVE_PORT" >/dev/null 2>&1 & echo $! > "$VM_DIR/serve.pid")
+}
+serve_stop() {
+    [ -f "$VM_DIR/serve.pid" ] && { kill "$(cat "$VM_DIR/serve.pid")" 2>/dev/null || true; rm -f "$VM_DIR/serve.pid"; }
+}
+
+cmd_install() {
+    local iso="" user=""
+    while [ $# -gt 0 ]; do
+        case "$1" in
+            --iso) iso="$2"; shift 2 ;;
+            --user) user="$2"; shift 2 ;;
+            *) usage ;;
+        esac
+    done
+    [ -n "$iso" ] || iso="$(ls -1t "$HOME"/downloads/omarchy-*.iso "$HOME"/Downloads/omarchy-*.iso 2>/dev/null | head -1 || true)"
+    [ -f "$iso" ] || die "no ISO; pass --iso PATH (download from https://omarchy.org)"
+    [ -n "$user" ] || die "pass --user NAME, the user you will create in the installer"
+    need_tools
+    running && die "already running; stop it first"
+    if [ -f "$BASE" ] && [ ! -w "$BASE" ]; then
+        die "$BASE is sealed; delete it yourself if you mean to install again"
+    fi
+    mkdir -p "$VM_DIR" "$SERVE"
+    [ -f "$KEY" ] || ssh-keygen -q -t ed25519 -N "" -C "jobsdone-uat" -f "$KEY"
+    echo "user=$user" > "$CONFIG"
+    rm -f "$BASE" "$WORK" "$VM_DIR/known_hosts"
+    qemu-img create -q -f qcow2 "$BASE" "$DISK_SIZE"
+    cp "$OVMF_VARS" "$VARS"
+    write_prepare_script
+    serve_start
+    trap serve_stop EXIT
+
+    cat <<EOF
+
+The installer is opening in a window. In it:
+  1. Pick the US keyboard layout, so keys typed from the host land right.
+  2. Create the user '$user'.
+  3. Skip disk encryption (Ctrl-C at the formatting confirmation, as the
+     manual says), so the machine boots with nobody at the keyboard.
+  4. Let it install. When it reboots, this window closes and the disk
+     boots on its own.
+
+EOF
+    launch "$BASE" show -drive file="$iso",media=cdrom,readonly=on -boot order=d
+    echo "installer running (pid $(cat "$PIDFILE")); waiting for it to finish..."
+    wait_for_exit
+    echo "first boot from the installed disk"
+    launch "$BASE" show
+    cat <<EOF
+
+When the desktop is up, open a terminal in the guest and run:
+
+    curl -fsS http://10.0.2.2:$SERVE_PORT/prepare.sh | bash
+
+Then, on the host:
+
+    uat/vm seal
+
+EOF
+    echo "the guest keeps running; this command is done"
+    trap - EXIT
+}
+
+cmd_seal() {
+    [ -f "$BASE" ] || die "no base image; run 'uat/vm install' first"
+    if running; then
+        [ "$(cat "$VM_DIR/mode" 2>/dev/null)" = show ] || die "the running guest is not the install session"
+        wait_for_ssh 20
+        echo "powering off"
+        power_off
+        wait_for_exit
+    fi
+    serve_stop
+    rm -f "$VM_DIR/known_hosts"    # the live ISO's host key was recorded during the install
+    cp "$VARS" "$BASE_VARS"
+    chmod 444 "$BASE" "$BASE_VARS"
+    echo "sealed $BASE ($(du -h "$BASE" | cut -f1)); 'uat/vm fresh' boots a clean copy"
+}
+
+boot_work() {
+    local mode="$1"
+    [ -f "$WORK" ] || die "no working copy; run 'uat/vm fresh'"
+    cp "$BASE_VARS" "$VARS"
+    launch "$WORK" "$mode"
+    echo "booting (pid $(cat "$PIDFILE")), $mode; waiting for ssh..."
+    unlock_if_asked
+    wait_for_ssh
+    wait_for_desktop
+    echo "desktop up: uat/vm ssh, uat/vm shot, uat/vm push"
+    [ "$mode" = headless ] && echo "watch it with a VNC viewer on 127.0.0.1:$((5900 + VNC_DISPLAY))"
+    return 0
+}
+
+mode_arg() {
+    local mode=headless
+    while [ $# -gt 0 ]; do
+        case "$1" in --show) mode=show; shift ;; *) usage ;; esac
+    done
+    echo "$mode"
+}
+
+cmd_fresh() {
+    local mode; mode="$(mode_arg "$@")"
+    [ -f "$BASE" ] && [ ! -w "$BASE" ] || die "no sealed base image; run 'uat/vm install' then 'uat/vm seal'"
+    running && cmd_stop
+    rm -f "$WORK" "$VM_DIR/known_hosts"
+    qemu-img create -q -f qcow2 -b "$BASE" -F qcow2 "$WORK"
+    boot_work "$mode"
+}
+
+cmd_start() {
+    local mode; mode="$(mode_arg "$@")"
+    boot_work "$mode"
+}
+
+# Omarchy handles the ACPI power button itself instead of shutting down, so
+# a running desktop is asked over ssh; the button is the fallback for a
+# guest that has not come up that far.
+power_off() {
+    # shellcheck disable=SC2046
+    $(ssh_base) -o BatchMode=yes -- 'sudo -n systemctl poweroff' 2>/dev/null ||
+        qmp system_powerdown 2>/dev/null || true
+}
+
+cmd_stop() {
+    running || { echo "not running"; return 0; }
+    power_off
+    local waited=0
+    while running && [ $waited -lt 30 ]; do sleep 1; waited=$((waited + 1)); done
+    if running; then
+        echo "did not power off; killing"
+        kill "$(cat "$PIDFILE")" 2>/dev/null || true
+        sleep 1
+    fi
+    rm -f "$PIDFILE" "$QMP"
+    echo "stopped"
+}
+
+cmd_ssh() {
+    running || die "not running"
+    if [ $# -eq 0 ]; then
+        # shellcheck disable=SC2046
+        exec $(ssh_base) -t -- "$GUEST_ENV exec bash -l"
+    fi
+    # shellcheck disable=SC2046
+    $(ssh_base) -- "$GUEST_ENV $*"
+}
+
+cmd_push() {
+    running || die "not running"
+    local user; user="$(guest_user)"
+    (cd "$ROOT" && git ls-files -z --cached --others --exclude-standard | tar --null -T - -cz) |
+        # shellcheck disable=SC2046
+        $(ssh_base) -- 'rm -rf ~/jobsdone && mkdir -p ~/jobsdone && tar -xz -C ~/jobsdone'
+    echo "pushed the working tree to $user@guest:~/jobsdone"
+}
+
+cmd_shot() {
+    running || die "not running"
+    local name="${1:-$(date +%H%M%S)}"
+    mkdir -p "$OUT"
+    if qmp screendump "{\"filename\": \"$VM_DIR/shot.png\", \"format\": \"png\"}" 2>/dev/null; then
+        mv "$VM_DIR/shot.png" "$OUT/$name.png"
+        echo "screen -> uat/out/vm/$name.png"
+    else
+        # No readable surface while a GL window owns the display; grim in
+        # the guest sees the same pixels once Hyprland is up.
+        # shellcheck disable=SC2046
+        $(ssh_base) -- "$GUEST_ENV grim -" > "$OUT/$name.png" || die "neither qemu nor grim could capture the screen"
+        echo "screen (via grim in the guest) -> uat/out/vm/$name.png"
+    fi
+}
+
+cmd_keys() { running || die "not running"; qmp keys "$@"; echo "pressed: $*"; }
+cmd_type() { running || die "not running"; qmp type "$1"; echo "typed: $1"; }
+
+cmd_serial() { tail -n "${1:-40}" "$SERIAL" 2>/dev/null || echo "no serial log yet"; }
+
+cmd_status() {
+    echo "images in $VM_DIR"
+    if [ -f "$BASE" ]; then
+        [ -w "$BASE" ] && echo "base: present, not sealed" || echo "base: sealed, $(du -h "$BASE" | cut -f1)"
+    else
+        echo "base: none (run 'uat/vm install')"
+    fi
+    [ -f "$WORK" ] && echo "working copy: present" || echo "working copy: none"
+    [ -n "$(guest_user)" ] && echo "guest user: $(guest_user)"
+    if running; then
+        echo "running: pid $(cat "$PIDFILE"), $(cat "$VM_DIR/mode" 2>/dev/null), ssh port $SSH_PORT"
+        # shellcheck disable=SC2046
+        if $(ssh_base) -o BatchMode=yes true 2>/dev/null; then echo "ssh: answering"; else echo "ssh: not yet"; fi
+    else
+        echo "not running"
+    fi
+}
+
+# A saved copy is the overlay file and its firmware variables; the overlay
+# only holds what differs from the base, so a save is small and quick.
+cmd_save() {
+    local name="${1:-}"; [ -n "$name" ] || usage
+    [ -f "$WORK" ] || die "no working copy to save"
+    running && die "stop the guest first, so the disk is consistent"
+    mkdir -p "$SAVES"
+    cp --reflink=auto "$WORK" "$SAVES/$name.qcow2"
+    cp "$VARS" "$SAVES/$name.vars.fd"
+    echo "saved as '$name' ($(du -h "$SAVES/$name.qcow2" | cut -f1)); 'uat/vm restore $name' brings it back"
+}
+
+cmd_restore() {
+    local name="${1:-}"; shift || true
+    [ -n "$name" ] || usage
+    [ -f "$SAVES/$name.qcow2" ] || die "no saved copy named '$name'; see 'uat/vm saves'"
+    local mode; mode="$(mode_arg "$@")"
+    running && cmd_stop
+    cp --reflink=auto "$SAVES/$name.qcow2" "$WORK"
+    cp "$SAVES/$name.vars.fd" "$VARS"
+    rm -f "$VM_DIR/known_hosts"
+    echo "restored '$name'"
+    launch "$WORK" "$mode"
+    echo "booting (pid $(cat "$PIDFILE")), $mode; waiting for ssh..."
+    unlock_if_asked
+    wait_for_ssh
+    wait_for_desktop
+    echo "desktop up: uat/vm ssh, uat/vm shot, uat/vm push"
+}
+
+cmd_saves() {
+    ls -1 "$SAVES"/*.qcow2 2>/dev/null | sed 's|.*/||; s|\.qcow2$||' || true
+    [ -n "$(ls -A "$SAVES" 2>/dev/null)" ] || echo "no saved copies"
+}
+
+case "${1:-}" in
+    install) shift; cmd_install "$@" ;;
+    save) shift; cmd_save "$@" ;;
+    restore) shift; cmd_restore "$@" ;;
+    saves) cmd_saves ;;
+    seal) cmd_seal ;;
+    fresh) shift; cmd_fresh "$@" ;;
+    start) shift; cmd_start "$@" ;;
+    stop) cmd_stop ;;
+    ssh) shift; cmd_ssh "$@" ;;
+    push) cmd_push ;;
+    shot) shift; cmd_shot "$@" ;;
+    keys) shift; cmd_keys "$@" ;;
+    type) shift; cmd_type "$@" ;;
+    serial) shift; cmd_serial "$@" ;;
+    status) cmd_status ;;
+    *) usage ;;
+esac
