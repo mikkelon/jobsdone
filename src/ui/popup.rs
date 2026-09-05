@@ -261,12 +261,20 @@ fn search(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
                     ("[ ]", plain())
                 };
                 canvas.put(x + 2, row, mark, style);
-                canvas.put(x + 6, row, &found.title, plain());
-                canvas.rput(
-                    x + width - 2,
+                // A result is laid out the way a task row is: where the
+                // task is now is measured first and the title takes what
+                // is left of the line, so a long title stops before the
+                // location instead of running through it and out of the
+                // box (F15).
+                let side = beside(found, *closed, app.today());
+                let side = super::clip(&side, width.saturating_sub(8));
+                canvas.rput(x + width - 2, row, side, dim());
+                let right = (x + width - 2).saturating_sub(count(side) + 2);
+                canvas.put(
+                    x + 6,
                     row,
-                    &beside(found, *closed, app.today()),
-                    dim(),
+                    super::clip(&found.title, right.saturating_sub(x + 6)),
+                    plain(),
                 );
                 if found_at == popup.selected {
                     canvas.restyle(x + 1, row, width - 2, cursor());

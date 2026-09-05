@@ -459,6 +459,18 @@ fn crowded() -> App {
 /// A row carrying every chip at once, more than any one task can really
 /// be: waiting and on a past day are exclusive, but the drawing may not
 /// depend on that.
+/// A day holding one task whose title is longer than any box that draws
+/// it, which is what search had no width for (F15). Search with nothing
+/// typed matches it, so the sweep draws it in the box at every size.
+fn long_titled() -> App {
+    let mut model = Model::empty();
+    model.tasks.insert(
+        1,
+        task(1, &"0123456789".repeat(8), Some(on("2025-09-05")), 0),
+    );
+    App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app")
+}
+
 fn every_chip() -> domain::Row {
     domain::Row {
         task: 1,
@@ -1445,7 +1457,7 @@ fn a_window_too_small_for_the_frame_draws_nothing_rather_than_panicking() {
 
 #[test]
 fn no_size_the_window_can_take_makes_the_drawing_panic() {
-    for mut app in [app(), crowded()] {
+    for mut app in [app(), crowded(), long_titled()] {
         for action in [
             Action::Tick,
             Action::Commands,
@@ -2041,6 +2053,47 @@ fn a_long_query_scrolls_with_its_caret_and_stops_before_the_count() {
             count.starts_with("  0 matches "),
             "a gap, then the count with nothing of the query under it, \
              at {width}: {box_row:?}"
+        );
+    }
+}
+
+/// A result longer than the box was drawn from its left edge onwards, so
+/// it ran through the location beside it and out through the right
+/// border of the card (F15).
+#[test]
+fn a_long_result_stops_before_its_location_and_the_border() {
+    let app = long_titled();
+    let mut app = app;
+    app.update(Action::Search);
+
+    for width in [120, 80] {
+        let drawn = look(&app, width, 36);
+        let top = drawn
+            .iter()
+            .position(|row| row.contains('┌'))
+            .unwrap_or_else(|| panic!("the top of the box at {width}"));
+        let right = drawn[top]
+            .chars()
+            .position(|glyph| glyph == '┐')
+            .expect("the corner");
+        let found = drawn[top..]
+            .iter()
+            .find(|row| row.contains("[ ] 0123"))
+            .unwrap_or_else(|| panic!("the result at {width}"));
+
+        assert_eq!(
+            found.chars().nth(right),
+            Some('│'),
+            "the border is on the result row too at {width}: {found:?}"
+        );
+        let inside: String = found.chars().take(right).collect();
+        assert!(
+            inside.trim_end().ends_with("  today"),
+            "the location has its own room at {width}: {found:?}"
+        );
+        assert!(
+            !inside.contains("0today"),
+            "and the title stops before it at {width}: {found:?}"
         );
     }
 }
