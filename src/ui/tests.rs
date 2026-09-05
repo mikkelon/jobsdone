@@ -9,7 +9,7 @@ use ratatui::{Terminal, TerminalOptions, Viewport};
 
 use crate::app::App;
 use crate::domain::tests::MemStore;
-use crate::domain::{FromPlace, Model, Note, Placement, Schedule, Task, Weekday};
+use crate::domain::{DueChip, FromPlace, Model, Note, Placement, Schedule, Task, Weekday};
 use crate::input::Action;
 
 /// The wireframes are the source of truth for the layout, so the test is a
@@ -387,6 +387,123 @@ fn history() -> App {
 
 fn app() -> App {
     App::new(Box::new(MemStore::holding(wireframe_model())), &at(NOW)).expect("an app")
+}
+
+/// A window holding the rows that carry the most: a task that left today
+/// for the backlog while waiting, due, reminded and repeating, so its
+/// pointer in the Moved group and its backlog row both run out of line,
+/// and a closed task that was focus, so the Done group carries a word and
+/// a time as well.
+fn crowded_model() -> Model {
+    let today = on("2025-09-05");
+    let mut model = Model::empty();
+    model.schedules.insert(
+        1,
+        Schedule {
+            id: 1,
+            title: "Task".to_owned(),
+            rule: Rule::Workdays,
+            generated_through: today,
+            stopped_on: None,
+            created_at: at(NOW),
+        },
+    );
+    model.tasks.insert(
+        1,
+        Task {
+            waiting: true,
+            due_on: Some(on("2025-09-03")),
+            remind_on: Some(on("2025-09-06")),
+            schedule_id: Some(1),
+            scheduled_on: Some(today),
+            ..task(1, "Task", None, 0)
+        },
+    );
+    model.tasks.insert(
+        2,
+        Task {
+            focus: true,
+            closed_at: Some(at("2025-09-05T09:05:00+02:00[Europe/Copenhagen]")),
+            ..task(2, "Send the contract draft", Some(today), 0)
+        },
+    );
+    model.placements.insert(
+        (1, today),
+        Placement {
+            task_id: 1,
+            day: today,
+            placed_at: at(NOW),
+            from_place: FromPlace::New,
+        },
+    );
+    model.placements.insert(
+        (2, today),
+        Placement {
+            task_id: 2,
+            day: today,
+            placed_at: at(NOW),
+            from_place: FromPlace::Backlog,
+        },
+    );
+    model
+}
+
+fn crowded() -> App {
+    let mut app = App::new(Box::new(MemStore::holding(crowded_model())), &at(NOW)).expect("an app");
+    // The repeat starting today opens the review; the rows this window is
+    // for are the ones behind it.
+    app.update(Action::Cancel);
+    app
+}
+
+/// A row carrying every chip at once, more than any one task can really
+/// be: waiting and on a past day are exclusive, but the drawing may not
+/// depend on that.
+fn every_chip() -> domain::Row {
+    domain::Row {
+        task: 1,
+        title: "Write the Q4 planning doc".to_owned(),
+        place: Place::Backlog,
+        closed_at: Some(at("2025-09-05T09:05:00+02:00[Europe/Copenhagen]")),
+        focus: true,
+        waiting: true,
+        due: Some(DueChip {
+            on: on("2025-08-30"),
+            overdue: true,
+        }),
+        remind: Some(on("2025-09-12")),
+        repeat: Some(Rule::Weekly {
+            weekdays: vec![Weekday::Mon, Weekday::Thu],
+        }),
+        was_focus: true,
+        on_the_pile: true,
+        from_backlog: true,
+        closed_on_this_day: true,
+    }
+}
+
+/// Draws one row on a canvas of its own, which is how a width the panes
+/// never hand a row is still put to it.
+fn one_row(width: u16, row: &domain::Row, look: Look) -> String {
+    let area = Rect::new(0, 0, width, 1);
+    let mut buffer = Buffer::empty(area);
+    let mut canvas = Canvas {
+        buffer: &mut buffer,
+        area,
+    };
+    task_row(
+        &mut canvas,
+        Column {
+            x: 0,
+            width,
+            top: 0,
+            bottom: 0,
+        },
+        0,
+        row,
+        look,
+    );
+    lines(&buffer).remove(0)
 }
 
 /// Renders and answers the screen as lines, trailing blanks trimmed the
@@ -1304,25 +1421,105 @@ fn a_window_too_small_for_the_frame_draws_nothing_rather_than_panicking() {
 
 #[test]
 fn no_size_the_window_can_take_makes_the_drawing_panic() {
-    let mut app = app();
-    for action in [
-        Action::Tick,
-        Action::Commands,
-        Action::Help,
-        Action::Search,
-        Action::MoveToDay,
-        Action::DueBy,
-        Action::Repeat,
-        Action::Add,
+    for mut app in [app(), crowded()] {
+        for action in [
+            Action::Tick,
+            Action::Commands,
+            Action::Help,
+            Action::Search,
+            Action::MoveToDay,
+            Action::DueBy,
+            Action::Repeat,
+            Action::Add,
+        ] {
+            app.update(action);
+            for width in [1, 2, 23, 24, 25, 40, 99, 100, 101, 120, 200] {
+                for height in [1, 2, 8, 9, 10, 12, 36, 48, 90] {
+                    look(&app, width, height);
+                }
+            }
+            app.update(Action::Cancel);
+        }
+    }
+}
+
+/// Every width a row can be drawn at, with more on its right than any
+/// pane would ever hand it. The panes only ever ask for a few of these,
+/// and the one that panicked was among them (F1).
+#[test]
+fn no_width_a_crowded_row_can_take_makes_the_drawing_panic() {
+    let row = every_chip();
+    for kind in [
+        Kind::Open,
+        Kind::Done,
+        Kind::Waiting,
+        Kind::Moved,
+        Kind::Handled,
     ] {
-        app.update(action);
-        for width in [1, 2, 23, 24, 25, 40, 99, 100, 101, 120, 200] {
-            for height in [1, 2, 8, 9, 10, 12, 36, 48, 90] {
-                look(&app, width, height);
+        for narrow in [false, true] {
+            for note in [None, Some("→ backlog")] {
+                for width in 1..=200 {
+                    one_row(
+                        width,
+                        &row,
+                        Look {
+                            kind,
+                            today: on("2025-09-05"),
+                            narrow,
+                            moving: false,
+                            note,
+                        },
+                    );
+                }
             }
         }
-        app.update(Action::Cancel);
     }
+}
+
+/// The chips give way, not the row: whatever else it carries, a row keeps
+/// its box and the start of its title, because that is all there is to
+/// tell it from any other row (F1, F7).
+#[test]
+fn a_crowded_row_keeps_its_box_and_the_start_of_its_title() {
+    let row = every_chip();
+    for width in 14..=200 {
+        let drawn = one_row(
+            width,
+            &row,
+            Look {
+                kind: Kind::Moved,
+                today: on("2025-09-05"),
+                narrow: false,
+                moving: false,
+                note: None,
+            },
+        );
+        assert!(
+            drawn.starts_with(" [\u{2192}] Write"),
+            "at {width} columns: {drawn:?}"
+        );
+    }
+}
+
+/// The row the acceptance test crashed on: a task moved to the backlog
+/// while waiting, due and reminded, whose pointer in the Moved group had
+/// eaten its own title (F7).
+#[test]
+fn a_moved_row_keeps_its_pointer_its_title_and_its_margin() {
+    let drawn = look(&crowded(), 120, 36);
+    let moved = drawn
+        .iter()
+        .find(|row| row.contains("\u{2192}]"))
+        .expect("the moved row");
+
+    assert!(
+        moved.starts_with(" [\u{2192}] Task"),
+        "the margin, the pointer and the title: {moved:?}"
+    );
+    assert!(
+        moved.contains("[w]") && moved.contains("[due]") && moved.contains("[\u{25f7}]"),
+        "and every chip, as its mark: {moved:?}"
+    );
 }
 
 #[test]

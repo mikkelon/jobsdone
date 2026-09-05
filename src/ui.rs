@@ -1244,7 +1244,28 @@ fn meta_of(row: &domain::Row, kind: Kind, today: Date, moving: bool) -> String {
     String::new()
 }
 
+/// The most of its title a row keeps, however full its right-hand side.
+/// A row whose title has gone cannot be told from any other row, so the
+/// words on the right give way first (DESIGN.md section 2).
+const TITLE_LEAST: u16 = 8;
+
+/// One of the things at the right of a row: its text, the blank cells to
+/// its left, and how readily it goes when the line is too full.
+struct Piece {
+    text: String,
+    style: Style,
+    gap: u16,
+    /// Dropped in descending order, so the chips go before the row's own
+    /// words and the time it was closed goes last.
+    drop: u8,
+}
+
 /// `[ ] Book dentist                          [◷ today]`
+///
+/// The right-hand side is measured before anything is drawn, and shrinks
+/// to fit: first every chip to the mark a narrow pane would give it, then
+/// pieces dropped from the left until the title has `TITLE_LEAST` cells.
+/// Nothing is ever placed left of the title, whatever the row carries.
 fn task_row(canvas: &mut Canvas, column: Column, y: u16, row: &domain::Row, look: Look) {
     let Column { x, width, .. } = column;
     let Look {
@@ -1257,9 +1278,8 @@ fn task_row(canvas: &mut Canvas, column: Column, y: u16, row: &domain::Row, look
     let (mark, mark_style, title_style) = mark_of(row, kind);
     canvas.put(x + 1, y, mark, mark_style);
 
-    // The right of the row, filled from its edge inwards: the time it was
-    // closed, then the chips, then whatever text is left.
-    let mut edge = x + width - 1;
+    let title_x = x + 5;
+    let edge = x + width.saturating_sub(1);
     // A moved row says where the task is now and nothing else: what
     // became of it there belongs to the day it is on. Nor does a row the
     // caller has given its own words, which are the whole of its right.
@@ -1268,32 +1288,78 @@ fn task_row(canvas: &mut Canvas, column: Column, y: u16, row: &domain::Row, look
     } else {
         closed_label(row, today)
     };
-    if !closed.is_empty() && !narrow {
-        edge = canvas.rput(edge, y, &closed, dim()) - count(&closed) - 2;
-    }
-    for chip in chips_of(row, look).iter().rev() {
-        let text = if narrow { chip.short } else { &chip.text };
-        edge = canvas.rput(edge, y, &format!("[{text}]"), chip.style) - count(text) - 4;
-    }
     let meta = match note {
         Some(note) => note.to_owned(),
         None => meta_of(row, kind, today, moving),
     };
-    // A narrow pane drops the row's words, except where they are the
-    // content of the row: where a moved task went, and what the review
-    // did to a row it has answered.
-    if !meta.is_empty() && (!narrow || kind == Kind::Moved || note.is_some()) {
-        edge = canvas
-            .rput(edge, y, &meta, dim())
-            .saturating_sub(count(&meta) + 1);
+
+    let pieces_of = |short: bool| {
+        let mut pieces = Vec::new();
+        // A narrow pane drops the row's words, except where they are the
+        // content of the row: where a moved task went, and what the review
+        // did to a row it has answered.
+        if !meta.is_empty() && (!narrow || kind == Kind::Moved || note.is_some()) {
+            pieces.push(Piece {
+                text: meta.clone(),
+                style: dim(),
+                gap: 1,
+                drop: 1,
+            });
+        }
+        for chip in chips_of(row, look) {
+            let text = if short { chip.short } else { &chip.text };
+            pieces.push(Piece {
+                text: format!("[{text}]"),
+                style: chip.style,
+                gap: 2,
+                drop: 2,
+            });
+        }
+        if !closed.is_empty() && !narrow {
+            pieces.push(Piece {
+                text: closed.clone(),
+                style: dim(),
+                gap: 2,
+                drop: 0,
+            });
+        }
+        pieces
+    };
+    let span = |pieces: &[Piece]| -> u16 {
+        pieces
+            .iter()
+            .map(|piece| count(&piece.text) + piece.gap)
+            .sum()
+    };
+
+    let room = edge.saturating_sub(title_x);
+    let budget = room.saturating_sub(TITLE_LEAST.min(room));
+    let mut pieces = pieces_of(narrow);
+    if span(&pieces) > budget {
+        pieces = pieces_of(true);
+    }
+    while span(&pieces) > budget {
+        // The leftmost of the pieces that go first, so a row loses its
+        // chips in the order it gained them.
+        let Some(at) = (0..pieces.len()).rev().max_by_key(|at| pieces[*at].drop) else {
+            break;
+        };
+        pieces.remove(at);
+    }
+
+    let mut right = edge;
+    for piece in pieces.iter().rev() {
+        right = canvas
+            .rput(right, y, &piece.text, piece.style)
+            .saturating_sub(count(&piece.text) + piece.gap);
     }
 
     // The title has whatever is left, so a row carrying three chips loses
     // the end of its own title rather than running under them.
     canvas.put(
-        x + 5,
+        title_x,
         y,
-        clip(&row.title, edge.saturating_sub(x + 5)),
+        clip(&row.title, right.saturating_sub(title_x)),
         title_style,
     );
 }
