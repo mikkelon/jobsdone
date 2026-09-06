@@ -1,6 +1,7 @@
 //! jobsdone: a keyboard-first daily task manager for the terminal.
 
 pub mod app;
+pub mod desktop;
 pub mod domain;
 pub mod input;
 pub mod storage;
