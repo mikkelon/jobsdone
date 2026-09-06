@@ -28,11 +28,14 @@ const TICK: Duration = Duration::from_millis(250);
 /// Enters raw mode, installs the panic hook, loops until `Flow::Quit`,
 /// restores the terminal.
 pub fn run(mut app: App) -> io::Result<()> {
-    enter()?;
+    // The `mouse` setting decides whether the program is handed the
+    // mouse at all, from the first frame on.
+    let mut mouse = app.settings().mouse();
+    enter(mouse)?;
     install_panic_hook();
 
     let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
-    let outcome = go_round(&mut terminal, &mut app);
+    let outcome = go_round(&mut terminal, &mut app, &mut mouse);
 
     // The terminal is restored whether or not the loop ended well.
     if let Err(error) = leave() {
@@ -41,7 +44,11 @@ pub fn run(mut app: App) -> io::Result<()> {
     outcome
 }
 
-fn go_round(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) -> io::Result<()> {
+fn go_round(
+    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    app: &mut App,
+    mouse: &mut bool,
+) -> io::Result<()> {
     loop {
         let mut layout = None;
         {
@@ -58,22 +65,35 @@ fn go_round(terminal: &mut Terminal<CrosstermBackend<Stdout>>, app: &mut App) ->
             Some(Action::Tick)
         };
 
-        if let Some(action) = action
-            && app.update(action) == Flow::Quit
-        {
-            return Ok(());
+        if let Some(action) = action {
+            if app.update(action) == Flow::Quit {
+                return Ok(());
+            }
+            // The setting takes effect at once, whether it was changed on
+            // the settings page or by another window a tick picked up.
+            if app.settings().mouse() != *mouse {
+                *mouse = !*mouse;
+                take_the_mouse(*mouse)?;
+            }
         }
     }
 }
 
-fn enter() -> io::Result<()> {
+fn enter(mouse: bool) -> io::Result<()> {
     enable_raw_mode()?;
-    execute!(
-        io::stdout(),
-        EnterAlternateScreen,
-        EnableMouseCapture,
-        EnableFocusChange
-    )
+    execute!(io::stdout(), EnterAlternateScreen, EnableFocusChange)?;
+    take_the_mouse(mouse)
+}
+
+/// Whether the terminal hands its mouse events to the program. With them
+/// off the terminal's own selection and scrollback work again, which is
+/// the whole of what the `mouse` setting buys (DOMAIN.md section 19).
+fn take_the_mouse(taking: bool) -> io::Result<()> {
+    if taking {
+        execute!(io::stdout(), EnableMouseCapture)
+    } else {
+        execute!(io::stdout(), DisableMouseCapture)
+    }
 }
 
 fn leave() -> io::Result<()> {
