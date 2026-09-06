@@ -323,9 +323,9 @@ program waits for Enter before exiting, because a keybind's window would
 otherwise close and take the message with it.
 
 The commands that are not the app say what they did on stdout and exit:
-`jobsdone desktop` prints the one line the rule it wrote amounts to,
-`--help` and `--version` print themselves. A command line nobody can read
-goes to stderr with the usage and exits 2, a window manager that would
-not take the rule exits 1 with what it said, and the settings are saved
-either way. None of these enters raw mode, so none of them waits for
-Enter.
+`jobsdone desktop` prints what the window will do now, that it floats at
+a size or that it tiles, and `--help` and `--version` print themselves. A
+command line nobody can read goes to stderr with the usage and exits 2; a
+window manager that would not take the rule exits 1 with what it said,
+the settings having been saved before it was asked. None of these enters
+raw mode, so none of them waits for Enter.
