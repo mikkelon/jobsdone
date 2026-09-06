@@ -847,7 +847,7 @@ def p13():
             ('', ),
             ('g', 'Window'),
             ('r', 'Floating window', 'on'),
-            ('r', 'Window size', '870x650'),
+            ('r', 'Window size', '870x650 · 120 by 36 cells'),
             ('r', 'Mouse', 'on'),
             ('', ),
             ('g', 'Looks'),

@@ -173,7 +173,11 @@ fn value(settings: &Settings, row: SettingRow) -> String {
         SettingRow::FloatingWindow => on_off(settings.floating_window()),
         SettingRow::WindowSize => {
             let size = settings.window_size();
-            format!("{}x{}", size.width, size.height)
+            let grid = match size.cells() {
+                Some((columns, rows)) => format!("{columns} by {rows} cells"),
+                None => "custom".to_owned(),
+            };
+            format!("{}x{} · {grid}", size.width, size.height)
         }
         SettingRow::Mouse => on_off(settings.mouse()),
         SettingRow::DateOrder => match settings.date_style() {

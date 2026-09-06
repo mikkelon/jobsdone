@@ -3379,10 +3379,47 @@ fn every_kind_of_row_is_changed_by_the_same_two_keys() {
     app.update(Action::Right);
     assert_eq!(app.settings().due_ahead_days(), 1);
 
-    // The window size, which both keys move by the same step.
+    // The window size, which steps from one preset to the next.
     cursor_to(&mut app, SettingRow::WindowSize);
     app.update(Action::Right);
-    assert_eq!(app.settings().window_size(), WindowSize::new(880, 660));
+    assert_eq!(app.settings().window_size(), WindowSize::PRESETS[2]);
+}
+
+#[test]
+fn the_window_size_walks_the_presets_and_stops_at_both_ends() {
+    let mut app = started();
+    app.update(Action::SettingsPage);
+    cursor_to(&mut app, SettingRow::WindowSize);
+    assert_eq!(app.settings().window_size(), WindowSize::PRESETS[1]);
+
+    for _ in 0..10 {
+        app.update(Action::Right);
+    }
+    assert_eq!(app.settings().window_size(), WindowSize::PRESETS[4]);
+
+    for _ in 0..10 {
+        app.update(Action::Left);
+    }
+    assert_eq!(app.settings().window_size(), WindowSize::PRESETS[0]);
+}
+
+#[test]
+fn a_typed_size_steps_to_the_preset_on_the_side_the_key_asked_for() {
+    let mut app = started();
+    app.update(Action::SettingsPage);
+    cursor_to(&mut app, SettingRow::WindowSize);
+    app.change_settings(changed(&app, |settings| {
+        settings.set_window_size(WindowSize::new(900, 700))
+    }));
+
+    app.update(Action::Right);
+    assert_eq!(app.settings().window_size(), WindowSize::PRESETS[2]);
+
+    app.change_settings(changed(&app, |settings| {
+        settings.set_window_size(WindowSize::new(900, 700))
+    }));
+    app.update(Action::Left);
+    assert_eq!(app.settings().window_size(), WindowSize::PRESETS[1]);
 }
 
 #[test]

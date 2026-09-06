@@ -3429,10 +3429,6 @@ const DATE_STYLES: [DateStyle; 3] = [
     DateStyle::MonthFirst,
 ];
 
-/// How much of the window `h` and `l` are worth, in logical pixels on
-/// each side. A size is typed when it has to be exact.
-const WINDOW_STEP: i64 = 10;
-
 /// The value a settings row is stepped to by `h` and `l`: the state on
 /// that side of the one it holds, and the state it holds when there is
 /// none, so the ends of a row stop rather than wrap. Every setter holds
@@ -3465,12 +3461,7 @@ fn stepped(settings: &Settings, row: SettingRow, forward: bool) -> Settings {
         }
         SettingRow::FloatingWindow => next.set_floating_window(forward),
         SettingRow::WindowSize => {
-            let size = settings.window_size();
-            let by = if forward { WINDOW_STEP } else { -WINDOW_STEP };
-            next.set_window_size(WindowSize::new(
-                i64::from(size.width) + by,
-                i64::from(size.height) + by,
-            ));
+            next.set_window_size(next_preset(settings.window_size(), forward))
         }
         SettingRow::Mouse => next.set_mouse(forward),
         SettingRow::DateOrder => {
@@ -3519,6 +3510,23 @@ fn cycled(settings: &Settings, row: SettingRow) -> Settings {
         | SettingRow::MessageSeconds => {}
     }
     next
+}
+
+/// The preset on one side of a size: the next one along from a preset,
+/// the nearest one that way from a size somebody typed, and the size
+/// itself when there is none, so the row stops at both ends.
+fn next_preset(size: WindowSize, forward: bool) -> WindowSize {
+    let here = (size.width, size.height);
+    let mut beyond = WindowSize::PRESETS
+        .into_iter()
+        .filter(|preset| ((preset.width, preset.height) > here) == forward)
+        .filter(|preset| (preset.width, preset.height) != here);
+    if forward {
+        beyond.next()
+    } else {
+        beyond.next_back()
+    }
+    .unwrap_or(size)
 }
 
 fn date_style_at(settings: &Settings) -> usize {
