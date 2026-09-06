@@ -354,7 +354,7 @@ def p01():
           [('⏎', 'next step'), ('esc', 'skip')])
     page('01-review', 'Morning review: the pile', [('120×36 · floating window', g)], '''
 <h2>Morning review, step 1: the pile</h2>
-<p>Shown once per day, on the first open of a work day, when the pile is non-empty. Full window: the review is a ritual, not a sidebar. Later opens that day go straight to Today. An empty pile skips the step.</p>
+<p>Shown once per day, on the first open of a work day, when the pile is non-empty and the review is set to open itself; otherwise <kbd>M</kbd> opens it. Full window: the review is a ritual, not a sidebar. Later opens that day go straight to Today. An empty pile skips the step.</p>
 <ol>
 <li>The status line becomes a step indicator. Escape (or closing the window) leaves the pile intact; the home screen then shows the red count until it is dealt with.</li>
 <li>Grouped by the day the task was planned for, newest first, with relative age on old groups; the age is on the group, not repeated on every row. Nothing is carried over automatically.</li>
@@ -395,7 +395,7 @@ def p02():
 <h2>Morning review, step 2: surfaced</h2>
 <p>Backlog tasks whose date has arrived. Surfacing is a prompt, not a move: a task stays in the backlog until pulled with <kbd>t</kbd>. If nothing surfaced, the step is skipped.</p>
 <ol>
-<li>Due-by tasks: shown from the due date on, every morning, until closed or re-dated. Overdue ones say how far over.</li>
+<li>Due-by tasks: shown from the due date on, or as many days before it as the settings look ahead, every morning until closed or re-dated. Overdue ones say how far over.</li>
 <li>Remind-on tasks: shown on that date only.</li>
 <li>Waiting tasks are not nagged about: shown dimmed for a reminder, never in the due group.</li>
 <li>Recurring copies created for today, for information only. They are already on the plan. The one place the app says what it did on its own.</li>
@@ -552,7 +552,7 @@ def p06():
 <li>Three ways in: typed text ("30 sep", "mon", "+3"), quick picks on Alt plus a digit, or the calendar. The text field has focus, so digits and letters type; <kbd>tab</kbd> moves focus to the calendar, where <kbd>h/l/j/k</kbd> work as keys again. Clearing is a pick, not a separate action.</li>
 <li><kbd>w</kbd> toggles waiting and moves the row under Waiting. No reason text; it is a flag. Waiting tasks keep their dates but only reminders surface them.</li>
 </ol>
-<div class="flow"><b>Due vs remind, in the review</b>Due: surfaces every morning from the date on. Remind: surfaces once, on the date. Both keep the task in the backlog until <kbd>t</kbd> pulls it.</div>
+<div class="flow"><b>Due vs remind, in the review</b>Due: surfaces every morning from the date on, or from as many days before it as the settings look ahead. Remind: surfaces once, on the date. Both keep the task in the backlog until <kbd>t</kbd> pulls it.</div>
 <p>Dates are only offered in the backlog; a task on a day already has a date. Moving a dated backlog task to a day keeps the chips.</p>''')
 
 
@@ -599,7 +599,7 @@ def p07():
 <li>The card previews the next dates so "1st of the month" and "every 2 weeks" are unambiguous before saving.</li>
 <li>All schedules are listed at the bottom of the backlog pane, collapsed by default, so there is somewhere to see and edit them without a fourth "place" for tasks.</li>
 </ol>
-<div class="flow"><b>What a schedule does</b>On launch, for each scheduled date since the last launch, a fresh copy is placed at the end of that day's plan (not Focus). Copies for past days land on the pile like any other unfinished task.</div>
+<div class="flow"><b>What a schedule does</b>On launch, for each scheduled date since the last launch that the backfill setting still reaches, a fresh copy is placed at the end of that day's plan (not Focus). Copies for past days land on the pile like any other unfinished task.</div>
 <div class="flow"><b>Editing a copy's title</b><kbd>e</kbd> on a copy asks: this copy only, or this and future copies. Past copies never change.</div>''')
 
 
