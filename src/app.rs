@@ -7,9 +7,14 @@ use tracing::warn;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::domain::{
-    self, BacklogView, Change, Command, DayList, DayView, Id, Model, MonthDay, NotesView, Pile,
-    Place, Rule, SearchResults, Store, StoreError, Surfaced, Weekday, Write,
+    self, BacklogView, Change, Command, Context, DayList, DayView, Id, Model, MonthDay, NotesView,
+    Pile, Place, Rule, SearchResults, Settings, Store, StoreError, Surfaced, Weekday, Write,
 };
+
+/// The two domain types the desktop is spoken to in. They cross that
+/// seam through here so that `desktop` never names the domain
+/// (ARCHITECTURE.md section 2).
+pub use crate::domain::{DateOrder, WindowSize};
 use crate::input::{
     self, Action, Binding, Field, KeyContext, NotesPane, Pane, PopupKind, ReviewStep, Shown,
 };
@@ -27,6 +32,27 @@ const PREVIEW: usize = 3;
 /// number (DOMAIN.md section 11); a hundred is more than a day's work and
 /// small enough to load with everything else.
 const UNDO_CAP: usize = 100;
+
+/// What the window manager can be asked to do about the window the
+/// program is in. The application never names one: `main.rs` hands it
+/// whatever is out there, and a machine with no window manager it knows
+/// gets an implementation that says so.
+pub trait Desktop {
+    /// Whether there is a window manager here to ask.
+    fn available(&self) -> bool;
+
+    /// Puts the window rule where the window manager reads it, or says
+    /// in one sentence why it could not.
+    fn apply_window(&self, floating: bool, size: WindowSize) -> Result<(), String>;
+}
+
+/// What the environment says about the person at the keyboard. The
+/// domain reads no environment, so `main.rs` resolves this once and the
+/// application settles it against the `date_style` setting.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct Locale {
+    pub dates: DateOrder,
+}
 
 /// Whether the event loop goes round again.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -520,6 +546,10 @@ struct Views {
 
 pub struct App {
     store: Box<dyn Store>,
+    desktop: Box<dyn Desktop>,
+    /// What the environment writes dates like, which the `date_style`
+    /// setting may override.
+    locale: Locale,
     model: Model,
     /// The database version the model was loaded at, so a change made by
     /// another window can be noticed.
@@ -562,16 +592,24 @@ impl App {
     /// Loads the model and runs the launch sequence: the recurring copies
     /// for every scheduled date since the last launch, and then the
     /// review gate.
-    pub fn new(store: Box<dyn Store>, now: &Zoned) -> Result<App, StoreError> {
+    pub fn new(
+        store: Box<dyn Store>,
+        desktop: Box<dyn Desktop>,
+        locale: Locale,
+        now: &Zoned,
+    ) -> Result<App, StoreError> {
         let model = store.load()?;
         let version = store.version()?;
+        let today = model.settings.working_day(now);
 
         let mut app = App {
             store,
+            desktop,
+            locale,
             model,
             version,
-            today: domain::working_day(now),
-            showing: domain::working_day(now),
+            today,
+            showing: today,
             views: Views::default(),
             page: Page::Home,
             pane: Pane::Day,
@@ -642,7 +680,7 @@ impl App {
                 // The clock is read here and nowhere else, so the date
                 // rolling over while the window is open is just a tick.
                 let now = self.now();
-                let today = domain::working_day(&now);
+                let today = self.model.settings.working_day(&now);
                 let rolled = today != self.today;
                 // A pane that was on today follows the day over; one
                 // stepped back stays on the day it was looking at.
@@ -758,6 +796,70 @@ impl App {
     }
 
     /// The instant an action happens at, read once per action.
+    /// What the domain is told about the world outside it, made afresh
+    /// for every action because the clock has moved.
+    fn context(&self) -> Context {
+        Context {
+            now: self.now(),
+            undo_cap: UNDO_CAP,
+            dates: self.dates(),
+        }
+    }
+
+    /// The settings the program is running with.
+    pub fn settings(&self) -> &Settings {
+        &self.model.settings
+    }
+
+    /// Which way round a date is written: what the setting says, or what
+    /// the locale does where the setting leaves it to the locale.
+    pub fn dates(&self) -> DateOrder {
+        match self.model.settings.date_style() {
+            domain::DateStyle::Locale => self.locale.dates,
+            domain::DateStyle::DayFirst => DateOrder::DayFirst,
+            domain::DateStyle::MonthFirst => DateOrder::MonthFirst,
+        }
+    }
+
+    /// The settings the program runs with from now on, or the sentence
+    /// saying why not.
+    ///
+    /// The day may now start at another hour, so the working day is
+    /// worked out again and a pane that was on today follows it. A window
+    /// setting is the window manager's to keep, so it is handed over the
+    /// moment it changes rather than at the next launch.
+    pub fn change_settings(&mut self, settings: Settings) {
+        self.reload_if_stale();
+        let window = (settings.floating_window(), settings.window_size());
+        let was = (
+            self.model.settings.floating_window(),
+            self.model.settings.window_size(),
+        );
+        let change = match domain::change_settings(&self.model, settings) {
+            Ok(change) => change,
+            Err(rejected) => {
+                self.say(rejected.to_string(), false);
+                return;
+            }
+        };
+        if self.commit(&change).is_none() {
+            return;
+        }
+
+        let today = self.model.settings.working_day(&self.now());
+        if self.showing == self.today {
+            self.showing = today;
+        }
+        self.today = today;
+        self.refresh();
+
+        if window != was
+            && let Err(why) = self.desktop.apply_window(window.0, window.1)
+        {
+            self.say(why, false);
+        }
+    }
+
     fn now(&self) -> Zoned {
         #[cfg(test)]
         return self.clock.clone();
@@ -1010,8 +1112,7 @@ impl App {
     /// caller can find the row it created.
     fn run(&mut self, command: Command) -> Option<Change> {
         self.reload_if_stale();
-        let now = self.now();
-        let change = match domain::apply(&self.model, command, &now, UNDO_CAP) {
+        let change = match domain::apply(&self.model, command, &self.context()) {
             Ok(change) => change,
             Err(rejected) => {
                 self.say(rejected.to_string(), false);
@@ -1058,8 +1159,7 @@ impl App {
     /// (DOMAIN.md section 11).
     fn undo(&mut self) {
         self.reload_if_stale();
-        let now = self.now();
-        let undone = match domain::undo(&self.model, &now) {
+        let undone = match domain::undo(&self.model, &self.context()) {
             Ok(undone) => undone,
             Err(rejected) => {
                 self.say(rejected.to_string(), false);

@@ -1,9 +1,55 @@
 use super::*;
 
+use std::cell::RefCell;
+use std::rc::Rc;
+
 use jiff::civil::Date;
 
 use crate::domain::tests::MemStore;
-use crate::domain::{Change, Placement, Rule, Schedule, Task, Write};
+use crate::domain::{Change, Placement, Rule, Schedule, Task, WorkDays, Write};
+
+/// A window manager a test can question: what it was told, and whether
+/// it was there to be told at all.
+#[derive(Clone)]
+struct Desk {
+    here: bool,
+    told: Rc<RefCell<Vec<(bool, WindowSize)>>>,
+}
+
+impl Desk {
+    fn here() -> Desk {
+        Desk {
+            here: true,
+            told: Rc::new(RefCell::new(Vec::new())),
+        }
+    }
+
+    fn absent() -> Desk {
+        Desk {
+            here: false,
+            ..Desk::here()
+        }
+    }
+
+    fn told(&self) -> Vec<(bool, WindowSize)> {
+        self.told.borrow().clone()
+    }
+}
+
+impl Desktop for Desk {
+    fn available(&self) -> bool {
+        self.here
+    }
+
+    fn apply_window(&self, floating: bool, size: WindowSize) -> Result<(), String> {
+        self.told.borrow_mut().push((floating, size));
+        if self.here {
+            Ok(())
+        } else {
+            Err("Hyprland is not here; the setting is kept for when it is.".to_owned())
+        }
+    }
+}
 
 /// A store that refuses to write, so that a failed commit can be seen to
 /// leave the model as it was (ARCHITECTURE.md rule 10).
@@ -40,7 +86,7 @@ fn on(text: &str) -> Date {
 fn reviewed(mut model: Model) -> Model {
     model.meta.insert(
         "review_on".to_owned(),
-        domain::working_day(&at(NOW)).to_string(),
+        model.settings.working_day(&at(NOW)).to_string(),
     );
     model
 }
@@ -55,7 +101,28 @@ fn set_meta(key: &str, value: &str) -> Change {
 }
 
 fn app_at(store: MemStore, now: &str) -> App {
-    App::new(Box::new(store), &at(now)).expect("an app")
+    App::new(
+        Box::new(store),
+        Box::new(Desk::here()),
+        Locale::default(),
+        &at(now),
+    )
+    .expect("an app")
+}
+
+/// An app on a window manager the test holds a second handle on.
+fn app_on(store: MemStore, desk: &Desk, now: &str) -> App {
+    App::new(
+        Box::new(store),
+        Box::new(desk.clone()),
+        Locale::default(),
+        &at(now),
+    )
+    .expect("an app")
+}
+
+fn app_in(store: MemStore, locale: Locale, now: &str) -> App {
+    App::new(Box::new(store), Box::new(Desk::here()), locale, &at(now)).expect("an app")
 }
 
 fn started() -> App {
@@ -113,7 +180,7 @@ fn hint(app: &App) -> String {
 /// today, which no key can make until phase 8.
 fn with_a_recurring_copy() -> (App, Id) {
     let now = at(NOW);
-    let today = domain::working_day(&now);
+    let today = Settings::default().working_day(&now);
     let mut model = Model::empty();
     model.schedules.insert(
         1,
@@ -2792,7 +2859,13 @@ fn a_change_that_cannot_be_saved_is_a_hint_and_not_a_crash() {
     let mut app = app_at(store.clone(), NOW);
     add(&mut app, "Book dentist");
 
-    let mut app = App::new(Box::new(Broken(store)), &at(NOW)).expect("an app");
+    let mut app = App::new(
+        Box::new(Broken(store)),
+        Box::new(Desk::here()),
+        Locale::default(),
+        &at(NOW),
+    )
+    .expect("an app");
     app.update(Action::Delete);
 
     assert_eq!(hint(&app), "The change could not be saved.");
@@ -2883,4 +2956,95 @@ fn the_editing_keys_take_a_whole_cluster_at_a_time() {
         Some(format!("ca{family}!")),
         "Backspace took the `f` and Delete the whole `e` with its accent"
     );
+}
+
+// ---- settings --------------------------------------------------------
+
+/// A settings change with one field moved, the way the page will make it.
+fn changed(app: &App, change: impl FnOnce(&mut Settings)) -> Settings {
+    let mut settings = app.settings().clone();
+    change(&mut settings);
+    settings
+}
+
+#[test]
+fn a_later_day_start_puts_the_morning_back_on_yesterday() {
+    let mut app = app_at(
+        MemStore::holding(reviewed(Model::empty())),
+        "2025-09-05T07:00:00+02:00[Europe/Copenhagen]",
+    );
+    assert_eq!(app.today(), on("2025-09-05"));
+
+    app.change_settings(changed(&app, |settings| settings.set_day_starts_at(8)));
+
+    assert_eq!(app.today(), on("2025-09-04"));
+    assert_eq!(app.showing(), on("2025-09-04"), "the pane follows today");
+    assert_eq!(app.settings().day_starts_at(), 8);
+}
+
+#[test]
+fn a_week_with_no_work_day_in_it_is_refused_and_says_why() {
+    let mut app = started();
+
+    app.change_settings(changed(&app, |settings| {
+        settings.set_work_days(WorkDays::of([]))
+    }));
+
+    assert_eq!(
+        hint(&app),
+        "At least one day of the week must be a work day."
+    );
+    assert_eq!(app.settings(), &Settings::default());
+}
+
+#[test]
+fn a_changed_window_setting_reaches_the_window_manager() {
+    let desk = Desk::here();
+    let mut app = app_on(MemStore::holding(reviewed(Model::empty())), &desk, NOW);
+
+    app.change_settings(changed(&app, |settings| {
+        settings.set_window_size(WindowSize::new(1200, 800))
+    }));
+    assert_eq!(desk.told(), [(true, WindowSize::new(1200, 800))]);
+
+    // A setting that is nothing to do with the window leaves it alone.
+    app.change_settings(changed(&app, |settings| settings.set_confirm_delete(true)));
+    assert_eq!(desk.told().len(), 1);
+}
+
+#[test]
+fn a_window_manager_that_is_not_there_says_so_in_the_hint_bar() {
+    let desk = Desk::absent();
+    let mut app = app_on(MemStore::holding(reviewed(Model::empty())), &desk, NOW);
+
+    app.change_settings(changed(&app, |settings| {
+        settings.set_floating_window(false)
+    }));
+
+    assert_eq!(
+        hint(&app),
+        "Hyprland is not here; the setting is kept for when it is."
+    );
+    assert!(
+        !app.settings().floating_window(),
+        "the setting is kept for when there is a window manager to take it"
+    );
+}
+
+#[test]
+fn the_date_order_is_the_locale_until_a_setting_says_otherwise() {
+    let month_first = Locale {
+        dates: DateOrder::MonthFirst,
+    };
+    let mut app = app_in(
+        MemStore::holding(reviewed(Model::empty())),
+        month_first,
+        NOW,
+    );
+    assert_eq!(app.dates(), DateOrder::MonthFirst);
+
+    app.change_settings(changed(&app, |settings| {
+        settings.set_date_style(domain::DateStyle::DayFirst)
+    }));
+    assert_eq!(app.dates(), DateOrder::DayFirst);
 }
