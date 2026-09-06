@@ -3172,3 +3172,46 @@ fn added_task(change: &Change) -> Option<Id> {
         _ => None,
     })
 }
+
+/// The window settings, set from the command line rather than from the
+/// page.
+///
+/// `jobsdone desktop` is how the install script asks for the window it
+/// was told to ask for, and how a machine that gains a Hyprland later
+/// gets the rule written. None of the rest of a launch happens
+/// here: no copies are made and no review is opened, so the command never
+/// spends the day's review. A flag that was not passed leaves its setting
+/// alone.
+///
+/// What comes back is the one line the command prints; the error is what
+/// the window manager said, the settings being saved either way.
+pub fn set_window(
+    store: &mut dyn Store,
+    desktop: &dyn Desktop,
+    floating: Option<bool>,
+    size: Option<WindowSize>,
+) -> Result<String, String> {
+    let mut model = store.load().map_err(|error| error.to_string())?;
+    let mut settings = model.settings.clone();
+    if let Some(floating) = floating {
+        settings.set_floating_window(floating);
+    }
+    if let Some(size) = size {
+        settings.set_window_size(size);
+    }
+
+    let change = domain::change_settings(&model, settings).map_err(|why| why.to_string())?;
+    if !change.writes.is_empty() {
+        store.commit(&change).map_err(|error| error.to_string())?;
+        model.apply(&change);
+    }
+
+    let floating = model.settings.floating_window();
+    let size = model.settings.window_size();
+    desktop.apply_window(floating, size)?;
+    Ok(if floating {
+        format!("the window floats at {}x{}", size.width, size.height)
+    } else {
+        "the window tiles".to_owned()
+    })
+}

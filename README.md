@@ -28,6 +28,16 @@ to the app; if the key is taken it says by what and leaves it to you.
 Running `make install` again updates everything in place, and `make
 uninstall` removes it all except your data.
 
+For other keys or another window, run the script itself:
+
+    scripts/install --keybind "SUPER + ALT + J" --size 1000x700
+    scripts/install --no-keybind --tiled
+
+The window flags are settings the app keeps, so a later install leaves
+them alone, the settings page changes them without an install, and
+`jobsdone desktop [--floating | --tiled] [--size WxH]` writes the
+Hyprland rule again from a terminal.
+
 On a Linux desktop that is not Omarchy the launcher entry opens the app
 in the default terminal. For a floating window, add a rule for the
 terminal window in your compositor's configuration; the app never sizes
@@ -44,8 +54,8 @@ how it looks and behaves, and `wireframes/index.html` shows every screen.
 ## Files
 
 The database is at `~/.local/share/jobsdone/jobsdone.db` and is the
-only thing worth backing up. The log is at
-`~/.local/state/jobsdone/jobsdone.log`. There is no configuration.
+only thing worth backing up: the settings are in it too. The log is at
+`~/.local/state/jobsdone/jobsdone.log`. There is no configuration file.
 
 ## Development
 

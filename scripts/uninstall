@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Remove what scripts/install put in place: the binary, the launcher entry
-# and icon, and the Hyprland block. The data and the log stay where they
-# are; the last line says where.
+# and icon, and the blocks in Hyprland's bindings file. The data and the
+# log stay where they are; the last line says where.
 set -euo pipefail
 
 DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
@@ -11,10 +11,31 @@ STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
 DESKTOP_FILE="$DATA_HOME/applications/jobsdone.desktop"
 ICON_FILE="$DATA_HOME/icons/hicolor/scalable/apps/jobsdone.svg"
 BINDINGS="$CONFIG_HOME/hypr/bindings.lua"
-BEGIN="-- jobsdone: begin (written by scripts/install; scripts/uninstall removes it)"
-END="-- jobsdone: end"
+
+# The keybind is the install script's block and the window rule is the
+# program's own; some machines have a single block holding both.
+BLOCKS=(
+    "-- jobsdone: keybind (begin)"  "-- jobsdone: keybind (end)"
+    "-- jobsdone: window (begin)"   "-- jobsdone: window (end)"
+    "-- jobsdone: begin"            "-- jobsdone: end"
+)
 
 say() { printf '%s\n' "$*"; }
+
+remove_block() {
+    local begin="$1" end="$2"
+    grep -qF -- "$begin" "$BINDINGS" || return 1
+    # The block, and the blank line that was under it, so that taking it
+    # out and putting it back leaves the file as it was.
+    awk -v begin="$begin" -v end="$end" '
+        index($0, begin) == 1 { inside = 1 }
+        inside { if (index($0, end) == 1) { inside = 0; blank = 1 } next }
+        blank && $0 ~ /^[[:space:]]*$/ { blank = 0; next }
+        { blank = 0; print }
+    ' "$BINDINGS" > "$BINDINGS.jobsdone"
+    printf '%s\n' "$(cat "$BINDINGS.jobsdone")" > "$BINDINGS"
+    rm -f "$BINDINGS.jobsdone"
+}
 
 if [ -e "$HOME/.local/bin/jobsdone" ]; then
     if command -v cargo >/dev/null && cargo install --list --root "$HOME/.local" 2>/dev/null | grep -q '^jobsdone '; then
@@ -29,17 +50,18 @@ rm -f "$DESKTOP_FILE" "$ICON_FILE"
 command -v update-desktop-database >/dev/null && update-desktop-database "$(dirname "$DESKTOP_FILE")" 2>/dev/null || true
 say "removed the launcher entry"
 
-if [ -f "$BINDINGS" ] && grep -qF -- "$BEGIN" "$BINDINGS"; then
-    python3 - "$BINDINGS" "$BEGIN" "$END" <<'PY'
-import re, sys
-path, begin, end = sys.argv[1:]
-text = open(path).read()
-pattern = re.compile(r"\n?" + re.escape(begin) + r".*?" + re.escape(end) + r"\n?", re.S)
-open(path, "w").write(pattern.sub("\n", text, count=1).rstrip("\n") + "\n")
-PY
-    say "removed the Hyprland block from $BINDINGS"
-    if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && command -v hyprctl >/dev/null; then
-        hyprctl reload >/dev/null && say "Hyprland reloaded"
+if [ -f "$BINDINGS" ]; then
+    removed=no
+    for ((i = 0; i < ${#BLOCKS[@]}; i += 2)); do
+        if remove_block "${BLOCKS[i]}" "${BLOCKS[i + 1]}"; then
+            removed=yes
+        fi
+    done
+    if [ "$removed" = yes ]; then
+        say "removed the jobsdone blocks from $BINDINGS"
+        if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && command -v hyprctl >/dev/null; then
+            hyprctl reload >/dev/null && say "Hyprland reloaded"
+        fi
     fi
 fi
 

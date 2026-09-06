@@ -158,6 +158,15 @@ Rejected:
 and runs again to update in place; `scripts/uninstall` takes everything
 out and leaves the data. It works on any Linux and does more on Omarchy.
 
+    scripts/install [--keybind [KEYS] | --no-keybind] [--floating | --tiled] [--size WxH]
+
+`--keybind` binds KEYS, or `SUPER + SHIFT + J` when none are given;
+`--no-keybind` binds nothing; with neither, the keybind is offered at the
+prompt when a terminal is attached and skipped otherwise. The window flags
+are settings rather than script arguments: they are passed to `jobsdone
+desktop`, and a flag left off keeps the setting as it is, so a second
+install does not undo what the settings page said.
+
 Everywhere:
 
 - The binary, with `cargo install --path . --root ~/.local`, so it lands
@@ -177,20 +186,42 @@ On Omarchy, recognised by `/usr/share/omarchy` and `omarchy-launch-tui`:
   match. `org.omarchy.<name>` is the id Omarchy gives every TUI it
   launches, and the same id is what `o.bind` with `{ tui = "jobsdone" }`
   produces.
-- A marked block in `~/.config/hypr/bindings.lua`, the file Omarchy
-  keeps for personal bindings, holding the window rule and the keybind:
+- The keybind, in the install script's own block in
+  `~/.config/hypr/bindings.lua`, the file Omarchy keeps for personal
+  bindings, between `-- jobsdone: keybind (begin)` and
+  `-- jobsdone: keybind (end)`:
+
+      o.bind("SUPER + SHIFT + J", "Jobsdone", { tui = "jobsdone" })
+
+  The line is written only when the keys are free, as `hyprctl binds`
+  reports them (or the bindings file, when Hyprland is not running), and
+  the person says yes at the prompt or passes `--keybind`. The keys asked
+  about are the keys given: the script reads them into the modmask and key
+  Hyprland answers with (SUPER 64, SHIFT 1, CTRL 4, ALT 8), so any keys
+  are checked as exactly as the default ones. A bind of our own is not
+  somebody else's, and neither is one the person already has in this
+  block, whose keys a plain re-install keeps.
+- The window rule, in the program's own block, between
+  `-- jobsdone: window (begin)` and `-- jobsdone: window (end)`:
 
       o.window("org.omarchy.jobsdone", { float = true, center = true, size = { 870, 650 } })
-      o.bind("SUPER + SHIFT + J", "Jobsdone", { tui = "jobsdone" })
 
   870 by 650 pixels is 120 by 36 cells in foot with Omarchy's default
   font (JetBrainsMono Nerd Font 9) and 14-pixel padding, measured on a
   clean install. Hyprland sizes in logical pixels, so the count holds on
-  a scaled monitor too. The keybind line is written only when the key is
-  free, as `hyprctl binds` reports it (or the bindings file, when
-  Hyprland is not running), and the person says yes at the prompt or
-  passes `--keybind`. After writing, the script reloads Hyprland and
-  fails loudly if `hyprctl configerrors` has anything to say.
+  a scaled monitor too. The rule is the `floating_window` and
+  `window_size` settings written out (section 8), so the settings page
+  changes it with no install at all; a tiled window is the two markers
+  with nothing between them. `jobsdone desktop [--floating | --tiled]
+  [--size WxH]` is what writes it, and the install script runs it once the
+  binary is in place, passing on the window flags it was given. Writing
+  reloads Hyprland and fails loudly if `hyprctl configerrors` has anything
+  to say.
+
+Some machines have one block instead, `-- jobsdone: begin` to
+`-- jobsdone: end`, holding both. An install that finds it takes it out,
+keeping the keys it bound, and writes the two blocks in its place;
+`scripts/uninstall` removes all three.
 
 foot is the reference terminal. alacritty, ghostty and kitty are reached
 through the same `xdg-terminal-exec`, each installed and made the default
