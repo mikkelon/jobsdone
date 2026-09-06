@@ -88,9 +88,9 @@ Everything the program does to its data goes through four domain types.
 
 **`Model`** is the whole state as a value: every live and deleted task,
 placement, schedule, note, the undo stack, the meta table and the
-settings, loaded from storage in one go. It is small enough that loading it is well under a
-millisecond (STACK.md section 3). Views are pure functions of a `Model`
-and a date.
+settings, loaded from storage in one go. It is small enough that loading
+it is well under a millisecond (STACK.md section 3). Views are pure
+functions of a `Model` and a date.
 
 **`Command`** is one of the commands in DOMAIN.md section 12. It carries
 task and schedule ids, never cursor positions.
@@ -280,14 +280,13 @@ adds it here first, the way a new dependency is added to section 2 first.
   and in text fields `Insert(char)` and the editing keys.
 - `KeyContext`: `Home { pane, day }`, `Notes { pane }`,
   `Settings { field }`, `Review { step, asks }`, `Popup { kind }`, each
-  with a text-field
-  overlay, and
-  `KeyContext::text_field()` to read it. The settings page's overlay is a
-  bool rather than a `Field`, because the page has one kind of field and
-  nothing to tell apart. Home's overlay is a
+  with a text-field overlay, and `KeyContext::text_field()` to read it.
+  Home's overlay is a
   `Option<Field>` rather than a bool, because the hint bar has to say
   which field it is: adding keeps the field open after Enter and
-  renaming does not. Home also carries a `Shown`, which day the day pane
+  renaming does not. The settings page's is a bool: it has one kind of
+  field, so there is nothing to tell apart.
+  Home also carries a `Shown`, which day the day pane
   is on, because history is the same page stepped to another day and its
   keys differ there: `t` puts a task from a day that has passed onto
   today, and the pane beside it is the list of days rather than the
@@ -378,8 +377,8 @@ adds it here first, the way a new dependency is added to section 2 first.
   is a task, a schedule, a note, a day or a setting, because the backlog
   pane draws the schedules under its tasks, the notes page has its own
   list, the day list's rows are dates rather than rows of the model, and
-  the settings page's are settings. `app` may
-  not name ratatui, so the rectangle is its own.
+  the settings page's are settings. `app` may not name ratatui, so the
+  rectangle is its own.
   `App::set_layout(Layout)` stores the last one and the mouse actions are
   resolved against it.
 - Read access to the model and the application state for `ui`:
@@ -390,15 +389,13 @@ adds it here first, the way a new dependency is added to section 2 first.
   `palette_rows`, `search_results`, `move_choices`, `date_choices`,
   `repeat_preview`, `draft`, `setting_draft` and `layout`.
   `Page` is `Home`, `Notes` or `Settings`, and the review is none of the
-  three: it is a mode
-  over the page, `Review`, which the window draws instead of the panes
-  while it is there. It holds the step on screen, the `Pile` and
+  three: it is a mode over the page, `Review`, which the window draws
+  instead of the panes while it is there. It holds the step on screen, the `Pile` and
   `Surfaced` each step opened with, and the `Decided` made for each row,
   and it answers `step`, `steps`, `pile`, `surfaced`, `decision` and
   `progress`. `List` is `Day`, `Backlog`, `Days`, `Notes`, `Review` or
-  `Settings`,
-  one cursor each, held by id, `Days` being the list the backlog pane
-  becomes while the day pane is on another day; `Popup` carries the kind, the text typed into
+  `Settings`, one cursor each, held by id, `Days` being the list the
+  backlog pane becomes while the day pane is on another day; `Popup` carries the kind, the text typed into
   it, the caret, the selected row, the row it is about, and the `Card` it
   is building before Enter turns it into a command, which for the date
   card is the day it is on and which of its two controls has the
