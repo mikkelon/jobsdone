@@ -17,8 +17,8 @@ The terminal module owns the loop and the raw-mode side effects.
 
 ## 1. Modules
 
-One crate, `jobsdone`, with `lib.rs` declaring six top-level modules and a
-thin `main.rs`. Each module is `src/<module>.rs` plus, when it needs more
+One crate, `jobsdone`, with `lib.rs` declaring seven top-level modules and
+a thin `main.rs`. Each module is `src/<module>.rs` plus, when it needs more
 than one file, `src/<module>/*.rs`.
 
 | Module     | Responsibility                                                                                                  |
@@ -29,7 +29,8 @@ than one file, `src/<module>/*.rs`.
 | `app`      | Application state, the launch sequence, reloading, turning actions into commands, and the screen layout.        |
 | `ui`       | Drawing: application state in, a ratatui frame out, plus the layout of what was drawn.                          |
 | `terminal` | Raw mode, alternate screen, mouse capture, the panic hook, and the event loop with its 250 ms tick.              |
-| `main.rs`  | XDG paths, logging to the state directory, opening storage, running the terminal.                               |
+| `desktop`  | The window rule the program keeps for itself: the block in Hyprland's configuration, and the reload.             |
+| `main.rs`  | XDG paths, the locale, logging to the state directory, opening storage, building the desktop, running the terminal. |
 
 Anything not on this list is not a top-level module. Helpers live inside
 the module that needs them.
@@ -49,7 +50,8 @@ means none. Names are separated by commas.
 | `app`      | domain, input         | jiff, tracing, unicode_segmentation |
 | `ui`       | domain, app, input    | ratatui, jiff, unicode_width, unicode_segmentation |
 | `terminal` | app, ui, input        | crossterm, ratatui, tracing    |
-| `main.rs`  | storage, app, terminal| jiff, tracing, tracing_subscriber, xdg |
+| `desktop`  | app                   | xdg                            |
+| `main.rs`  | storage, app, terminal, desktop | jiff, tracing, tracing_subscriber, xdg |
 
 What the table says, read as a picture, arrows pointing at what is
 depended on:
@@ -59,6 +61,7 @@ depended on:
                          ui -> input
                          terminal -> input
     main.rs -> app
+    main.rs -> desktop -> app
 
 Module names in the table may be wrapped in backticks; the test strips
 them, and normalises `-` to `_` so a crate is written the way a path writes
@@ -67,13 +70,17 @@ it.
 `main.rs` reads the clock once, at startup, for the `now` that `App::new`
 takes; that is the only place outside `app` that names `jiff`.
 
-Two absences are deliberate:
+Three absences are deliberate:
 
 - `app` does not depend on `storage`. It holds a `Box<dyn Store>` that
   `main.rs` hands it, and only ever sees the trait. Nothing under `app`
   can name a SQLite type.
 - `terminal` does not depend on `domain`. It moves events in and frames
   out; the application reads the clock and computes the working day.
+- `desktop` does not depend on `domain` either. It implements the
+  `Desktop` trait `app` defines, and the two domain types that trait is
+  written in, `WindowSize` and `DateOrder`, are re-exported by `app` so
+  that the window rule is written without naming a rule about tasks.
 
 ## 3. The core seam: model, command, change, store
 
@@ -103,10 +110,17 @@ task and schedule ids, never cursor positions.
 | `PopUndo(id)`               |                                               |
 | `TruncateUndo(cap)`         | Delete the lowest ids beyond the cap.         |
 | `SetMeta(key, value)`       |                                               |
+| `PutSettings(Settings)`     | Every settings row at once; the table is one value. |
 
 Whole rows, not fields. A renumbered place is one `PutTask` per shifted
 task. Phase 5 may add a variant; it may not add a second way to express
 an edit that a whole-row put already expresses.
+
+**`Context`** is what the domain is told about the world outside it:
+`Context { now: Zoned, undo_cap: usize, dates: DateOrder }`. The domain
+reads no clock, chooses no cap and knows no locale, so `apply` and `undo`
+take one of these in place of a bare instant. The application builds a
+fresh one per action.
 
 **`Store`** is the interface storage implements, defined in `domain`:
 
@@ -129,6 +143,18 @@ type, and so without depending on `domain`. An in-memory `Store` for tests
 is a `Model` and `Model::apply`, and it lives in `domain/tests.rs` as
 `pub(crate)` so that every module's tests can drive an app through it.
 
+**`Desktop`** is the same arrangement one seam over, defined in `app`:
+
+    trait Desktop {
+        fn available(&self) -> bool;
+        fn apply_window(&self, floating: bool, size: WindowSize) -> Result<(), String>;
+    }
+
+`main.rs` hands the application whichever window manager is out there, so
+`app` never names Hyprland and a test hands it a fake. The error is a
+sentence for the hint bar rather than a type, because there is nothing
+the application can do about it but say so.
+
 ### The path of one key press
 
 1. `terminal` reads an event and asks `input` for an `Action`, passing
@@ -137,7 +163,7 @@ is a `Model` and `Model::apply`, and it lives in `domain/tests.rs` as
    `Command`. It reads the clock once, here.
 3. If `store.version()` differs from the version the app last saw, the
    app reloads the model first.
-4. `domain::apply(&model, command, &now, undo_cap)` returns a `Change` or a
+4. `domain::apply(&model, command, &context)` returns a `Change` or a
    `Rejected` with the sentence for the hint bar.
 5. `store.commit(&change)`. On success `model.apply(&change)` and the
    version is re-read. On `Conflict` the change is dropped and the hint
@@ -158,7 +184,8 @@ when it happens.
 
 Only `app` reads the clock, once per action, with `jiff::Zoned::now()`.
 The domain receives an instant or a date and derives the working day
-itself (DOMAIN.md section 2). `terminal` never sees time at all; a tick is
+itself, from the hour `settings.day_starts_at` names (DOMAIN.md section
+2). `terminal` never sees time at all; a tick is
 an action like any other. Because that one call is the whole of it, a
 test's `App` keeps the instant it was built with instead, which is what
 lets a rule about days be tested without waiting for one.
@@ -176,12 +203,15 @@ adds it here first, the way a new dependency is added to section 2 first.
   `Surfaced`, `SearchResults`, `DayList`, `NotesView`. With them the small
   types those name: `Id`, `Place`, `FromPlace`, `Weekday`, `MonthDay`,
   `Write`, `Row`, `DueChip`, `DayCounts`, `PileDay`, `DayListRow`,
-  `DayStretch`, `Stretch`, `ScheduleRow`, `NoteRow`, `Undone`.
-- `apply(&Model, Command, now: &Zoned, undo_cap: usize) -> Result<Change,
-  Rejected>`: every user command. Pushes the undo entry as part of the
-  change. The cap is the length the undo stack is held to; the domain
-  does not choose the number, so the application passes it in.
-- `undo(&Model, now) -> Result<Undone, Rejected>`: pops the top entry and
+  `DayStretch`, `Stretch`, `ScheduleRow`, `NoteRow`, `Undone`. With them
+  the settings: `Settings`, `WeekStart`, `WorkDays`, `DateStyle`,
+  `DateOrder`, `WindowSize`, and the `Context` a command is given.
+- `apply(&Model, Command, &Context) -> Result<Change, Rejected>`: every
+  user command. Pushes the undo entry as part of the change. The context
+  carries the instant, the length the undo stack is held to and the order
+  dates are written in; the domain chooses none of the three, so the
+  application passes them in.
+- `undo(&Model, &Context) -> Result<Undone, Rejected>`: pops the top entry and
   returns its inverse's change with nothing pushed. `Undone` carries the
   change, the entry's label, the task the inverse was about where it was
   about one, because the cursor goes to it (DESIGN.md section 4), and,
@@ -194,11 +224,20 @@ adds it here first, the way a new dependency is added to section 2 first.
   operations. Neither touches the undo stack. Generation takes an instant
   rather than a date because the rows it writes carry `created_at` and
   `placed_at`.
+- `change_settings(&Model, Settings) -> Result<Change, Rejected>`: the
+  settings the program runs with from now on, as one `PutSettings`. Not
+  undoable and nothing on the stack, like the system operations; the
+  `Rejected` is the sentence the hint bar shows.
+- `Settings`: the whole of DOMAIN.md section 19 as one value. Its fields
+  are read one at a time and set one at a time, each setter holding what
+  it is given to the range; `Settings::from_pairs` and `to_pairs` are the
+  text codec storage moves rows with, and `Settings::working_day(&self,
+  instant) -> Date` is where every date the program calls today comes
+  from.
 - `Model::empty()` and `Model::apply(&mut self, &Change)`.
 - Views, each `(&Model, ...dates) -> value`: `day_view`, `backlog_view`,
-  `pile`, `surfaced`, `search`, `day_list`, `notes`, `next_dates`,
-  `working_day`, and `previous_review`, the lower bound of the reminder
-  window.
+  `pile`, `surfaced`, `search`, `day_list`, `notes`, `next_dates`, and
+  `previous_review`, the lower bound of the reminder window.
 - `pile_again(&Model, today, &Pile) -> Pile` and
   `surfaced_again(&Model, today, &Surfaced) -> Surfaced`: the same two
   views again, from the value a review opened with rather than from the
@@ -212,6 +251,10 @@ adds it here first, the way a new dependency is added to section 2 first.
   (DOMAIN.md section 2). It takes no model: the date card previews what
   is typed on every keystroke, and what a shape means is a rule whether
   or not there is anything to apply it to.
+- `day_label(date, DateOrder)`, `short_label(date, DateOrder)` and
+  `stamp_label(&Zoned, DateOrder)`: `Fri 5 Sep`, `5 Sep` and `Fri 5 Sep
+  08:12`, or the same with the month first. Which way round a date is
+  written is a rule, so nothing else in the program formats one.
 
 ### `storage`
 
@@ -280,9 +323,21 @@ adds it here first, the way a new dependency is added to section 2 first.
 
 ### `app`
 
-- `App::new(Box<dyn Store>, now) -> Result<App, StoreError>`: loads the
-  model and runs the launch sequence: `generate_copies`, then the review
-  gate and `start_review` if the review opens.
+- `App::new(Box<dyn Store>, Box<dyn Desktop>, Locale, now) ->
+  Result<App, StoreError>`: loads the model and runs the launch sequence:
+  `generate_copies`, then the review gate and `start_review` if the
+  review opens.
+- `Desktop`: what the window manager can be asked to do about the window
+  the program is in, `available()` and `apply_window(floating, size)`,
+  implemented by `desktop` and by a fake in the tests. `Locale` is what
+  the environment says dates look like here, which `main.rs` resolves
+  once. `WindowSize` and `DateOrder` are re-exported here so that both
+  seams are spoken in one vocabulary.
+- `App::settings() -> &Settings`, `App::dates() -> DateOrder`, the
+  setting resolved against the locale, and `App::change_settings(Settings)`,
+  which commits, works the day out again in case the day now starts at
+  another hour, refreshes the views and hands a changed window setting to
+  the desktop, whose answer the hint bar carries.
 - `App::update(&mut self, Action) -> Flow`, `Flow` being `Continue` or
   `Quit`. The single entry point for every event, ticks included.
 - `App::key_context() -> KeyContext`, and `App::page_context()` for the
@@ -331,6 +386,13 @@ adds it here first, the way a new dependency is added to section 2 first.
 ### `ui`
 
 - `draw(&App, &mut Frame) -> Layout`.
+
+### `desktop`
+
+- `Hyprland::here() -> Hyprland`: implements `app::Desktop` by writing the
+  block between `-- jobsdone: window (begin)` and `(end)` in
+  `$XDG_CONFIG_HOME/hypr/bindings.lua` and reloading a running Hyprland.
+  Off Hyprland `apply_window` says so in a sentence and writes nothing.
 
 ### `terminal`
 
@@ -437,6 +499,9 @@ section 2, in the commit that needs it, with the reason in the message.
 | Work                                              | Module            |
 |---------------------------------------------------|-------------------|
 | A rule about tasks, days, order, dates, schedules | `domain`          |
+| A setting: what it may hold, what it defaults to, what it means | `domain` |
+| The settings page and the keys that change a setting | `app`, `ui`   |
+| What a setting does outside the program            | `desktop` (the window), `terminal` (the mouse) |
 | A new view, count or annotation on a screen       | `domain` (the view), `ui` (its formatting) |
 | A migration or a change to how rows are written   | `storage`         |
 | A new key, or a key that means something new      | `input`           |

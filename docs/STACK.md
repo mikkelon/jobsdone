@@ -227,7 +227,9 @@ Rejected:
 ## 8. Files on disk
 
 The program follows the XDG base directory specification and has no
-configuration directory, because it has no configuration.
+configuration directory: what can be configured is in the database, in
+the `settings` table, which the settings page writes (DOMAIN.md section
+19).
 
 | Kind      | Path                             | Contents                        |
 |-----------|----------------------------------|---------------------------------|
@@ -236,26 +238,41 @@ configuration directory, because it has no configuration.
 
 With the defaults these are `~/.local/share/jobsdone/` and
 `~/.local/state/jobsdone/`. A backup of the data directory is a backup of
-everything that matters.
+everything that matters, settings included.
 
-Two environment variables are read, both for development and neither
-documented for users, because the program is still one with no
-configuration:
+The one file the program writes outside its own directories is the
+Hyprland window rule, in `$XDG_CONFIG_HOME/hypr/bindings.lua`, between
+its own markers. That file is Hyprland's rather than this program's; the
+block in it belongs to the program, and the `floating_window` and
+`window_size` settings are what it is written from (section 7).
 
-| Variable            | Effect                                        |
-|---------------------|-----------------------------------------------|
-| `JOBSDONE_DATA_DIR` | the data directory, in place of the XDG one   |
-| `JOBSDONE_LOG`      | the log level, `info` if unset                |
+The environment is read for four things:
 
-The log level is not read from `RUST_LOG`, so a variable set for some
-other tool cannot change what this one writes to disk.
+| Variable                       | Effect                                      |
+|--------------------------------|---------------------------------------------|
+| `LC_ALL`, `LC_TIME`, `LANG`    | which way round dates are written, the first one set winning, unless `date_style` says outright |
+| `HYPRLAND_INSTANCE_SIGNATURE`  | whether there is a Hyprland running to reload |
+| `JOBSDONE_DATA_DIR`            | the data directory, in place of the XDG one |
+| `JOBSDONE_LOG`                 | the log level, `info` if unset              |
+
+The last two are for development and are not documented for users. The
+log level is not read from `RUST_LOG`, so a variable set for some other
+tool cannot change what this one writes to disk. The locale is read once,
+at startup, in `main.rs`: month-first for the territories that write
+dates that way (US, PH, FM, MH, PW, GU, PR, VI, AS, MP, UM), and
+day-first for everything else, `C` and `POSIX` and an unset locale
+included.
 
 Rejected:
 
 - **Everything under one directory.** One place to look, but the log
   would sit next to the data it is not.
-- **`~/.config/jobsdone/`.** The most familiar per-app directory, but the
-  specification reserves it for configuration, and this program has none.
+- **A configuration file in `~/.config/jobsdone/`.** The most familiar
+  place to put settings, but a second file format to design, parse,
+  validate and keep in step with the database, for thirteen values that
+  several open windows already follow each other through `data_version`
+  to pick up. In the database they are one backup, one writer and one
+  reload path.
 
 ## 9. Errors and logging
 

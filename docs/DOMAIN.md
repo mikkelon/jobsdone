@@ -39,10 +39,12 @@ The domain never reads a clock. The application passes an instant (a
 zoned timestamp) into every command that needs one, and the domain
 derives the date from it:
 
-    working_day(instant) = civil date of (instant - 5 hours), local time
+    working_day(instant) = civil date of (instant - day_starts_at hours), local time
 
-So 01:30 on Saturday belongs to Friday. `DAY_STARTS_AT = 05:00` is a
-constant in the domain, not a setting. Every rule below that says "today"
+So 01:30 on Saturday belongs to Friday. The hour is
+`settings.day_starts_at`, which is 5 unless it has been changed (section
+19), so the working day is `model.settings.working_day(instant)` and no
+caller may work it out for itself. Every rule below that says "today"
 means the working day of the instant the command was given.
 
 Consequences:
@@ -51,6 +53,8 @@ Consequences:
 - Due and remind dates are compared with the working day.
 - A copy for date D is created when the working day reaches D.
 - The review gate compares working days.
+- Moving the hour moves all of these at once: the day the panes are on is
+  worked out again the moment the setting is saved.
 
 ### Representation
 
@@ -440,6 +444,12 @@ is one of the task commands above, or nothing at all in the case of
 | EditNote(note, body)  | live         | Sets body, `updated_at` = now. Not undoable. | none |
 | DeleteNote(note)      | live         | `deleted_at` = now.          | RestoreNote       |
 
+### Settings
+
+Changing a setting is not a command. `change_settings` stands beside
+GenerateCopies and StartReview: one write, not undoable, nothing on the
+stack (section 19).
+
 ## 13. The review
 
 ### The pile
@@ -613,6 +623,19 @@ CREATE TABLE undo_log (
 PRAGMA user_version = 1;
 ```
 
+The second migration adds the settings, which are data like everything
+else and so are in the database rather than in a file of their own
+(STACK.md section 8):
+
+```sql
+CREATE TABLE settings (
+    key    TEXT PRIMARY KEY,
+    value  TEXT NOT NULL
+);
+
+PRAGMA user_version = 2;
+```
+
 Notes on the schema:
 
 - `tasks.day` NULL is the backlog. Position density is the domain's
@@ -624,6 +647,12 @@ Notes on the schema:
   popped by deleting them; the cap is enforced by deleting the lowest
   ids.
 - `meta` keys: `review_on`, `review_before`.
+- `settings` keys are the ones in section 19, every value text. A
+  `PutSettings` writes the whole table: the rows are deleted and written
+  again in one transaction, because the settings are one value in the
+  model rather than thirteen. Loading is the same in reverse, so a
+  missing key is that setting's default and a key this build does not
+  know is ignored.
 
 ## 18. Every screen as a view
 
@@ -648,3 +677,50 @@ is drawn from.
 Two things the wireframes show that are not model state: the "moving"
 marker during a reorder and the text of a title being edited. Both are
 application state that becomes a command on Enter.
+
+## 19. Settings
+
+Thirteen settings, held in the `settings` table and loaded into the model
+as one typed value. The domain owns the type, its defaults, its
+validation and its codec; storage only moves the rows and the settings
+page only draws them.
+
+| Key                  | Type and range                         | Default    | Page label            | What it does |
+|----------------------|----------------------------------------|------------|-----------------------|--------------|
+| `day_starts_at`      | hour, 0..=23                           | `5`        | Day starts at         | The hour the working day rolls over. 01:30 on Saturday belongs to Friday while it is 5. |
+| `week_starts_on`     | `monday` or `sunday`                   | `monday`   | Week starts on        | Where the history's "this week"/"last week" rules fall, and the first column of the calendar and the weekday row of the repeat card. |
+| `work_days`          | comma list of `mon`..`sun`, at least 1 | `mon,tue,wed,thu,fri` | Work days (seven toggle rows) | What "every work day" repeats on and what "next work day" on the move card means. |
+| `review_opens_itself`| `true`/`false`                         | `true`     | Open the review on launch | Whether the morning review opens itself on the first launch of a day. Off, it is only opened with `M`. |
+| `due_ahead_days`     | days, 0..=365                          | `0`        | Surface due tasks early | A due task surfaces in the review this many days before its date, as well as on and after it. |
+| `backfill_days`      | days, 0..=365; 0 means no cap          | `0`        | Backfill copies       | After time away, copies of a schedule are made only for the last N days. Older scheduled dates are skipped for good. 0 makes every copy. |
+| `pile_horizon_days`  | days, 0..=3650; 0 means never          | `0`        | Hide pile tasks older than | An unfinished task from a day more than N days ago stays on its day but is left out of the pile and its count. 0 hides nothing. |
+| `floating_window`    | `true`/`false`                         | `true`     | Floating window       | On Hyprland, whether the app opens in a centred floating window or tiles. Written to the Hyprland rule the moment it changes. |
+| `window_size`        | `WxH` in logical pixels, 200..=10000 each | `870x650` | Window size         | The floating window's size. 870 by 650 is 120 by 36 cells in foot with Omarchy's default font. |
+| `mouse`              | `true`/`false`                         | `true`     | Mouse                 | Whether the app takes the mouse. Off, the terminal's own text selection works again and the keyboard does everything. Takes effect at once. |
+| `message_seconds`    | seconds, 0..=60; 0 means until the next key | `4`   | Hint bar messages stand for | How long "closed X · u undo" stays when no key follows. 0 keeps it until the next key. |
+| `date_style`         | `locale`, `day_first`, `month_first`   | `locale`   | Date order            | `Fri 5 Sep` or `Fri Sep 5`, everywhere a date is written. `locale` follows `LC_TIME`. |
+| `confirm_delete`     | `true`/`false`                         | `false`    | Confirm before delete | `x` asks first instead of deleting and offering `u`. Applies to tasks, notes and the review pile. |
+
+### The codec
+
+Every value is text. A missing key or a value that cannot be read is that
+setting's default, and an unknown key is ignored, so an older binary can
+open a newer database's settings table without emptying it. A number
+outside its range is held to the range rather than refused: a typed 48
+for the hour the day starts is 23.
+
+### Validation
+
+A `Settings` cannot hold a value outside the ranges above, so the only
+thing left to refuse is a week with no work day in it, which
+`change_settings` answers with "At least one day of the week must be a
+work day." for the hint bar.
+
+### Changing a setting
+
+`change_settings(&Model, Settings)` is one write, `PutSettings`, and
+nothing on the undo stack: like the system operations of section 12 it is
+not undoable, and `u` after it takes back whatever it was that came
+before. `date_style` is settled against the locale by the application,
+which is the only part of the program that knows what a locale is; the
+domain sees the resolved order in the `Context` of every command.
