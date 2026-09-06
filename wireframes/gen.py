@@ -201,6 +201,17 @@ def inp(g, x, y, w, text, ph=''):
         g.put(x + 1, y, ph, 'i d')
 
 
+def setting(g, x, w, y, label, value, cursor=False):
+    """One settings row: the label dotted across to its value."""
+    left = g.put(x + 2, y, label)
+    at = x + w - 2 - len(value)
+    g.put(at, y, value, 'A' if cursor else 'd')
+    if at - left - 2 > 0:
+        g.put(left + 1, y, '.' * (at - left - 2), 'd')
+    if cursor:
+        g.add_attr(x, y, w, 'c')
+
+
 def progress(g, x, y, w, frac):
     n = round(w * frac)
     g.put(x, y, '█' * n, 'A')
@@ -745,12 +756,16 @@ def p11():
     h = Grid(120, 17)
     h.box(2, 1, 116, 13)
     h.put(4, 1, ' Keys ', 'A b'); h.rput(116, 1, ' ? or esc close ', 'd')
-    cols = [(5, 'Everywhere', [[('j/k', 'move'), ('h/l tab', 'pane')], [('a', 'add'), ('e', 'edit'), ('x', 'delete'), ('u', 'undo')],
-                               [('space', 'done / reopen')], [('/', 'search'), (':', 'commands'), ('?', 'help')], [('n', 'notes page'), ('q', 'quit')]]),
-            (45, 'Day', [[('J/K', 'reorder'), ('f', 'focus')], [('b', 'to backlog'), ('m', 'move to day…')], [('[ ]', 'prev/next day'), ('.', 'today')],
-                         [('g', 'go to date'), ('R', 'repeat')]]),
-            (83, 'Backlog', [[('t', 'to today'), ('m', 'move to day…')], [('d', 'due by'), ('r', 'remind on'), ('w', 'waiting')], [('R', 'repeat schedule')], [],
-                             'REVIEW', [('d', 'done'), ('t', 'today'), ('b', 'backlog')], [('k', 'keep'), ('⏎', 'next step')]])]
+    cols = [(5, 'Everywhere', [[('j/k', 'move'), ('h/l tab', 'pane')], [('a', 'add'), ('e', 'edit'), ('x', 'delete')],
+                               [('u', 'undo'), ('space', 'done')], [('/', 'search'), (':', 'commands')],
+                               [('?', 'help'), ('n', 'notes')], [(',', 'settings'), ('q', 'quit')]]),
+            (33, 'Day', [[('J/K', 'reorder'), ('f', 'focus')], [('b', 'to backlog')], [('m', 'move to day…')],
+                         [('[ ]', 'prev/next day')], [('.', 'today'), ('g', 'go to date')], [('R', 'repeat')]]),
+            (61, 'Backlog', [[('t', 'to today'), ('m', 'move…')], [('d', 'due by'), ('r', 'remind on')],
+                             [('w', 'waiting'), ('R', 'repeat')], [],
+                             'REVIEW', [('d', 'done'), ('t', 'today')], [('b', 'backlog'), ('m', 'move…')],
+                             [('k', 'keep'), ('⏎', 'next step')]]),
+            (89, 'Settings', [[('h/l', 'adjust')], [('space ⏎', 'change')], [('esc ,', 'back')]])]
     for x, title, lines in cols:
         h.put(x, 3, title.upper(), 'd')
         for i, l in enumerate(lines):
@@ -767,7 +782,7 @@ def p11():
 <p><b>A</b> The palette is the Omarchy launcher shape: a centred box with a fuzzy filter and the selected row highlighted. Actions for the cursor task come first, app-level ones after. Inside the palette you type to filter, move with ↑/↓ and run with Enter; letters type, as in every text field. The key in the right column is not for pressing here: it is the direct key for next time, on the home screen, so the palette teaches itself out of use.</p>
 <p><b>B</b> Help is a static overlay of the same keys the hint bar shows, grouped by context. It is the whole map; there are no hidden keys.</p>
 <div class="flow"><b>Key conventions</b>Lowercase acts on the cursor row. Uppercase reorders or opens schedule editing. Punctuation navigates. Enter confirms, Escape backs out one level, <kbd>u</kbd> undoes.</div>
-<p>There is no settings screen. Colours and font come from the terminal, which Omarchy themes; the app has nothing of its own to configure.</p>''')
+<p>Settings are a page of their own (screen 13), reached with <kbd>,</kbd> and listed in the palette under the app's section. Colour and font are not on it: they come from the terminal, which Omarchy themes.</p>''')
 
 
 # 12 --------------------------------------------------------------------
@@ -803,6 +818,78 @@ def p12():
 <p><b>F</b> The new-note row is the whole empty state.</p>''')
 
 
+
+# 13 --------------------------------------------------------------------
+def p13():
+    g = Grid(120, 36)
+    strip(g, [('Settings', 'b'), ('kept in the database, beside the tasks', 'd')],
+          [(', or esc back', 'd'), (':', 'd'), ('?', 'd')])
+    lx, lw, rx, rw, y0, y1 = frame2(g, ('Settings', '', 'colour and font come from the terminal'),
+                                    ('Day starts at',), 'left', div=79)
+    rows = [('g', 'Day'),
+            ('r', 'Day starts at', '5:00', True),
+            ('r', 'Week starts on', 'Monday'),
+            ('', ),
+            ('g', 'Work days'),
+            ('r', 'Monday', 'on'),
+            ('r', 'Tuesday', 'on'),
+            ('r', 'Wednesday', 'on'),
+            ('r', 'Thursday', 'on'),
+            ('r', 'Friday', 'on'),
+            ('r', 'Saturday', 'off'),
+            ('r', 'Sunday', 'off'),
+            ('', ),
+            ('g', 'Review'),
+            ('r', 'Open the review on launch', 'on'),
+            ('r', 'Surface due tasks early', '0 days'),
+            ('r', 'Backfill copies', 'no cap'),
+            ('r', 'Hide pile tasks older than', 'never'),
+            ('', ),
+            ('g', 'Window'),
+            ('r', 'Floating window', 'on'),
+            ('r', 'Window size', '870x650'),
+            ('r', 'Mouse', 'on'),
+            ('', ),
+            ('g', 'Looks'),
+            ('r', 'Date order', 'as the locale writes it'),
+            ('r', 'Hint bar messages stand for', '4 seconds'),
+            ('r', 'Confirm before delete', 'off')]
+    y = y0
+    for line in rows:
+        if line[0] == 'g':
+            group(g, lx, lw, y, line[1])
+        elif line[0] == 'r':
+            setting(g, lx, lw, y, line[1], line[2], cursor=len(line) > 3)
+        y += 1
+
+    about = ['The hour the working day rolls over.', '01:30 on Saturday belongs to Friday',
+             'while it is 5.']
+    for i, line in enumerate(about):
+        g.put(rx + 2, y0 + i, line)
+    g.put(rx + 2, y0 + len(about) + 1, 'Default: 5:00', 'd')
+
+    g.callout(lx + 9, 0, 1)
+    g.callout(lx + 40, 2, 2)
+    g.callout(lx + 20, y0 + 4, 3)
+    g.callout(rx + 2, y0, 4)
+    g.callout(rx + 2, y0 + len(about) + 1, 5)
+    hints(g, g.h - 1, 'Settings', [('h/l', 'adjust'), ('space ⏎', 'change'), ('esc ,', 'back')],
+          [('?', 'help')])
+    page('13-settings', 'Settings', [('120×36 · floating window, settings page', g)], '''
+<h2>Settings</h2>
+<p>Thirteen settings on one page, reached with <kbd>,</kbd> from either other page and left with <kbd>,</kbd> or <kbd>esc</kbd>. They are kept in the database beside the tasks, so a second window picks a change up the way it picks up any other.</p>
+<ol>
+<li>The status line names the page and the two keys that leave it. There is no review count and no notes count here: the settings are about the program, not about a day.</li>
+<li>What the app does not hold, said where somebody looking for it would look: colour, font and size come from the terminal, which Omarchy themes.</li>
+<li>Every row is a label dotted across to its value, in five groups. A toggle reads <em>on</em> or <em>off</em>; a number carries its unit, and the number that means "none of it" is written as what none of it does: <em>no cap</em>, <em>never</em>, <em>until the next key</em>. The cursor row's value is in the accent colour, because it is the one value a key would change.</li>
+<li>Beside the list, what the cursor row does, in the words DOMAIN.md gives it. Under 100 columns this pane goes and the list has the window, the way the review's panel does.</li>
+<li>What the setting holds when nobody has changed it, so a page that has been fiddled with can be read back to its defaults without a document.</li>
+</ol>
+<div class="flow"><b>Changing one</b><kbd>h</kbd> and <kbd>l</kbd> step the value; <kbd>space</kbd> and <kbd>⏎</kbd> change it. On a row holding a number or the window size, <kbd>⏎</kbd> opens a field in place of the value: type it, <kbd>⏎</kbd> saves, <kbd>esc</kbd> keeps what was there. Every change is written at once, like every other change in the app, and none of them is on the undo stack.</div>
+<div class="flow"><b>Refusals</b>A number outside its range is held to the range rather than refused. The one thing that is refused is a week with no work day in it, which says so in the hint bar and leaves the row as it was.</div>
+<div class="flow"><b>The window</b>Floating and the window size are Hyprland's to keep, so the app writes its own rule the moment either changes and says in the hint bar what came back — including, off Hyprland, that there is nothing there to tell.</div>''')
+
+
 # ------------------------------------------------------------- output ---
 TEMPLATE = '''<!doctype html>
 <html><head><meta charset="utf-8"><title>{title}</title>
@@ -820,7 +907,7 @@ TEMPLATE = '''<!doctype html>
 
 
 def main():
-    for f in (p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12):
+    for f in (p01, p02, p03, p04, p05, p06, p07, p08, p09, p10, p11, p12, p13):
         f()
     for name, title, grids, notes in PAGES:
         blocks = []
