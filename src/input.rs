@@ -103,6 +103,12 @@ pub enum KeyContext {
         kind: PopupKind,
         text_field: bool,
     },
+    /// The settings page. `field` is the number or the window size being
+    /// typed on a row, which is the only text field it has, so there is
+    /// nothing for the hint bar to tell two of them apart by.
+    Settings {
+        field: bool,
+    },
 }
 
 impl KeyContext {
@@ -113,6 +119,7 @@ impl KeyContext {
             KeyContext::Notes { text_field, .. }
             | KeyContext::Review { text_field, .. }
             | KeyContext::Popup { text_field, .. } => text_field,
+            KeyContext::Settings { field } => field,
         }
     }
 }
@@ -139,6 +146,9 @@ pub enum Action {
     Today,
     GoToDate,
     NotesPage,
+    /// The settings page, and the way back off it: `,` opens it from a
+    /// page and closes it again.
+    SettingsPage,
     /// The morning review again, after it was left or on a day it has
     /// already run on.
     OpenReview,
@@ -412,6 +422,13 @@ macro_rules! home_table {
                 keys: &[("n", Action::NotesPage)],
                 shown: "n",
                 label: "notes page",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+            Binding {
+                keys: &[(",", Action::SettingsPage)],
+                shown: ",",
+                label: "settings",
                 bar: Bar::Off,
                 narrow: Bar::Off,
             },
@@ -723,6 +740,13 @@ const NOTES_LIST: &[Binding] = &[
         label: "back to today",
         bar: Bar::Left,
         narrow: Bar::Short(Side::Left, "back"),
+    },
+    Binding {
+        keys: &[(",", Action::SettingsPage)],
+        shown: ",",
+        label: "settings",
+        bar: Bar::Off,
+        narrow: Bar::Off,
     },
     Binding {
         keys: &[
@@ -1651,6 +1675,93 @@ const HELP_OVERLAY: &[Binding] = &[Binding {
     narrow: Bar::Left,
 }];
 
+/// The settings page. Its rows are settings rather than tasks, so a key
+/// changes a value instead of acting on a row: `h` and `l` step it,
+/// `space` and Enter change it, and on a row that holds a number or a
+/// size Enter opens the field the value is typed into.
+const SETTINGS_LIST: &[Binding] = &[
+    Binding {
+        keys: &[
+            ("h", Action::Left),
+            ("l", Action::Right),
+            ("left", Action::Left),
+            ("right", Action::Right),
+        ],
+        shown: "h/l",
+        label: "adjust",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("space", Action::Pick), ("enter", Action::Confirm)],
+        shown: "space ⏎",
+        label: "change",
+        bar: Bar::Left,
+        narrow: Bar::Short(Side::Left, "change"),
+    },
+    // `,` is the key that opened the page, so it is also the key that
+    // closes it; `esc` backs out of it the way it backs out of anything.
+    Binding {
+        keys: &[("esc", Action::Cancel), (",", Action::SettingsPage)],
+        shown: "esc ,",
+        label: "back",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[
+            ("j", Action::Down),
+            ("k", Action::Up),
+            ("down", Action::Down),
+            ("up", Action::Up),
+        ],
+        shown: "j/k",
+        label: "move",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[(":", Action::Commands)],
+        shown: ":",
+        label: "commands",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("?", Action::Help)],
+        shown: "?",
+        label: "help",
+        bar: Bar::Right,
+        narrow: Bar::Short(Side::Right, "more"),
+    },
+    Binding {
+        keys: &[("q", Action::Quit)],
+        shown: "q",
+        label: "quit",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+];
+
+/// A number or a window size being typed on a settings row. Every letter
+/// and digit types there, so the two keys that leave are the whole table.
+const SETTINGS_FIELD: &[Binding] = &[
+    Binding {
+        keys: &[("enter", Action::Confirm)],
+        shown: "⏎",
+        label: "save",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("esc", Action::Cancel)],
+        shown: "esc",
+        label: "cancel",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+];
+
 /// The rows of the key table for a context.
 pub fn bindings(context: KeyContext) -> &'static [Binding] {
     match context {
@@ -1741,6 +1852,8 @@ pub fn bindings(context: KeyContext) -> &'static [Binding] {
             kind: PopupKind::Repeat,
             ..
         } => REPEAT_CARD,
+        KeyContext::Settings { field: true } => SETTINGS_FIELD,
+        KeyContext::Settings { field: false } => SETTINGS_LIST,
     }
 }
 
@@ -1819,6 +1932,7 @@ pub fn name(context: KeyContext) -> &'static str {
             kind: PopupKind::Repeat,
             ..
         } => "REPEAT",
+        KeyContext::Settings { .. } => "SETTINGS",
     }
 }
 

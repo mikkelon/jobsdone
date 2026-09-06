@@ -1,0 +1,59 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Settings</title>
+<link rel="stylesheet" href="wf.css"><script src="themes.js"></script><script src="wf.js" defer></script></head>
+<body>
+<div class="stage">
+<div class="desktop">
+<div class="shot"><div class="lbl">120×36 · floating window, settings page</div><pre class="tui" style="width:120ch">                                                                                                                        
+ <span class="b">Settings</span><span class="n">1</span><span class="d">kept in the database, beside the tasks</span>                                                  <span class="d">, or esc back</span>   <span class="d">:</span>   <span class="d">?</span> 
+<span class="d">────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>
+ <span class="A b">Settings</span>                               <span class="n">2</span><span class="d">olour and font come from the terminal</span>   <span class="b">Day starts at</span>                          
+<span class="d">───────────────────────────────────────────────────────────────────────────────┬────────────────────────────────────────</span>
+ <span class="d">DAY</span> <span class="d">─────────────────────────────────────────────────────────────────────────</span> <span class="d">│</span>  <span class="n">4</span>he hour the working day rolls over.  
+<span class="c">  Day starts at </span><span class="d c">........................................................</span><span class="c"> </span><span class="A c">5:00</span><span class="c">  </span><span class="d">│</span>  01:30 on Saturday belongs to Friday   
+  Week starts on <span class="d">.....................................................</span> <span class="d">Monday</span>  <span class="d">│</span>  while it is 5.                        
+                                                                               <span class="d">│</span>                                        
+ <span class="d">WORK DAYS</span> <span class="d">─────────</span><span class="n">3</span><span class="d">─────────────────────────────────────────────────────────</span> <span class="d">│</span>  <span class="n">5</span><span class="d">efault: 5:00</span>                         
+  Monday <span class="d">.................................................................</span> <span class="d">on</span>  <span class="d">│</span>                                        
+  Tuesday <span class="d">................................................................</span> <span class="d">on</span>  <span class="d">│</span>                                        
+  Wednesday <span class="d">..............................................................</span> <span class="d">on</span>  <span class="d">│</span>                                        
+  Thursday <span class="d">...............................................................</span> <span class="d">on</span>  <span class="d">│</span>                                        
+  Friday <span class="d">.................................................................</span> <span class="d">on</span>  <span class="d">│</span>                                        
+  Saturday <span class="d">..............................................................</span> <span class="d">off</span>  <span class="d">│</span>                                        
+  Sunday <span class="d">................................................................</span> <span class="d">off</span>  <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+ <span class="d">REVIEW</span> <span class="d">──────────────────────────────────────────────────────────────────────</span> <span class="d">│</span>                                        
+  Open the review on launch <span class="d">..............................................</span> <span class="d">on</span>  <span class="d">│</span>                                        
+  Surface due tasks early <span class="d">............................................</span> <span class="d">0 days</span>  <span class="d">│</span>                                        
+  Backfill copies <span class="d">....................................................</span> <span class="d">no cap</span>  <span class="d">│</span>                                        
+  Hide pile tasks older than <span class="d">..........................................</span> <span class="d">never</span>  <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+ <span class="d">WINDOW</span> <span class="d">──────────────────────────────────────────────────────────────────────</span> <span class="d">│</span>                                        
+  Floating window <span class="d">........................................................</span> <span class="d">on</span>  <span class="d">│</span>                                        
+  Window size <span class="d">.......................................................</span> <span class="d">870x650</span>  <span class="d">│</span>                                        
+  Mouse <span class="d">..................................................................</span> <span class="d">on</span>  <span class="d">│</span>                                        
+                                                                               <span class="d">│</span>                                        
+ <span class="d">LOOKS</span> <span class="d">───────────────────────────────────────────────────────────────────────</span> <span class="d">│</span>                                        
+  Date order <span class="d">........................................</span> <span class="d">as the locale writes it</span>  <span class="d">│</span>                                        
+  Hint bar messages stand for <span class="d">.....................................</span> <span class="d">4 seconds</span>  <span class="d">│</span>                                        
+  Confirm before delete <span class="d">.................................................</span> <span class="d">off</span>  <span class="d">│</span>                                        
+<span class="d">────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────</span>
+ <span class="b">SETTINGS</span>  <span class="k">h/l</span> <span class="d">adjust</span>  <span class="k">space ⏎</span> <span class="d">change</span>  <span class="k">esc ,</span> <span class="d">back</span>                                                                <span class="k">?</span> <span class="d">help</span> 
+                                                                                                                        </pre></div>
+</div>
+<aside class="notes">
+<h2>Settings</h2>
+<p>Thirteen settings on one page, reached with <kbd>,</kbd> from either other page and left with <kbd>,</kbd> or <kbd>esc</kbd>. They are kept in the database beside the tasks, so a second window picks a change up the way it picks up any other.</p>
+<ol>
+<li>The status line names the page and the two keys that leave it. There is no review count and no notes count here: the settings are about the program, not about a day.</li>
+<li>What the app does not hold, said where somebody looking for it would look: colour, font and size come from the terminal, which Omarchy themes.</li>
+<li>Every row is a label dotted across to its value, in five groups. A toggle reads <em>on</em> or <em>off</em>; a number carries its unit, and the number that means "none of it" is written as what none of it does: <em>no cap</em>, <em>never</em>, <em>until the next key</em>. The cursor row's value is in the accent colour, because it is the one value a key would change.</li>
+<li>Beside the list, what the cursor row does, in the words DOMAIN.md gives it. Under 100 columns this pane goes and the list has the window, the way the review's panel does.</li>
+<li>What the setting holds when nobody has changed it, so a page that has been fiddled with can be read back to its defaults without a document.</li>
+</ol>
+<div class="flow"><b>Changing one</b><kbd>h</kbd> and <kbd>l</kbd> step the value; <kbd>space</kbd> and <kbd>⏎</kbd> change it. On a row holding a number or the window size, <kbd>⏎</kbd> opens a field in place of the value: type it, <kbd>⏎</kbd> saves, <kbd>esc</kbd> keeps what was there. Every change is written at once, like every other change in the app, and none of them is on the undo stack.</div>
+<div class="flow"><b>Refusals</b>A number outside its range is held to the range rather than refused. The one thing that is refused is a week with no work day in it, which says so in the hint bar and leaves the row as it was.</div>
+<div class="flow"><b>The window</b>Floating and the window size are Hyprland's to keep, so the app writes its own rule the moment either changes and says in the hint bar what came back — including, off Hyprland, that there is nothing there to tell.</div>
+</aside>
+</div>
+</body></html>

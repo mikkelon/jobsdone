@@ -118,7 +118,8 @@ Conventions, so the map is guessable:
   `d` due by, `r` remind on, `w` waiting. `R` opens the repeat schedule.
 - Punctuation navigates: `[` `]` previous and next day, `.` today, `g` go
   to a date, `/` search, `:` command palette, `?` help, `n` notes page,
-  `q` quit.
+  `,` settings, `q` quit. `n` and `,` are also the way back off the page
+  they open, as `Escape` is.
 - `M` opens the morning review again: the review opens itself once a day,
   and this is how it is picked up after it was left half done. It is the
   one uppercase key that is not about the cursor row, which is what makes
@@ -145,8 +146,9 @@ Conventions, so the map is guessable:
   moves the cursor, so the view always follows it and there is never a
   cursor somewhere off screen.
 - Where a text field has focus (search, the palette, the date card, an
-  open note, a title being edited), every letter and digit types. Only
-  `Enter`, `Escape`, `↑`/`↓` and `Tab` keep their meaning there. The few
+  open note, a title being edited, a number typed on a settings row),
+  every letter and digit types. Only `Enter`, `Escape`, `↑`/`↓` and `Tab`
+  keep their meaning there. The few
   extra actions a text field needs are on Alt plus a key (`alt-t` re-add
   from search, `alt-1` to `alt-4` quick dates). `Tab` moves focus to the
   next control, where single keys work again.
@@ -196,12 +198,19 @@ key the panel named, and the status line carries the progress. A row
 that has been answered stays where it was, checked and dim, saying what
 was done to it, so the list never moves under the hand working it down.
 
-## 6. Two pages, and popups over them
+## 6. Three pages, and popups over them
 
-The window shows one of two pages. The home page is today (or another day)
-beside the backlog. The notes page, reached with `n`, is the list of notes
-beside the open note. Everything else is a popup over a page: the date
-card, the repeat card, the day picker, search, the palette, help.
+The window shows one of three pages. The home page is today (or another
+day) beside the backlog. The notes page, reached with `n`, is the list of
+notes beside the open note. The settings page, reached with `,`, is the
+list of settings beside what the row under the cursor does (section 11).
+Everything else is a popup over a page: the date card, the repeat card,
+the day picker, search, the palette, help.
+
+Both of the pages that are not home are opened and left with the same
+key, and `Escape` leaves them as well. `,` goes back to whichever page it
+was pressed on, so a setting can be changed from the notes page without
+losing it.
 
 History is not a separate screen. It is the day pane stepped backwards with
 `[`, while the backlog pane becomes a list of days with their done counts,
@@ -322,11 +331,38 @@ something in it. No illustrations, no encouragement. The empty search
 offers to add the typed text as a task. A review with nothing in it is not
 shown at all.
 
-## 11. Nothing to configure
+## 11. Settings
 
-Colours, font, and size come from the terminal, which Omarchy themes.
-Window placement comes from Hyprland. The app has no settings screen and no
-preferences file.
+`,` opens a page of the thirteen settings of DOMAIN.md section 19, in
+five groups: the day, the work days, the review, the window and the
+looks. Every row is a label dotted across to its value, because a page of
+settings is read down the labels and across to the values. A toggle reads
+`on` or `off`; a number carries its unit, and the number that means none
+of it is written as what none of it does: `no cap`, `never`, `until the
+next key`. The value on the cursor row is in the accent colour, because
+it is the one value a key would change.
+
+Beside the list, in a column of 40, what the cursor row does and what it
+holds when nobody has changed it. Under 100 columns that column goes and
+the list has the window, the way the review's panel does. The page is
+never one of the narrow window's tabs: `,` is the whole of the way on and
+off it.
+
+`h` and `l` step a value and `space` and Enter change it. A row that
+holds a number or the window size has no next value worth stepping to, so
+Enter opens a field in place of the value: type it, Enter saves, Escape
+keeps what was there. A number outside its range is held to the range
+rather than refused; the one refusal is a week with no work day in it,
+which says so in the hint bar and leaves the row as it was. Nothing on
+the page is on the undo stack.
+
+What is not on the page: colour and font, which come from the terminal
+that Omarchy themes. Whether the window floats and how big it is are on
+it, because those are a rule the app writes for Hyprland rather than
+something Hyprland is asked about; the hint bar carries whatever the
+window manager answers. There is no preferences file: the settings are
+rows in the database, beside the tasks, so a second window picks a change
+up the way it picks up any other.
 
 ## Screen inventory
 
@@ -344,6 +380,7 @@ preferences file.
 | Scratchpad (notes page)     | `wireframes/10-scratchpad.html`   | 120×36  |
 | Command palette and help    | `wireframes/11-palette-help.html` | panels  |
 | Empty states                | `wireframes/12-empty.html`        | panels  |
+| Settings                    | `wireframes/13-settings.html`     | 120×36  |
 
 The user flows are drawn on `wireframes/index.html`: the morning (A), plan
 today (B), work through the day (C), park with a date (D), wait on someone

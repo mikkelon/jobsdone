@@ -18,7 +18,10 @@ use ratatui::style::{Color, Modifier, Style};
 use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
-use crate::app::{App, Editor, Layout, List, ListArea, Page, Rect as Cells, RowArea, RowId};
+use crate::app::{
+    App, Editor, Layout, List, ListArea, Page, Rect as Cells, RowArea, RowId, SettingGroup,
+    SettingRow,
+};
 use crate::domain::{
     self, DateOrder, DayListRow, MonthDay, NoteRow, Place, Rule, ScheduleRow, Stretch, Weekday,
     day_label, short_label, stamp_label,
@@ -27,6 +30,7 @@ use crate::input::{self, Field, NotesPane, Pane, Shown, Side};
 
 mod popup;
 mod review;
+mod settings;
 #[cfg(test)]
 mod tests;
 
@@ -40,6 +44,10 @@ const TABS: [&str; 3] = ["TODAY", "BACKLOG", "NOTES"];
 /// The notes page gives the open note the width; the list is a fixed
 /// column beside it rather than half the window.
 const NOTES_DIVIDER: u16 = 44;
+
+/// The settings page gives the list the width; what the cursor row does
+/// is a fixed column beside it, the way the review's panel is.
+const ABOUT_SETTING: u16 = 40;
 
 /// The caret of a text field, which is a cell of its own rather than a
 /// terminal cursor, so that it sits where the text does.
@@ -461,6 +469,16 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
                 quiet("?"),
             ],
         ),
+        // The settings are about the program rather than about a day, so
+        // the indicators the other pages carry mean nothing here. The way
+        // out is where the notes page puts its own.
+        (Page::Settings, _) => (
+            vec![
+                ("Settings".to_owned(), bold()),
+                quiet("kept in the database, beside the tasks"),
+            ],
+            vec![quiet(", or esc back"), quiet(":"), quiet("?")],
+        ),
     };
 
     canvas.segments(1, y, &left, 1);
@@ -530,6 +548,9 @@ fn tab_row(canvas: &mut Canvas, app: &App, y: u16) {
         (Page::Notes, _) => 2,
         (Page::Home, Pane::Day) => 0,
         (Page::Home, Pane::Backlog) => 1,
+        // The settings are not one of the tabs: the page takes the
+        // window at any width and `,` is the only way on and off it.
+        (Page::Settings, _) => return,
     };
     // Stepped to another day, the first two tabs are that day and the
     // list of days, because that is what the two panes hold.
@@ -570,6 +591,7 @@ fn two_panes(canvas: &mut Canvas, app: &App, rows: &Rows, layout: &mut Layout) {
     let divider = match app.page() {
         Page::Home => width / 2 - 1,
         Page::Notes => NOTES_DIVIDER.min(width / 2),
+        Page::Settings => width.saturating_sub(ABOUT_SETTING + 1),
     };
     let left = Column {
         x: 0,
@@ -590,6 +612,9 @@ fn two_panes(canvas: &mut Canvas, app: &App, rows: &Rows, layout: &mut Layout) {
     let on_left = match app.page() {
         Page::Home => app.pane() == Pane::Day,
         Page::Notes => app.notes_pane() == NotesPane::List,
+        // The settings are one list, and the pane beside them describes
+        // its cursor row rather than being somewhere to be.
+        Page::Settings => true,
     };
     match app.page() {
         Page::Home => {
@@ -606,6 +631,10 @@ fn two_panes(canvas: &mut Canvas, app: &App, rows: &Rows, layout: &mut Layout) {
         Page::Notes => {
             pane(canvas, app, List::Notes, left, rows, on_left, layout);
             open_note(canvas, app, right, Some(rows.headers), !on_left);
+        }
+        Page::Settings => {
+            pane(canvas, app, List::Settings, left, rows, true, layout);
+            settings::about_the_setting(canvas, app, right, rows.headers);
         }
     }
 }
@@ -700,6 +729,9 @@ enum Content<'a> {
     Schedules(&'a [ScheduleRow]),
     Days(&'a [DayListRow]),
     Notes(&'a [NoteRow]),
+    /// A run of settings rows under one label. They are not rows of the
+    /// model, so the page rather than a view says what is in each group.
+    Settings(&'a [(SettingGroup, SettingRow)]),
 }
 
 /// A group under its rule, with the `+ add` line that may close it.
@@ -968,6 +1000,7 @@ enum Line<'a> {
     Schedule(&'a ScheduleRow),
     Day(&'a DayListRow),
     Note(&'a NoteRow),
+    Setting(SettingRow),
     Add(&'static str),
     /// The pane's last word about itself, under everything else.
     Foot(&'static str),
@@ -990,6 +1023,9 @@ fn lines_of<'a>(view: &'a PaneView<'a>) -> Vec<Line<'a>> {
             Content::Schedules(rows) => lines.extend(rows.iter().map(Line::Schedule)),
             Content::Days(rows) => lines.extend(rows.iter().map(Line::Day)),
             Content::Notes(rows) => lines.extend(rows.iter().map(Line::Note)),
+            Content::Settings(rows) => {
+                lines.extend(rows.iter().map(|(_, row)| Line::Setting(*row)));
+            }
         }
         if let Some(add) = section.add {
             lines.push(Line::Add(add));
@@ -1029,13 +1065,16 @@ fn pane(
         List::Backlog => backlog_pane(app, adding),
         List::Days => days_pane(app),
         List::Notes => notes_pane(app),
+        List::Settings => settings::view(),
         // The review draws its own rows and is never a pane beside
         // another one.
         List::Review => return,
     };
 
     // A narrow window puts the tab row where the pane headers would be.
-    if !layout.narrow {
+    // The settings page is not one of the tabs, so it keeps its header
+    // at every width.
+    if !layout.narrow || list == List::Settings {
         header(canvas, x, width, rows.headers, &view, focused);
     }
     let height = column.height();
@@ -1065,6 +1104,7 @@ fn pane(
         Line::Add(_) => adding,
         Line::Task(row, _) => !adding && on == Some(RowId::Task(row.task)),
         Line::Note(row) => !adding && on == Some(RowId::Note(row.note)),
+        Line::Setting(row) => on == Some(RowId::Setting(*row)),
         Line::Schedule(row) => !adding && on == Some(RowId::Schedule(row.schedule)),
         Line::Day(row) => !adding && on == Some(RowId::Day(row.day)),
         _ => false,
@@ -1134,6 +1174,11 @@ fn pane(
             Line::Day(row) => {
                 day_row(canvas, x, width, y, row, today, app.dates());
                 Some(RowId::Day(row.day))
+            }
+            Line::Setting(row) => {
+                let id = RowId::Setting(*row);
+                settings::row(canvas, column, y, *row, app, on == Some(id));
+                Some(id)
             }
             Line::Schedule(row) => {
                 schedule_row(canvas, x, width, y, row);
