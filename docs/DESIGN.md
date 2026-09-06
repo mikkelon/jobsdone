@@ -103,7 +103,10 @@ Rules:
 
 Every action is one key on the cursor row, listed in the hint bar for the
 focused pane. The mouse does the obvious things (click a row, wheel to
-scroll, drag to reorder) but nothing is only reachable by mouse.
+scroll, drag to reorder) but nothing is only reachable by mouse, which is
+what lets the `mouse` setting hand it back to the terminal: with it off
+the terminal's own selection and scrollback work again and the keyboard
+still does everything.
 
 Conventions, so the map is guessable:
 
@@ -129,6 +132,8 @@ Conventions, so the map is guessable:
   row of the group it left, so a list is worked down without moving the
   cursor by hand. Everything else leaves the cursor on the task it acted
   on, which is how a reordered row is followed up or down the list.
+- `x` deletes on the spot and offers `u`; with `confirm_delete` on it
+  asks first, and `Enter` deletes where `Escape` keeps (section 8).
 - After `u` the cursor goes to the task the undo brought back or changed,
   when it is on a list that is on screen; otherwise it stays. The keyboard
   goes with it, so `space` `u` `space` closes one task twice rather than
@@ -260,9 +265,12 @@ The app never reorders, carries over, expires, or tidies.
 
 ## 8. Undo instead of confirm
 
-No action asks "are you sure". Delete, close, move, and review decisions
-apply immediately and offer `u` in the hint bar until the next key, or
-for a few seconds when no key comes. Editing
+No action asks "are you sure" unless it is asked to. Delete, close, move,
+and review decisions apply immediately and offer `u` in the hint bar
+until the next key, or for as long as `message_seconds` says when no key
+comes. `confirm_delete` is the one setting that buys a confirmation back:
+with it on, `x` names the row in a card and waits for `Enter` to delete
+or `Escape` to keep, on a task, a note and a review row alike. Editing
 is always in place; the only forms are the three small cards (date, repeat,
 move).
 
@@ -276,16 +284,17 @@ bar rather than beside it: while a title is being typed the bar says what
 Enter does there, "add & keep typing" when adding and "save" when
 renaming. A line longer than the field scrolls with the caret rather than
 clipping at its end, so what is being typed is always the part on screen.
-What just happened goes first on the same line until the next key, or
-for a few seconds when no key comes, and the keys that still fit follow
+What just happened goes first on the same line until the next key, or for
+the seconds `message_seconds` names when no key comes, which at 0 is
+however long it takes one to arrive, and the keys that still fit follow
 it; a quoted title is cut to a few words so that the offer of `u`, which
 comes right after it, is never pushed off. The offer is left off while a
 field has the keyboard, because `u` types there: the bar never names a
 key the line would swallow.
 
-The one deliberate question: editing the title of a recurring copy asks
-whether the change is for this copy or this and future copies, because
-PRODUCT.md gives both answers meaning.
+The one question asked whether or not it was asked for: editing the title
+of a recurring copy asks whether the change is for this copy or this and
+future copies, because PRODUCT.md gives both answers meaning.
 
 ## 9. Scratchpad is text, and only text
 
