@@ -76,6 +76,17 @@ Say in the report which tests stood on a written-in date or a
 written-in setting, since a rule that only fails at a real rollover is
 not one this can catch.
 
+## The demo
+
+`uat/demo` records the README's demo: a scripted morning in the app,
+seeded with a day that has passed so the recording opens on the review.
+Every keystroke is a frame, drawn by `render.py` in a theme's colours
+inside a bordered window over that theme's wallpaper, and ffmpeg makes
+`assets/demo.mp4` and `assets/demo.gif` from them. The storyboard is the
+`STORY` list at the top of the script; `--theme NAME` draws it in another
+Omarchy theme and `--out DIR` puts the files elsewhere. It takes about
+half a minute and leaves its frames under `uat/out/demo/`.
+
 ## What to look at
 
 - `docs/PRODUCT.md` is what the program must do. `docs/DESIGN.md` is how

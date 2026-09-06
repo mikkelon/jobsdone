@@ -17,6 +17,9 @@ another day).
 
 Neither is a gate. Reach for them when the question is one they answer.
 
+`uat/demo` is neither: it records the README's demo GIF and video from a
+scripted morning in the app, with the storyboard at the top of the script.
+
 ## Driving the app
 
 1. `uat/tui start --fresh --size 120x36` builds and launches on wiped data. Every later step prints what it did, so the transcript reads on its own.

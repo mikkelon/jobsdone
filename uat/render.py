@@ -48,8 +48,22 @@ def palette(theme):
 
 
 def render(ansi, cols, rows, slots, fg, bg):
+    """A whole page: the screen as HTML spans on the theme's background."""
+    return f"""<!doctype html><meta charset=utf-8>
+<style>
+body{{margin:0;background:{bg}}}
+{PRE_STYLE.format(fg=fg, bg=bg)}
+</style><pre>{screen(ansi, cols, rows, slots, fg, bg)}</pre>"""
+
+
+PRE_STYLE = """pre{{margin:0;padding:14px;background:{bg};color:{fg};
+font:9pt/1.25 "JetBrainsMono Nerd Font","JetBrains Mono","Liberation Mono",monospace;
+display:inline-block;white-space:pre}}"""
+
+
+def screen(ansi, cols, rows, slots, fg, bg):
     """Turn one line of ANSI into HTML spans; state resets per line, which
-    is what capture-pane -e produces."""
+    is what capture-pane -e produces. The result is the inside of a pre."""
     out = []
     for line in ansi.split("\n")[:rows]:
         state = dict(bold=False, dim=False, rev=False, fg=None, bg=None)
@@ -131,14 +145,7 @@ def render(ansi, cols, rows, slots, fg, bg):
         out.append("".join(spans))
     while len(out) < rows:
         out.append(" " * cols)
-    body = "\n".join(out)
-    return f"""<!doctype html><meta charset=utf-8>
-<style>
-body{{margin:0;background:{bg}}}
-pre{{margin:0;padding:14px;background:{bg};color:{fg};
-font:9pt/1.25 "JetBrainsMono Nerd Font","JetBrains Mono","Liberation Mono",monospace;
-display:inline-block;white-space:pre}}
-</style><pre>{body}</pre>"""
+    return "\n".join(out)
 
 
 def main():
