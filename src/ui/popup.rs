@@ -11,7 +11,9 @@ use jiff::Span;
 use jiff::civil::{Date, Weekday as Civil};
 use ratatui::style::{Color, Modifier, Style};
 
-use super::{Canvas, Rows, accent, bold, count, cursor, day_label, dim, place_label, plain};
+use super::{
+    Canvas, DateOrder, Rows, accent, bold, count, cursor, day_label, dim, place_label, plain,
+};
 use crate::app::{App, DateDraft, DateKind, MoveTarget, Popup, RepeatDraft, RowId};
 use crate::domain::{self, Row, Weekday};
 use crate::input::{
@@ -192,7 +194,7 @@ fn about_the_row(app: &App) -> String {
             .model()
             .note(id)
             .map(|note| note.body.lines().next().unwrap_or_default().to_owned()),
-        Some(RowId::Day(day)) => Some(day_label(day)),
+        Some(RowId::Day(day)) => Some(day_label(day, app.dates())),
         None => None,
     };
     match title {
@@ -275,7 +277,7 @@ fn search(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
                 // is left of the line, so a long title stops before the
                 // location instead of running through it and out of the
                 // box (F15).
-                let side = beside(found, *closed, app.today());
+                let side = beside(found, *closed, app.today(), app.dates());
                 let side = super::clip(&side, width.saturating_sub(8));
                 canvas.rput(x + width - 2, row, side, dim());
                 let right = (x + width - 2).saturating_sub(count(side) + 2);
@@ -323,8 +325,8 @@ enum Line<'a> {
 /// What a result says about itself on the right: the day it is on, which
 /// is the day Enter goes to (DOMAIN.md section 14), and for an open task
 /// the flags it carries there.
-fn beside(found: &Row, closed: bool, today: jiff::civil::Date) -> String {
-    let mut parts = vec![place_label(found.place, today)];
+fn beside(found: &Row, closed: bool, today: jiff::civil::Date, dates: DateOrder) -> String {
+    let mut parts = vec![place_label(found.place, today, dates)];
     if !closed {
         if found.focus {
             parts.push("focus".to_owned());
@@ -408,7 +410,7 @@ fn move_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
         canvas.put(x + 2, row, choice.key, accent());
         canvas.put(x + 8, row, choice.label, plain());
         let day = match choice.target {
-            MoveTarget::Day(day) => day_label(day),
+            MoveTarget::Day(day) => day_label(day, app.dates()),
             MoveTarget::Backlog => "no day".to_owned(),
             MoveTarget::Pick => "calendar".to_owned(),
         };
@@ -471,7 +473,7 @@ fn date_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     // that the typed line is not a date yet, since Enter would say so.
     let typed = popup.text.trim();
     let day = if typed.is_empty() || domain::parse_date(typed, app.today()).is_some() {
-        day_label(draft.on)
+        day_label(draft.on, app.dates())
     } else {
         "not a date".to_owned()
     };
@@ -487,7 +489,7 @@ fn date_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
         canvas.put(x + 2, row, choice.key, accent());
         canvas.put(x + 8, row, choice.label, plain());
         let day = match choice.date {
-            Some(day) => day_label(day),
+            Some(day) => day_label(day, app.dates()),
             None => no_date(draft.kind).to_owned(),
         };
         canvas.rput(x + width - 2, row, &day, dim());
@@ -641,7 +643,15 @@ fn repeat_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
 
         canvas.put(x + 2, row, binding.shown, accent());
         canvas.put(x + 8, row, binding.label, plain());
-        shape_of(canvas, x, width, row, *shape, draft, at == popup.selected);
+        shape_of(
+            canvas,
+            x + width - 2,
+            row,
+            *shape,
+            draft,
+            at == popup.selected,
+            app.dates(),
+        );
         if at == popup.selected {
             canvas.restyle(x + 1, row, width - 2, cursor());
         }
@@ -650,7 +660,7 @@ fn repeat_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     let preview: Vec<String> = app
         .repeat_preview()
         .iter()
-        .map(|date| day_label(*date))
+        .map(|date| day_label(*date, app.dates()))
         .collect();
     let next = if shapes.get(popup.selected) == Some(&Action::StopRepeat) {
         // The one row that ends a schedule rather than describing one, so
@@ -683,14 +693,13 @@ fn repeat_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
 /// on, and, on the selected row, what `h` and `l` are pointing at.
 fn shape_of(
     canvas: &mut Canvas,
-    x: u16,
-    width: u16,
+    right: u16,
     y: u16,
     shape: Action,
     draft: &RepeatDraft,
     selected: bool,
+    dates: DateOrder,
 ) {
-    let right = x + width - 2;
     match shape {
         Action::EveryWorkDay => {
             canvas.rput(right, y, "Mon–Fri", dim());
@@ -720,7 +729,7 @@ fn shape_of(
         }
         Action::EveryFewWeeks => {
             let unit = if draft.weeks == 1 { "week" } else { "weeks" };
-            let from = format!("{unit} from {}", day_label(draft.from));
+            let from = format!("{unit} from {}", day_label(draft.from, dates));
             canvas.rput(right, y, &from, dim());
             canvas.rput(
                 right.saturating_sub(count(&from) + 1),

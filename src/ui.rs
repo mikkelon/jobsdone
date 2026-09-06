@@ -20,7 +20,8 @@ use unicode_width::UnicodeWidthStr;
 
 use crate::app::{App, Editor, Layout, List, ListArea, Page, Rect as Cells, RowArea, RowId};
 use crate::domain::{
-    self, DayListRow, MonthDay, NoteRow, Place, Rule, ScheduleRow, Stretch, Weekday,
+    self, DateOrder, DayListRow, MonthDay, NoteRow, Place, Rule, ScheduleRow, Stretch, Weekday,
+    day_label, short_label, stamp_label,
 };
 use crate::input::{self, Field, NotesPane, Pane, Shown, Side};
 
@@ -202,17 +203,12 @@ fn cells(glyph: &str) -> u16 {
 
 // ---- dates, rules and places, as words -------------------------------
 
-/// `Fri 5 Sep`, which is how every date in the program is written.
-fn day_label(date: Date) -> String {
-    date.strftime("%a %-d %b").to_string()
-}
-
 /// A date beside today: the word where there is one, the date otherwise.
-fn when(date: Date, today: Date) -> String {
+fn when(date: Date, today: Date, dates: DateOrder) -> String {
     if date == today {
         "today".to_owned()
     } else {
-        date.strftime("%-d %b").to_string()
+        short_label(date, dates)
     }
 }
 
@@ -231,11 +227,11 @@ fn ago(day: Date, today: Date) -> String {
 }
 
 /// Where a task is now, which is what a moved row points at.
-fn place_label(place: Place, today: Date) -> String {
+fn place_label(place: Place, today: Date, dates: DateOrder) -> String {
     match place {
         Place::Backlog => "backlog".to_owned(),
         Place::Day(day) if day == today => "today".to_owned(),
-        Place::Day(day) => day_label(day),
+        Place::Day(day) => day_label(day, dates),
     }
 }
 
@@ -401,9 +397,12 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
     };
     let browsing = app.shown() != Shown::Today;
     let day = if browsing {
-        (day_label(app.showing()), bold())
+        (day_label(app.showing(), app.dates()), bold())
     } else {
-        (format!("Today · {}", day_label(app.today())), bold())
+        (
+            format!("Today · {}", day_label(app.today(), app.dates())),
+            bold(),
+        )
     };
     let count = app.notes().count;
     let notes = counted(count, "note", "notes");
@@ -537,7 +536,7 @@ fn tab_row(canvas: &mut Canvas, app: &App, y: u16) {
     let browsing = app.shown() != Shown::Today;
     let tabs: [String; 3] = if browsing {
         [
-            day_label(app.showing()).to_uppercase(),
+            day_label(app.showing(), app.dates()).to_uppercase(),
             "DAYS".to_owned(),
             TABS[2].to_owned(),
         ]
@@ -668,6 +667,8 @@ impl Column {
 struct Look<'a> {
     kind: Kind,
     today: Date,
+    /// Which way round the dates on the row are written.
+    dates: DateOrder,
     narrow: bool,
     moving: bool,
     /// The words at the right of the row when the caller knows them and
@@ -805,9 +806,9 @@ fn day_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
     };
 
     let (title, sub) = match shown {
-        Shown::Today => ("Today".to_owned(), day_label(view.day)),
-        Shown::Past => (day_label(view.day), "past day".to_owned()),
-        Shown::Future => (day_label(view.day), "future day".to_owned()),
+        Shown::Today => ("Today".to_owned(), day_label(view.day, app.dates())),
+        Shown::Past => (day_label(view.day, app.dates()), "past day".to_owned()),
+        Shown::Future => (day_label(view.day, app.dates()), "future day".to_owned()),
     };
 
     PaneView {
@@ -1075,6 +1076,7 @@ fn pane(
         let look = Look {
             kind,
             today,
+            dates: app.dates(),
             narrow,
             moving: app.moving() == Some(row.task),
             note: None,
@@ -1126,11 +1128,11 @@ fn pane(
                 None
             }
             Line::Note(row) => {
-                note_row(canvas, x, width, y, row, today);
+                note_row(canvas, x, width, y, row, app);
                 Some(RowId::Note(row.note))
             }
             Line::Day(row) => {
-                day_row(canvas, x, width, y, row, today);
+                day_row(canvas, x, width, y, row, today, app.dates());
                 Some(RowId::Day(row.day))
             }
             Line::Schedule(row) => {
@@ -1155,6 +1157,7 @@ fn pane(
                         let look = Look {
                             kind: *kind,
                             today,
+                            dates: app.dates(),
                             narrow,
                             moving: app.moving() == Some(row.task),
                             note: None,
@@ -1271,7 +1274,9 @@ struct Chip {
 
 /// The chips of a row, in the order they are drawn from the left.
 fn chips_of(row: &domain::Row, look: Look) -> Vec<Chip> {
-    let Look { kind, today, .. } = look;
+    let Look {
+        kind, today, dates, ..
+    } = look;
     let mut chips = Vec::new();
     if kind == Kind::Waiting || row.waiting {
         chips.push(Chip {
@@ -1289,7 +1294,7 @@ fn chips_of(row: &domain::Row, look: Look) -> Vec<Chip> {
     }
     if let Some(due) = row.due {
         chips.push(Chip {
-            text: format!("due {}{}", when(due.on, today), how_late(due, today)),
+            text: format!("due {}{}", when(due.on, today, dates), how_late(due, today)),
             short: "due",
             style: Style::new().fg(if due.overdue {
                 Color::Red
@@ -1300,7 +1305,7 @@ fn chips_of(row: &domain::Row, look: Look) -> Vec<Chip> {
     }
     if let Some(remind) = row.remind {
         chips.push(Chip {
-            text: format!("◷ {}", when(remind, today)),
+            text: format!("◷ {}", when(remind, today, dates)),
             short: "◷",
             style: Style::new().fg(Color::Cyan),
         });
@@ -1335,12 +1340,12 @@ fn how_late(due: domain::DueChip, today: Date) -> String {
 /// The right-hand words that are not a chip: that the row is being
 /// carried up or down, where a moved task went, that a task came in from
 /// the backlog, that a closed one was focus.
-fn meta_of(row: &domain::Row, kind: Kind, today: Date, moving: bool) -> String {
+fn meta_of(row: &domain::Row, kind: Kind, today: Date, dates: DateOrder, moving: bool) -> String {
     if moving {
         return "moving ▲▼".to_owned();
     }
     if kind == Kind::Moved {
-        return format!("to {}", place_label(row.place, today));
+        return format!("to {}", place_label(row.place, today, dates));
     }
     if row.was_focus {
         return "was focus".to_owned();
@@ -1379,6 +1384,7 @@ fn right_side(column: Column, row: &domain::Row, look: Look) -> (Vec<Piece>, u16
     let Look {
         kind,
         today,
+        dates,
         narrow,
         moving,
         note,
@@ -1392,11 +1398,11 @@ fn right_side(column: Column, row: &domain::Row, look: Look) -> (Vec<Piece>, u16
     let closed = if kind == Kind::Moved || note.is_some() {
         String::new()
     } else {
-        closed_label(row, today)
+        closed_label(row, today, dates)
     };
     let meta = match note {
         Some(note) => note.to_owned(),
-        None => meta_of(row, kind, today, moving),
+        None => meta_of(row, kind, today, dates, moving),
     };
 
     let pieces_of = |short: bool| {
@@ -1539,14 +1545,14 @@ fn tail_of(title: &str, room: u16, width: u16) -> Vec<String> {
 
 /// The time a task was closed, or the date when it was closed on a later
 /// day than the one being shown (DOMAIN.md section 6).
-fn closed_label(row: &domain::Row, today: Date) -> String {
+fn closed_label(row: &domain::Row, today: Date, dates: DateOrder) -> String {
     let Some(at) = &row.closed_at else {
         return String::new();
     };
     if row.closed_on_this_day {
         at.strftime("%H:%M").to_string()
     } else {
-        format!("closed {}", when(at.date(), today))
+        format!("closed {}", when(at.date(), today, dates))
     }
 }
 
@@ -1610,8 +1616,16 @@ fn schedule_row(canvas: &mut Canvas, x: u16, width: u16, y: u16, row: &ScheduleR
 }
 
 /// `     Thu 4 Sep                               4 / 5 · 1 open`
-fn day_row(canvas: &mut Canvas, x: u16, width: u16, y: u16, row: &DayListRow, today: Date) {
-    let mut name = day_label(row.day);
+fn day_row(
+    canvas: &mut Canvas,
+    x: u16,
+    width: u16,
+    y: u16,
+    row: &DayListRow,
+    today: Date,
+    dates: DateOrder,
+) {
+    let mut name = day_label(row.day, dates);
     if row.day == today {
         name.push_str(" · today");
     }
@@ -1625,7 +1639,7 @@ fn day_row(canvas: &mut Canvas, x: u16, width: u16, y: u16, row: &DayListRow, to
 }
 
 /// ` ▪ Mention to Anna: CI runner b                        yesterday`
-fn note_row(canvas: &mut Canvas, x: u16, width: u16, y: u16, row: &NoteRow, today: Date) {
+fn note_row(canvas: &mut Canvas, x: u16, width: u16, y: u16, row: &NoteRow, app: &App) {
     canvas.put(x + 1, y, " ▪ ", dim());
     canvas.put(
         x + 4,
@@ -1633,14 +1647,19 @@ fn note_row(canvas: &mut Canvas, x: u16, width: u16, y: u16, row: &NoteRow, toda
         clip(&row.first_line, width.saturating_sub(16)),
         plain(),
     );
-    let made = domain::working_day(&row.created_at);
-    canvas.rput(x + width - 1, y, &age(made, today), dim());
+    let made = app.settings().working_day(&row.created_at);
+    canvas.rput(
+        x + width - 1,
+        y,
+        &age(made, app.today(), app.dates()),
+        dim(),
+    );
 }
 
 /// How long ago a note was made, counted in working days so that one
 /// written at one in the morning is still yesterday's (DOMAIN.md section
 /// 2). Past a couple of months the words stop being shorter than the date.
-fn age(made: Date, today: Date) -> String {
+fn age(made: Date, today: Date, dates: DateOrder) -> String {
     let days = made
         .until(today)
         .map_or(0, |span| i64::from(span.get_days()));
@@ -1650,7 +1669,7 @@ fn age(made: Date, today: Date) -> String {
         2..=6 => format!("{days} days"),
         7..=13 => "last week".to_owned(),
         14..=55 => format!("{} weeks", days / 7),
-        _ => made.strftime("%-d %b").to_string(),
+        _ => short_label(made, dates),
     }
 }
 
@@ -1673,7 +1692,7 @@ fn open_note(
         .rows
         .iter()
         .find(|row| Some(row.note) == open)
-        .map(|row| row.created_at.strftime("%a %-d %b %H:%M").to_string());
+        .map(|row| stamp_label(&row.created_at, app.dates()));
 
     let view = PaneView {
         title: "Note".to_owned(),

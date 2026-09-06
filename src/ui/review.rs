@@ -13,7 +13,7 @@ use super::{
     day_label, dim, group_rule, place_label, plain, row_area, scroll_to, task_row, title_field,
 };
 use crate::app::{App, Decided, Editor, Layout, List, ListArea, Rect as Cells, Review, RowId};
-use crate::domain::{Place, Row};
+use crate::domain::{DateOrder, Place, Row};
 use crate::input::{self, Field, ReviewStep};
 
 /// The columns the panel takes, as wireframes 01 and 02 draw it.
@@ -148,7 +148,7 @@ enum Line<'a> {
     Task(&'a Row, Kind, String),
 }
 
-fn lines_of<'a>(review: &'a Review, today: Date) -> Vec<Line<'a>> {
+fn lines_of<'a>(review: &'a Review, today: Date, dates: DateOrder) -> Vec<Line<'a>> {
     let mut lines = Vec::new();
     let mut group = |label: String, rows: &'a [Row], starting: bool| {
         if rows.is_empty() {
@@ -168,14 +168,14 @@ fn lines_of<'a>(review: &'a Review, today: Date) -> Vec<Line<'a>> {
             lines.push(Line::Task(
                 row,
                 kind,
-                note_of(answered, row, today, starting),
+                note_of(answered, row, today, dates, starting),
             ));
         }
     };
 
     if let Some(pile) = review.pile().filter(|_| review.step() == ReviewStep::Pile) {
         for day in &pile.days {
-            group(day_heading(day.day, day.age), &day.rows, false);
+            group(day_heading(day.day, day.age, dates), &day.rows, false);
         }
     }
     if let Some(surfaced) = review
@@ -195,8 +195,8 @@ fn lines_of<'a>(review: &'a Review, today: Date) -> Vec<Line<'a>> {
 
 /// `Yesterday · Thu 4 Sep`, `Mon 1 Sep`, `Fri 22 Aug · 2 weeks ago`: the
 /// day, and how long ago where the date alone does not say it.
-fn day_heading(day: Date, age: i64) -> String {
-    let date = day_label(day);
+fn day_heading(day: Date, age: i64, dates: DateOrder) -> String {
+    let date = day_label(day, dates);
     match age {
         1 => format!("Yesterday · {date}"),
         7..=13 => format!("{date} · last week"),
@@ -207,10 +207,16 @@ fn day_heading(day: Date, age: i64) -> String {
 
 /// The words at the right of a row: what the review did to it, or what
 /// the row is while it waits to be answered.
-fn note_of(answered: Option<Decided>, row: &Row, today: Date, starting: bool) -> String {
+fn note_of(
+    answered: Option<Decided>,
+    row: &Row,
+    today: Date,
+    dates: DateOrder,
+    starting: bool,
+) -> String {
     match answered {
         Some(Decided::Done) => return "✓ closed".to_owned(),
-        Some(Decided::Moved(place)) => return format!("→ {}", place_label(place, today)),
+        Some(Decided::Moved(place)) => return format!("→ {}", place_label(place, today, dates)),
         Some(Decided::Deleted) => return "✗ deleted".to_owned(),
         Some(Decided::Kept) => return "kept".to_owned(),
         Some(Decided::Dated) => return "re-dated".to_owned(),
@@ -223,7 +229,7 @@ fn note_of(answered: Option<Decided>, row: &Row, today: Date, starting: bool) ->
         // the group, so it cannot claim a plan the task is not on.
         return match row.place {
             Place::Day(day) if day == today => "on today's plan".to_owned(),
-            place => format!("now in {}", place_label(place, today)),
+            place => format!("now in {}", place_label(place, today, dates)),
         };
     }
     // The day this task was a must-do for has passed.
@@ -248,7 +254,7 @@ fn the_list(canvas: &mut Canvas, app: &App, review: &Review, column: Column, lay
     });
 
     let today = app.today();
-    let lines = lines_of(review, today);
+    let lines = lines_of(review, today, app.dates());
     let on = app.cursor(List::Review);
     let writing = app
         .editor()
@@ -281,6 +287,7 @@ fn the_list(canvas: &mut Canvas, app: &App, review: &Review, column: Column, lay
                     Look {
                         kind: *kind,
                         today,
+                        dates: app.dates(),
                         narrow: layout.narrow,
                         moving: false,
                         note: Some(note),

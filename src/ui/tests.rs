@@ -7,7 +7,7 @@ use ratatui::backend::{CrosstermBackend, TestBackend};
 use ratatui::style::Color;
 use ratatui::{Terminal, TerminalOptions, Viewport};
 
-use crate::app::App;
+use crate::app::{App, Desktop, Locale, WindowSize};
 use crate::domain::tests::MemStore;
 use crate::domain::{DueChip, FromPlace, Model, Note, Placement, Schedule, Task, Weekday};
 use crate::input::Action;
@@ -28,9 +28,32 @@ fn on(text: &str) -> Date {
     text.parse().expect("a civil date")
 }
 
+/// A window manager that takes whatever it is told. Nothing on screen
+/// asks it anything.
+struct Desk;
+
+impl Desktop for Desk {
+    fn available(&self) -> bool {
+        true
+    }
+
+    fn apply_window(&self, _floating: bool, _size: WindowSize) -> Result<(), String> {
+        Ok(())
+    }
+}
+
+/// The app a drawing test draws, on the store it is given.
+fn app_on(store: MemStore) -> App {
+    app_when(store, &at(NOW))
+}
+
+fn app_when(store: MemStore, now: &Zoned) -> App {
+    App::new(Box::new(store), Box::new(Desk), Locale::default(), now).expect("an app")
+}
+
 /// An app on an empty database, which is what a first launch looks like.
 fn empty() -> App {
-    App::new(Box::new(MemStore::new()), &at(NOW)).expect("an app")
+    app_on(MemStore::new())
 }
 
 /// A task with everything a wireframe row does not say about it left off.
@@ -377,7 +400,7 @@ fn history() -> App {
     model
         .meta
         .insert("review_on".to_owned(), "2025-09-05".to_owned());
-    let mut app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+    let mut app = app_on(MemStore::holding(model));
     for _ in 0..4 {
         app.update(Action::PrevDay);
     }
@@ -386,7 +409,7 @@ fn history() -> App {
 }
 
 fn app() -> App {
-    App::new(Box::new(MemStore::holding(wireframe_model())), &at(NOW)).expect("an app")
+    app_on(MemStore::holding(wireframe_model()))
 }
 
 /// A window holding the rows that carry the most: a task that left today
@@ -449,7 +472,7 @@ fn crowded_model() -> Model {
 }
 
 fn crowded() -> App {
-    let mut app = App::new(Box::new(MemStore::holding(crowded_model())), &at(NOW)).expect("an app");
+    let mut app = app_on(MemStore::holding(crowded_model()));
     // The repeat starting today opens the review; the rows this window is
     // for are the ones behind it.
     app.update(Action::Cancel);
@@ -468,7 +491,7 @@ fn long_titled() -> App {
         1,
         task(1, &"0123456789".repeat(8), Some(on("2025-09-05")), 0),
     );
-    App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app")
+    app_on(MemStore::holding(model))
 }
 
 fn every_chip() -> domain::Row {
@@ -705,7 +728,7 @@ fn review_model() -> Model {
 /// The review as wireframe 01 draws it: opened by the launch, with the
 /// first row closed and the second moved onto today.
 fn reviewing() -> App {
-    let mut app = App::new(Box::new(MemStore::holding(review_model())), &at(NOW)).expect("an app");
+    let mut app = app_on(MemStore::holding(review_model()));
     app.update(Action::Close);
     app.update(Action::ToToday);
     // What just happened stands in the hint bar until the next key, and
@@ -1293,7 +1316,7 @@ fn a_row_with_more_chips_than_room_loses_the_end_of_its_title() {
             created_at: now.clone(),
         },
     );
-    let app = App::new(Box::new(MemStore::holding(model)), &now).expect("an app");
+    let app = app_when(MemStore::holding(model), &now);
 
     let row = look(&app, 120, 36)
         .into_iter()
@@ -1481,7 +1504,7 @@ fn a_note_written_in_the_small_hours_is_as_old_as_the_evening_it_came_from() {
         // Half past one on the Friday, which is Thursday's working day.
         note.created_at = at("2025-09-05T01:30:00+02:00[Europe/Copenhagen]");
     }
-    let mut app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+    let mut app = app_on(MemStore::holding(model));
     app.update(Action::NotesPage);
 
     assert!(look(&app, 120, 36)[5].contains("yesterday"));
@@ -1572,6 +1595,7 @@ fn no_width_a_crowded_row_can_take_makes_the_drawing_panic() {
                         Look {
                             kind,
                             today: on("2025-09-05"),
+                            dates: DateOrder::DayFirst,
                             narrow,
                             moving: false,
                             note,
@@ -1596,6 +1620,7 @@ fn a_title_longer_than_its_row_ends_in_an_ellipsis() {
         Look {
             kind: Kind::Open,
             today: on("2025-09-05"),
+            dates: DateOrder::DayFirst,
             narrow: true,
             moving: false,
             note: None,
@@ -1621,7 +1646,7 @@ fn the_cursor_row_shows_a_long_title_whole_on_the_lines_under_it() {
     model
         .tasks
         .insert(2, task(2, "Book dentist", Some(on("2025-09-05")), 1));
-    let app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+    let app = app_on(MemStore::holding(model));
     let (drawn, layout) = screen(&app, 120, 36);
 
     assert!(
@@ -1678,6 +1703,7 @@ fn a_crowded_row_keeps_its_box_and_the_start_of_its_title() {
             Look {
                 kind: Kind::Moved,
                 today: on("2025-09-05"),
+                dates: DateOrder::DayFirst,
                 narrow: false,
                 moving: false,
                 note: None,
@@ -1861,7 +1887,7 @@ fn a_pane_longer_than_the_window_follows_the_cursor() {
             task(at + 1, &format!("Task {}", at + 1), None, at as usize),
         );
     }
-    let mut app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+    let mut app = app_on(MemStore::holding(model));
     app.update(Action::PaneRight);
 
     let top = look(&app, 120, 36);
@@ -1897,7 +1923,7 @@ fn a_title_of_wide_characters_keeps_every_character_and_its_chips() {
             ..task(1, "日本語 🙂 の報告", None, 0)
         },
     );
-    let app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+    let app = app_on(MemStore::holding(model));
 
     let row = glyphs(&app, 120, 36)
         .into_iter()
@@ -1924,7 +1950,7 @@ fn a_note_of_wide_characters_wraps_and_puts_its_caret_by_cells() {
             deleted_at: None,
         },
     );
-    let mut app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+    let mut app = app_on(MemStore::holding(model));
     app.update(Action::NotesPage);
     app.update(Action::Confirm);
     // Into the body, and back two characters, which is four cells.
@@ -1971,7 +1997,7 @@ fn a_day_header_keeps_its_counts_clear_of_its_label() {
             from_place: FromPlace::New,
         },
     );
-    let mut app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+    let mut app = app_on(MemStore::holding(model));
     app.update(Action::NextDay);
 
     let header: Vec<char> = look(&app, 120, 36).remove(3).chars().collect();
@@ -2136,7 +2162,7 @@ fn nothing_to_decide() -> App {
             ..task(1, "Write standup notes", Some(today), 0)
         },
     );
-    App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app")
+    app_on(MemStore::holding(model))
 }
 
 /// A surfaced step whose only rows are today's copies asks nothing, and
@@ -2366,7 +2392,7 @@ fn a_query_of_clusters_finds_the_row_it_is_stored_in() {
     model
         .tasks
         .insert(1, task(1, CLUSTERS, Some(on("2025-09-05")), 0));
-    let mut app = App::new(Box::new(MemStore::holding(model)), &at(NOW)).expect("an app");
+    let mut app = app_on(MemStore::holding(model));
     app.update(Action::Search);
     for typed in CLUSTERS.chars() {
         app.update(Action::Insert(typed));
