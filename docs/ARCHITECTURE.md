@@ -148,7 +148,7 @@ is a `Model` and `Model::apply`, and it lives in `domain/tests.rs` as
     trait Desktop {
         fn available(&self) -> bool;
         fn apply_window(&self, floating: bool, size: WindowSize) -> Result<(), String>;
-        fn preview(&self, size: WindowSize) -> Result<(), String>;
+        fn preview(&self, size: WindowSize) -> Result<bool, String>;
     }
 
 `main.rs` hands the application whichever window manager is out there, so
@@ -158,11 +158,13 @@ the application can do about it but say so.
 
 `apply_window` is the rule the window opens by; `preview` is the window
 it is in already, resized and centred so that a size being chosen on the
-settings page is seen rather than read. Both are owed rather than done:
-a window setting changed by a key marks the window owed, and the tick
-that follows 250 ms of quiet keys pays it once, so a key held down on
-the size row costs one rewrite of Hyprland's configuration rather than
-one per repeat. `Quit` pays what is still owed, without the preview, so
+settings page is seen rather than read, answering whether there was a
+window manager running to do it, so that the hint bar can tell a size on
+screen from one that waits for the next launch. Both are owed rather
+than done: a window setting changed by a key marks the window owed, and
+the tick that follows 250 ms of quiet keys pays it once, so a key held
+down on the size row costs one rewrite of Hyprland's configuration
+rather than one per repeat. `Quit` pays what is still owed, without the preview, so
 that a size settled on and quit within the quarter second still reaches
 the rule.
 
@@ -353,7 +355,9 @@ adds it here first, the way a new dependency is added to section 2 first.
   review opens.
 - `Desktop`: what the window manager can be asked to do about the window
   the program is in, `available()`, `apply_window(floating, size)` and
-  `preview(size)`, implemented by `desktop` and by a fake in the tests.
+  `preview(size) -> Result<bool, String>`, the `bool` being whether a
+  window was really resized, implemented by `desktop` and by a fake in
+  the tests.
   `Locale` is what the environment says dates look like here, which
   `main.rs` resolves once. `WindowSize` and `DateOrder` are re-exported
   here so that both seams are spoken in one vocabulary.
@@ -362,8 +366,8 @@ adds it here first, the way a new dependency is added to section 2 first.
   which commits, works the day out again in case the day now starts at
   another hour, refreshes the views and, when a window setting moved,
   marks the window owed. The tick pays it: the rule is written, a
-  floating window is shown the size, and the hint bar carries whatever
-  came back.
+  floating window is shown the size, and the hint bar says which of
+  the two the person got.
 - The settings page as rows: `SettingRow`, one per row of the page and so
   one per work day, `SettingGroup`, the label a run of them is drawn
   under, and `setting_rows() -> &[(SettingGroup, SettingRow)]`, the whole
@@ -440,8 +444,8 @@ adds it here first, the way a new dependency is added to section 2 first.
   `$XDG_CONFIG_HOME/hypr/bindings.lua` and reloading a running Hyprland.
   Off Hyprland `apply_window` says so in a sentence and writes nothing.
   `preview` is `hyprctl dispatch resizeactive exact W H` and then
-  `centerwindow`, and where no Hyprland is running there is no window to
-  dispatch to, which is nothing done rather than a failure.
+  `centerwindow`, answering `true`; where no Hyprland is running there is
+  no window to dispatch to, which is `false` rather than a failure.
 
 ### `terminal`
 

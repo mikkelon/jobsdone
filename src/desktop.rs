@@ -82,10 +82,11 @@ impl Desktop for Hyprland {
 
     /// The rule is what the window opens at; this is the window it is in
     /// already. Nothing to dispatch to when Hyprland is not running,
-    /// which is the same case the reload sits out.
-    fn preview(&self, size: WindowSize) -> Result<(), String> {
+    /// which is the same case the reload sits out and is `false` rather
+    /// than a failure.
+    fn preview(&self, size: WindowSize) -> Result<bool, String> {
         if env::var_os(SIGNATURE).is_none() {
-            return Ok(());
+            return Ok(false);
         }
         hyprctl(&[
             "dispatch",
@@ -95,7 +96,7 @@ impl Desktop for Hyprland {
             &size.height.to_string(),
         ])?;
         hyprctl(&["dispatch", "centerwindow"])?;
-        Ok(())
+        Ok(true)
     }
 }
 

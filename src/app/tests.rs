@@ -13,6 +13,9 @@ use crate::domain::{Change, Placement, Rule, Schedule, Task, WeekStart, Weekday,
 #[derive(Clone)]
 struct Desk {
     here: bool,
+    /// Whether there is a compositor running to resize a window, which a
+    /// configuration to write the rule into does not promise.
+    shows: bool,
     told: Rc<RefCell<Vec<(bool, WindowSize)>>>,
     shown: Rc<RefCell<Vec<WindowSize>>>,
 }
@@ -21,6 +24,7 @@ impl Desk {
     fn here() -> Desk {
         Desk {
             here: true,
+            shows: true,
             told: Rc::new(RefCell::new(Vec::new())),
             shown: Rc::new(RefCell::new(Vec::new())),
         }
@@ -29,6 +33,16 @@ impl Desk {
     fn absent() -> Desk {
         Desk {
             here: false,
+            shows: false,
+            ..Desk::here()
+        }
+    }
+
+    /// A configuration to write the rule into, with nothing running to
+    /// show it in.
+    fn unattended() -> Desk {
+        Desk {
+            shows: false,
             ..Desk::here()
         }
     }
@@ -56,9 +70,9 @@ impl Desktop for Desk {
         }
     }
 
-    fn preview(&self, size: WindowSize) -> Result<(), String> {
+    fn preview(&self, size: WindowSize) -> Result<bool, String> {
         self.shown.borrow_mut().push(size);
-        Ok(())
+        Ok(self.shows)
     }
 }
 
@@ -3595,6 +3609,37 @@ fn a_window_owed_at_quitting_time_is_paid_before_the_program_goes() {
     assert!(
         desk.shown().is_empty(),
         "there is nothing to show in a window that is closing"
+    );
+}
+
+#[test]
+fn a_window_the_person_just_watched_resize_is_not_told_to_wait_for_a_launch() {
+    let desk = Desk::here();
+    let mut app = app_on(MemStore::holding(reviewed(Model::empty())), &desk, NOW);
+    app.update(Action::SettingsPage);
+    cursor_to(&mut app, SettingRow::WindowSize);
+
+    app.update(Action::Right);
+    app.update(Action::Tick);
+    assert_eq!(
+        hint(&app),
+        "The window rule is written and the window is shown at that size."
+    );
+}
+
+#[test]
+fn a_rule_written_with_nothing_running_to_show_it_waits_for_the_next_launch() {
+    let desk = Desk::unattended();
+    let mut app = app_on(MemStore::holding(reviewed(Model::empty())), &desk, NOW);
+    app.update(Action::SettingsPage);
+    cursor_to(&mut app, SettingRow::WindowSize);
+
+    app.update(Action::Right);
+    app.update(Action::Tick);
+    assert_eq!(desk.told(), [(true, WindowSize::PRESETS[2])]);
+    assert_eq!(
+        hint(&app),
+        "The window rule is written. It applies the next time the app opens."
     );
 }
 

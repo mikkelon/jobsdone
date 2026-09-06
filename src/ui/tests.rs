@@ -44,8 +44,8 @@ impl Desktop for Desk {
         Ok(())
     }
 
-    fn preview(&self, _size: WindowSize) -> Result<(), String> {
-        Ok(())
+    fn preview(&self, _size: WindowSize) -> Result<bool, String> {
+        Ok(true)
     }
 }
 

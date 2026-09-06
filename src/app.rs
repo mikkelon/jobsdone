@@ -47,10 +47,11 @@ pub trait Desktop {
     fn apply_window(&self, floating: bool, size: WindowSize) -> Result<(), String>;
 
     /// Gives the window the program is in this size now, so a size being
-    /// chosen is seen rather than read. Asked only of a floating window,
-    /// and only worth anything while the window manager is running: it
-    /// is otherwise a no-op rather than a failure.
-    fn preview(&self, size: WindowSize) -> Result<(), String>;
+    /// chosen is seen rather than read. Asked only of a floating window.
+    /// The answer is whether there was a window manager running to do it,
+    /// because a rule written where nothing is running is not a failure
+    /// and is also not something anybody just watched happen.
+    fn preview(&self, size: WindowSize) -> Result<bool, String>;
 }
 
 /// What the environment says about the person at the keyboard. The
@@ -1018,29 +1019,38 @@ impl App {
     /// it stops on reaches Hyprland, which rewrites its configuration and
     /// reloads for each one it is given. A floating window is then
     /// resized to what was chosen, so the size is seen rather than read;
-    /// `showing` is false where there would be nobody to see it.
+    /// `showing` is false where there would be nobody to see it. The hint
+    /// bar says which of the two happened, because a size on screen and a
+    /// size that waits for the next launch are different answers.
     fn pay_the_window(&mut self, showing: bool) {
         if !std::mem::take(&mut self.window_owed) {
             return;
         }
         let floating = self.model.settings.floating_window();
         let size = self.model.settings.window_size();
-        match self.desktop.apply_window(floating, size) {
-            Ok(()) => {
-                if showing
-                    && floating
-                    && let Err(why) = self.desktop.preview(size)
-                {
+        if let Err(why) = self.desktop.apply_window(floating, size) {
+            self.say(why, false);
+            return;
+        }
+        let shown = if showing && floating {
+            match self.desktop.preview(size) {
+                Ok(shown) => shown,
+                Err(why) => {
                     self.say(why, false);
                     return;
                 }
-                self.say(
-                    "The window rule is written. It applies the next time the app opens.",
-                    false,
-                );
             }
-            Err(why) => self.say(why, false),
-        }
+        } else {
+            false
+        };
+        self.say(
+            if shown {
+                "The window rule is written and the window is shown at that size."
+            } else {
+                "The window rule is written. It applies the next time the app opens."
+            },
+            false,
+        );
     }
 
     fn now(&self) -> Zoned {
