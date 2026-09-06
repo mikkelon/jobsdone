@@ -3125,8 +3125,8 @@ fn added_task(change: &Change) -> Option<Id> {
 /// page.
 ///
 /// `jobsdone desktop` is how the install script asks for the window it
-/// was told to ask for, and how a machine that has since gained a
-/// Hyprland gets the rule written. None of the rest of a launch happens
+/// was told to ask for, and how a machine that gains a Hyprland later
+/// gets the rule written. None of the rest of a launch happens
 /// here: no copies are made and no review is opened, so the command never
 /// spends the day's review. A flag that was not passed leaves its setting
 /// alone.

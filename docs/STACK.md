@@ -218,9 +218,10 @@ On Omarchy, recognised by `/usr/share/omarchy` and `omarchy-launch-tui`:
   reloads Hyprland and fails loudly if `hyprctl configerrors` has anything
   to say.
 
-An install that finds the single `-- jobsdone: begin` block an earlier
-version wrote takes it out, keeping the keys it bound, and writes the two
-blocks instead. `scripts/uninstall` removes all three.
+Some machines have one block instead, `-- jobsdone: begin` to
+`-- jobsdone: end`, holding both. An install that finds it takes it out,
+keeping the keys it bound, and writes the two blocks in its place;
+`scripts/uninstall` removes all three.
 
 foot is the reference terminal. alacritty, ghostty and kitty are reached
 through the same `xdg-terminal-exec`, each installed and made the default

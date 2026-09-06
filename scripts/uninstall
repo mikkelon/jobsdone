@@ -13,8 +13,7 @@ ICON_FILE="$DATA_HOME/icons/hicolor/scalable/apps/jobsdone.svg"
 BINDINGS="$CONFIG_HOME/hypr/bindings.lua"
 
 # The keybind is the install script's block and the window rule is the
-# program's own; a machine installed from before that split has one block
-# holding both.
+# program's own; some machines have a single block holding both.
 BLOCKS=(
     "-- jobsdone: keybind (begin)"  "-- jobsdone: keybind (end)"
     "-- jobsdone: window (begin)"   "-- jobsdone: window (end)"

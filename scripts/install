@@ -26,9 +26,8 @@ ICON_FILE="$DATA_HOME/icons/hicolor/scalable/apps/jobsdone.svg"
 BINDINGS="$CONFIG_HOME/hypr/bindings.lua"
 
 # The keybind is the script's; the window rule is the program's, in a
-# block of its own that `jobsdone desktop` writes. A machine installed
-# from before that split has one block holding both, which is taken out
-# when it is found.
+# block of its own that `jobsdone desktop` writes. Some machines have a
+# single block holding both, which is taken out when it is found.
 KEYBIND_BEGIN="-- jobsdone: keybind (begin)"
 KEYBIND_END="-- jobsdone: keybind (end)"
 BOTH_BEGIN="-- jobsdone: begin"
