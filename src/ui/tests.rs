@@ -2513,3 +2513,84 @@ fn a_card_taller_than_the_window_covers_the_hint_bar_whole() {
         "and its footer, which is where its keys are: {drawn:?}"
     );
 }
+
+#[test]
+fn the_settings_page_matches_the_wireframe() {
+    let mut app = app();
+    app.update(Action::SettingsPage);
+    same(
+        &look(&app, 120, 36),
+        &wireframe("13-settings", 0, 36),
+        "the settings page",
+    );
+}
+
+#[test]
+fn a_narrow_settings_page_keeps_the_list_and_drops_the_description() {
+    let mut app = app();
+    app.update(Action::SettingsPage);
+    let drawn = look(&app, 80, 44);
+    let text = drawn.join("\n");
+
+    assert!(
+        !text.contains("The hour the working day rolls over"),
+        "there is no room beside the list for what the row does"
+    );
+    assert!(
+        !text.contains('\u{2502}'),
+        "and so no divider either:\n{text}"
+    );
+    // The page is not one of the three tabs, so it keeps its header at
+    // every width.
+    assert!(drawn[3].starts_with(" Settings"), "{:?}", drawn[3]);
+    assert!(
+        text.contains("Confirm before delete"),
+        "the whole list is on"
+    );
+}
+
+#[test]
+fn the_cursor_rows_value_is_the_one_a_key_would_change() {
+    let mut app = app();
+    app.update(Action::SettingsPage);
+    let mut terminal = Terminal::new(TestBackend::new(120, 36)).expect("a test terminal");
+    terminal
+        .draw(|frame| _ = draw(&app, frame))
+        .expect("a frame");
+    let buffer = terminal.backend().buffer();
+
+    let row = lines(buffer)
+        .iter()
+        .position(|line| line.starts_with("  Day starts at"))
+        .expect("the first row") as u16;
+    let at = lines(buffer)[row as usize].find("5:00").expect("its value") as u16;
+    assert_eq!(buffer[(at, row)].fg, Color::Blue, "the value is in accent");
+    assert!(
+        buffer[(at, row)].modifier.contains(Modifier::REVERSED),
+        "under the cursor row's own weight"
+    );
+}
+
+#[test]
+fn a_typed_row_becomes_a_field_where_its_value_was() {
+    let mut app = app();
+    app.update(Action::SettingsPage);
+    app.update(Action::Confirm);
+    app.update(Action::Backspace);
+    app.update(Action::Insert('9'));
+    let drawn = look(&app, 120, 36);
+
+    let row = drawn
+        .iter()
+        .find(|line| line.starts_with("  Day starts at"))
+        .expect("the row");
+    assert!(
+        row.contains("9\u{258f}"),
+        "the caret follows the digit: {row:?}"
+    );
+    assert!(
+        drawn[34].contains("⏎ save") && drawn[34].contains("esc cancel"),
+        "and the hint bar is the field's: {:?}",
+        drawn[34]
+    );
+}

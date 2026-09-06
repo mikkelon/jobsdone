@@ -86,6 +86,8 @@ fn every_context() -> Vec<KeyContext> {
         field(PopupKind::Date),
         popup(PopupKind::Date),
         popup(PopupKind::Repeat),
+        KeyContext::Settings { field: false },
+        KeyContext::Settings { field: true },
     ]
 }
 

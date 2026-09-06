@@ -6,7 +6,7 @@ use std::rc::Rc;
 use jiff::civil::Date;
 
 use crate::domain::tests::MemStore;
-use crate::domain::{Change, Placement, Rule, Schedule, Task, WorkDays, Write};
+use crate::domain::{Change, Placement, Rule, Schedule, Task, WeekStart, WorkDays, Write};
 
 /// A window manager a test can question: what it was told, and whether
 /// it was there to be told at all.
@@ -3047,4 +3047,192 @@ fn the_date_order_is_the_locale_until_a_setting_says_otherwise() {
         settings.set_date_style(domain::DateStyle::DayFirst)
     }));
     assert_eq!(app.dates(), DateOrder::DayFirst);
+}
+
+// ---- the settings page -----------------------------------------------
+
+/// The cursor down the settings list to the row with this label, which
+/// is how a test says which setting it is about without an index.
+fn cursor_to(app: &mut App, row: SettingRow) {
+    // From the top, because the list stops at both ends rather than
+    // wrapping.
+    for _ in 0..setting_rows().len() {
+        app.update(Action::Up);
+    }
+    for _ in 0..setting_rows().len() {
+        if app.cursor(List::Settings) == Some(RowId::Setting(row)) {
+            return;
+        }
+        app.update(Action::Down);
+    }
+    panic!("{row:?} is not a row of the settings page");
+}
+
+#[test]
+fn a_comma_opens_the_settings_and_the_same_key_brings_the_page_back() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    assert_eq!(app.page(), Page::Notes);
+
+    app.update(Action::SettingsPage);
+    assert_eq!(app.page(), Page::Settings);
+    assert_eq!(app.focused(), List::Settings);
+    assert_eq!(
+        app.cursor(List::Settings),
+        Some(RowId::Setting(SettingRow::DayStartsAt)),
+        "the page opens on its first row"
+    );
+
+    app.update(Action::SettingsPage);
+    assert_eq!(app.page(), Page::Notes, "back to the page it was opened on");
+
+    // And `esc` is the other way off it, back to wherever it came from.
+    app.update(Action::NotesPage);
+    app.update(Action::SettingsPage);
+    app.update(Action::Cancel);
+    assert_eq!(app.page(), Page::Home);
+}
+
+#[test]
+fn every_kind_of_row_is_changed_by_the_same_two_keys() {
+    let mut app = started();
+    app.update(Action::SettingsPage);
+
+    // A toggle: `l` turns it on, `h` off, and `space` turns it over.
+    cursor_to(&mut app, SettingRow::ConfirmDelete);
+    app.update(Action::Right);
+    assert!(app.settings().confirm_delete());
+    app.update(Action::Left);
+    assert!(!app.settings().confirm_delete());
+    app.update(Action::Pick);
+    assert!(app.settings().confirm_delete());
+
+    // One of the seven work days, which is a toggle of its own.
+    cursor_to(&mut app, SettingRow::WorkDay(Weekday::Sat));
+    app.update(Action::Pick);
+    assert!(app.settings().work_days().contains(Weekday::Sat));
+
+    // A row of two named values.
+    cursor_to(&mut app, SettingRow::WeekStartsOn);
+    app.update(Action::Confirm);
+    assert_eq!(app.settings().week_starts_on(), WeekStart::Sunday);
+
+    // A row of three, which `l` steps through and stops at the end of.
+    cursor_to(&mut app, SettingRow::DateOrder);
+    app.update(Action::Right);
+    assert_eq!(app.settings().date_style(), DateStyle::DayFirst);
+    app.update(Action::Right);
+    app.update(Action::Right);
+    assert_eq!(app.settings().date_style(), DateStyle::MonthFirst);
+
+    // A number, held to its range whatever the key asks for.
+    cursor_to(&mut app, SettingRow::DueAheadDays);
+    app.update(Action::Left);
+    assert_eq!(app.settings().due_ahead_days(), 0, "and no further");
+    app.update(Action::Right);
+    assert_eq!(app.settings().due_ahead_days(), 1);
+
+    // The window size, which both keys move by the same step.
+    cursor_to(&mut app, SettingRow::WindowSize);
+    app.update(Action::Right);
+    assert_eq!(app.settings().window_size(), WindowSize::new(880, 660));
+}
+
+#[test]
+fn a_number_is_typed_into_the_row_it_belongs_to() {
+    let mut app = started();
+    app.update(Action::SettingsPage);
+    cursor_to(&mut app, SettingRow::PileHorizonDays);
+
+    // Enter opens the field on the value that is there.
+    app.update(Action::Confirm);
+    assert_eq!(
+        app.setting_draft().map(|draft| draft.text.clone()),
+        Some("0".to_owned())
+    );
+
+    app.update(Action::Backspace);
+    for typed in "90".chars() {
+        app.update(Action::Insert(typed));
+    }
+    app.update(Action::Confirm);
+    assert_eq!(app.settings().pile_horizon_days(), 90);
+    assert!(app.setting_draft().is_none(), "the field is done with");
+
+    // A line the field cannot read leaves it open and says so.
+    app.update(Action::Confirm);
+    app.update(Action::Insert('x'));
+    app.update(Action::Confirm);
+    assert_eq!(hint(&app), "That is not a number I can read.");
+    assert!(app.setting_draft().is_some(), "so it can be typed again");
+    assert_eq!(app.settings().pile_horizon_days(), 90);
+
+    // Escape keeps what was there.
+    app.update(Action::Cancel);
+    assert!(app.setting_draft().is_none());
+    assert_eq!(app.page(), Page::Settings, "and leaves the page open");
+    assert_eq!(app.settings().pile_horizon_days(), 90);
+}
+
+#[test]
+fn the_size_is_typed_as_the_row_writes_it() {
+    let mut app = started();
+    app.update(Action::SettingsPage);
+    cursor_to(&mut app, SettingRow::WindowSize);
+    app.update(Action::Confirm);
+    assert_eq!(
+        app.setting_draft().map(|draft| draft.text.clone()),
+        Some("870x650".to_owned())
+    );
+
+    for _ in 0..7 {
+        app.update(Action::Backspace);
+    }
+    for typed in "1200x800".chars() {
+        app.update(Action::Insert(typed));
+    }
+    app.update(Action::Confirm);
+    assert_eq!(app.settings().window_size(), WindowSize::new(1200, 800));
+}
+
+#[test]
+fn a_week_the_domain_refuses_says_why_and_leaves_the_row_as_it_was() {
+    let mut app = started();
+    app.update(Action::SettingsPage);
+    // Every work day off but the last, which is the one that is refused.
+    for day in [
+        Weekday::Mon,
+        Weekday::Tue,
+        Weekday::Wed,
+        Weekday::Thu,
+        Weekday::Fri,
+    ] {
+        cursor_to(&mut app, SettingRow::WorkDay(day));
+        app.update(Action::Pick);
+    }
+
+    assert_eq!(
+        hint(&app),
+        "At least one day of the week must be a work day."
+    );
+    assert!(
+        app.settings().work_days().contains(Weekday::Fri),
+        "the last day stays a work day"
+    );
+}
+
+#[test]
+fn a_changed_window_setting_says_what_the_window_manager_answered() {
+    let desk = Desk::here();
+    let mut app = app_on(MemStore::holding(reviewed(Model::empty())), &desk, NOW);
+    app.update(Action::SettingsPage);
+    cursor_to(&mut app, SettingRow::FloatingWindow);
+
+    app.update(Action::Pick);
+    assert!(!app.settings().floating_window());
+    assert_eq!(desk.told(), [(false, WindowSize::default())]);
+    assert_eq!(
+        hint(&app),
+        "The window rule is written. It applies the next time the app opens."
+    );
 }
