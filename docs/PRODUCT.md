@@ -37,9 +37,10 @@ A task lives in exactly one of these places:
   everything not pinned to a date: long-running work, things to do when
   there is time, and things waiting on someone else.
 - **The review pile.** Not a place a task is put, but a view: all unfinished
-  tasks whose planned day is in the past, however old. A task leaves the pile
-  only when it is closed, moved, or deleted. Nothing is carried over
-  automatically.
+  tasks whose planned day is in the past, back as far as the pile is set to
+  reach. A task leaves the pile only when it is closed, moved, or deleted.
+  Nothing is carried over automatically, and a task the pile no longer
+  reaches stays on its day, marked as still open.
 
 Tasks can be moved freely between a day and the backlog.
 
@@ -108,6 +109,31 @@ mention X" or drafting a message before sending it.
   deleted; there is no automatic expiry or cleanup.
 - Notes are not long-term storage and the product does not try to organise
   them.
+
+## Settings
+
+The program runs on its defaults, and a page reached with `,` changes the
+few things worth changing. There is no configuration file: the settings
+are kept with the tasks, so every open window picks a change up at once.
+
+| Setting                     | Default                | What it changes |
+|-----------------------------|------------------------|-----------------|
+| Day starts at               | 05:00                  | The hour a new day begins, so a late night belongs to the day it started in. |
+| Week starts on              | Monday                 | Where the history's weeks are broken, and the first column of a calendar. |
+| Work days                   | Monday to Friday       | What "every work day" repeats on, and what "next work day" means. |
+| Open the review on launch   | on                     | Off, the morning review waits for `M` instead of opening itself. |
+| Surface due tasks early     | 0 days                 | How many days before its date a due task starts surfacing in the review. |
+| Backfill copies             | no cap                 | After time away, how far back copies of a recurring task are made. |
+| Hide pile tasks older than  | never                  | How far back the review pile reaches. Older tasks stay on their day. |
+| Floating window             | on                     | On Omarchy, whether the app floats or tiles. |
+| Window size                 | 870x650                | The floating window's size, which is 120 by 36 cells in the default font. |
+| Mouse                       | on                     | Off, the terminal's own selection and scrollback come back and the keyboard does everything. |
+| Hint bar messages stand for | 4 seconds              | How long "closed X · u undo" stays when no key follows. |
+| Date order                  | as the locale writes it | `Fri 5 Sep` or `Fri Sep 5`, everywhere a date is written. |
+| Confirm before delete       | off                    | On, `x` asks first instead of deleting and offering to undo. |
+
+Colour and font are not here: they come from the terminal, which Omarchy
+themes.
 
 ## Out of scope
 

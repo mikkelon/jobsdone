@@ -48,6 +48,11 @@ or positions itself.
 Press `?` inside the app for every key that works where you are. The
 hint bar at the bottom always names the ones that matter most.
 
+`,` opens the settings page: the hour the day starts, which days are work
+days, how far back the review pile reaches, whether the window floats and
+how big it is, and a few more. Each row says what it does and what it
+holds when nobody has changed it.
+
 `docs/PRODUCT.md` says what the program does and why, `docs/DESIGN.md`
 how it looks and behaves, and `wireframes/index.html` shows every screen.
 
