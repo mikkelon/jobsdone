@@ -1695,6 +1695,94 @@ fn x_deletes_without_asking_and_u_puts_it_back() {
     assert!(!app.message().is_some_and(|message| message.undo));
 }
 
+/// The setting turned on, which is the whole of what `confirm_delete`
+/// changes about `x`.
+fn asks_first(app: &mut App) {
+    let mut settings = app.settings().clone();
+    settings.set_confirm_delete(true);
+    app.change_settings(settings);
+}
+
+#[test]
+fn x_asks_first_when_the_setting_is_on_and_esc_keeps_the_row() {
+    let mut app = started();
+    add(&mut app, "Book dentist");
+    asks_first(&mut app);
+
+    app.update(Action::Delete);
+    assert_eq!(
+        app.key_context(),
+        KeyContext::Popup {
+            kind: PopupKind::DeleteQuestion,
+            text_field: false
+        }
+    );
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Book dentist"],
+        "the question is asked before anything is done"
+    );
+
+    app.update(Action::Cancel);
+    assert!(app.popup().is_none());
+    assert_eq!(titles(&app, List::Day), ["Book dentist"]);
+    assert_eq!(hint(&app), "", "keeping a row is not news");
+}
+
+#[test]
+fn enter_on_the_question_deletes_the_row_it_was_asked_about() {
+    let mut app = started();
+    add(&mut app, "Book dentist");
+    let kept = add(&mut app, "Review Anna's PR");
+    app.update(Action::Up);
+    asks_first(&mut app);
+
+    app.update(Action::Delete);
+    app.update(Action::Confirm);
+
+    assert!(app.popup().is_none());
+    assert_eq!(titles(&app, List::Day), ["Review Anna's PR"]);
+    assert_eq!(hint(&app), "Deleted \"Book dentist\"");
+    assert!(app.message().is_some_and(|message| message.undo));
+    assert_eq!(cursor(&app, List::Day), Some(kept), "the cursor steps on");
+}
+
+#[test]
+fn a_note_is_asked_about_the_same_way() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "remember to mention X");
+    asks_first(&mut app);
+
+    app.update(Action::Delete);
+    app.update(Action::Cancel);
+    assert_eq!(app.notes().count, 1, "the note is still there");
+
+    app.update(Action::Delete);
+    app.update(Action::Confirm);
+    assert_eq!(app.notes().count, 0);
+    assert_eq!(hint(&app), "Deleted a note");
+}
+
+#[test]
+fn a_pile_row_is_asked_about_before_the_review_lets_it_go() {
+    let mut app = app_at(left_behind(&[("One", "2025-09-04")]), NOW);
+    asks_first(&mut app);
+
+    app.update(Action::Delete);
+    assert_eq!(
+        app.review().expect("the review").decision(1),
+        None,
+        "nothing is decided while the question is up"
+    );
+
+    app.update(Action::Confirm);
+    assert_eq!(
+        app.review().expect("the review").decision(1),
+        Some(Decided::Deleted)
+    );
+}
+
 #[test]
 fn undo_walks_back_through_the_day() {
     let mut app = started();

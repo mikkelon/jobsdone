@@ -83,6 +83,7 @@ fn every_context() -> Vec<KeyContext> {
         popup(PopupKind::Help),
         popup(PopupKind::Move),
         popup(PopupKind::CopyQuestion),
+        popup(PopupKind::DeleteQuestion),
         field(PopupKind::Date),
         popup(PopupKind::Date),
         popup(PopupKind::Repeat),
@@ -562,6 +563,25 @@ fn the_copy_question_has_a_key_for_each_answer_and_no_default() {
         action_for(&press(KeyCode::Enter), context),
         None,
         "there is no answer safe enough to be the one Enter picks"
+    );
+}
+
+#[test]
+fn the_delete_question_takes_enter_for_yes_and_esc_for_no() {
+    let context = popup(PopupKind::DeleteQuestion);
+
+    assert_eq!(
+        action_for(&press(KeyCode::Enter), context),
+        Some(Action::Confirm)
+    );
+    assert_eq!(
+        action_for(&press(KeyCode::Esc), context),
+        Some(Action::Cancel)
+    );
+    assert_eq!(
+        action_for(&typing('x'), context),
+        None,
+        "the key that asked the question cannot answer it"
     );
 }
 

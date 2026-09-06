@@ -1433,6 +1433,21 @@ fn the_copy_question_spells_both_answers_out() {
 }
 
 #[test]
+fn the_delete_question_names_the_row_it_is_about() {
+    let mut app = app();
+    let mut settings = app.settings().clone();
+    settings.set_confirm_delete(true);
+    app.change_settings(settings);
+    app.update(Action::Delete);
+    let text = look(&app, 120, 36).join("\n");
+
+    assert!(text.contains("─ Delete ─"), "the card says what it is");
+    assert!(text.contains("Delete \"Ship invoice export\"?"));
+    assert!(text.contains("⏎     Delete"));
+    assert!(text.contains("esc   Keep"));
+}
+
+#[test]
 fn the_notes_list_is_newest_first_with_the_age_of_each_note() {
     let mut app = app();
     app.update(Action::NotesPage);
