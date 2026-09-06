@@ -27,7 +27,9 @@ half width. Both must feel right, and the floating case comes first.
 - The layout targets 120×36. A full-width tile shows the same layout with
   more rows. Under 100 columns the two panes collapse to tabs.
 - Hyprland does the windowing: a window rule on the app's class floats and
-  sizes it. The app never positions or resizes itself.
+  sizes it. The rule is the app's own to write, from the `floating_window`
+  and `window_size` settings; the app never positions or resizes its
+  window itself.
 - Several windows may be open at once, a tile left running and a floating
   one opened elsewhere. All of them show the same data within a moment.
 
@@ -273,9 +275,9 @@ The app never reorders, carries over, expires, or tidies.
   On launch the app creates the copies for every scheduled date since the
   last launch, or for as many of the last days as the backfill setting
   allows, and the surfaced step lists today's, once, for information.
-  A window left open past 05:00 has reached a new day without a launch, so
-  it does the same then; a day is never short of its copies because a
-  window happened to be open.
+  A window left open past the hour the day starts has reached a new day
+  without a launch, so it does the same then; a day is never short of its
+  copies because a window happened to be open.
 - Notes stay until deleted.
 
 ## 8. Undo instead of confirm

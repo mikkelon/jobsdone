@@ -120,7 +120,10 @@ section 6 owns the details.
 
 Test code lives in `src/<module>/tests.rs` rather than in an inline
 `#[cfg(test)] mod tests`, so the scanner never has to match braces to know
-whether it is looking at test code.
+whether it is looking at test code. `main.rs` is the exception, because a
+`src/main/` directory would read as a module of its own; what the command
+line means is tested inline there, as the scanner's own tests are in
+`lib.rs`.
 
 Rejected:
 
@@ -318,3 +321,11 @@ migrating the database, or building the application. That message goes to
 the log and to stderr, and when there is a terminal on the other end the
 program waits for Enter before exiting, because a keybind's window would
 otherwise close and take the message with it.
+
+The commands that are not the app say what they did on stdout and exit:
+`jobsdone desktop` prints the one line the rule it wrote amounts to,
+`--help` and `--version` print themselves. A command line nobody can read
+goes to stderr with the usage and exits 2, a window manager that would
+not take the rule exits 1 with what it said, and the settings are saved
+either way. None of these enters raw mode, so none of them waits for
+Enter.

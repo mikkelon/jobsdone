@@ -14,7 +14,7 @@ through every wireframe and names the view it is drawn from.
 | task            | A title, whether it is done, and where it lives. Nothing else.           |
 | place           | Where a task lives: the backlog, or one day.                             |
 | day             | A civil date. Days are not stored; a day exists when a task refers to it.|
-| working day     | The date the program calls "today". It changes at 05:00, not midnight.   |
+| working day     | The date the program calls "today". It changes at `day_starts_at`, 05:00 by default, not midnight. |
 | position        | A task's index in the order of its place.                                |
 | focus           | A task marked as one of the day's must-dos.                              |
 | closed          | Done. A closed task remembers when it was closed.                        |
@@ -24,12 +24,13 @@ through every wireframe and names the view it is drawn from.
 | waiting         | A backlog task blocked on someone or something else.                     |
 | due, remind     | Dates a task carries. They surface it; they never move it.               |
 | surface         | Appear in the second step of the review, as a prompt.                    |
-| pile            | Every open task on a day before today.                                   |
+| pile            | Every open task on a day before today, back as far as the pile horizon reaches. |
 | schedule        | A repeat rule with a title. It creates copies.                           |
 | copy            | A task created by a schedule for one date. Ordinary from then on.        |
 | review          | The two-step morning pass over the pile and the surfaced tasks.          |
 | note            | A plain-text scratchpad entry.                                           |
 | command         | One change to the model. Every command has an inverse.                   |
+| settings        | The thirteen values that change what the rules do. Section 19.           |
 
 ## 2. Time
 
@@ -669,7 +670,10 @@ Notes on the schema:
   again in one transaction, because the settings are one value in the
   model rather than thirteen. Loading is the same in reverse, so a
   missing key is that setting's default and a key this build does not
-  know is ignored.
+  know is ignored. The delete takes those unknown keys with it, which is
+  the price of the value being whole: an older binary can read a newer
+  database's settings, and writing one of them drops what it could not
+  read.
 
 ## 18. Every screen as a view
 
@@ -717,14 +721,14 @@ page only draws them.
 | `window_size`        | `WxH` in logical pixels, 200..=10000 each | `870x650` | Window size         | The floating window's size. 870 by 650 is 120 by 36 cells in foot with Omarchy's default font. |
 | `mouse`              | `true`/`false`                         | `true`     | Mouse                 | Whether the app takes the mouse. Off, the terminal's own text selection works again and the keyboard does everything. Takes effect at once. |
 | `message_seconds`    | seconds, 0..=60; 0 means until the next key | `4`   | Hint bar messages stand for | How long "closed X · u undo" stays when no key follows. 0 keeps it until the next key. |
-| `date_style`         | `locale`, `day_first`, `month_first`   | `locale`   | Date order            | `Fri 5 Sep` or `Fri Sep 5`, everywhere a date is written. `locale` follows `LC_TIME`. |
+| `date_style`         | `locale`, `day_first`, `month_first`   | `locale`   | Date order            | `Fri 5 Sep` or `Fri Sep 5`, everywhere a date is written. `locale` follows the environment's locale (STACK.md section 8). |
 | `confirm_delete`     | `true`/`false`                         | `false`    | Confirm before delete | `x` asks first instead of deleting and offering `u`. Applies to tasks, notes and the review pile. |
 
 ### The codec
 
 Every value is text. A missing key or a value that cannot be read is that
 setting's default, and an unknown key is ignored, so an older binary can
-open a newer database's settings table without emptying it. A number
+read a newer database's settings rather than refusing them. A number
 outside its range is held to the range rather than refused: a typed 48
 for the hour the day starts is 23.
 
