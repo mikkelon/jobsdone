@@ -1396,6 +1396,10 @@ fn a_sunday_week_opens_the_calendar_and_the_repeat_row_on_sunday() {
     app.update(Action::DueBy);
     let text = look(&app, 120, 36).join("\n");
     assert!(text.contains(" Su Mo Tu We Th Fr Sa"));
+    assert!(
+        text.contains(" 31  1  2  3  4  5  6"),
+        "the month opens on the Sunday before it"
+    );
 
     app.update(Action::Cancel);
     app.update(Action::Repeat);
