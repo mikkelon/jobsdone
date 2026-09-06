@@ -17,6 +17,7 @@ use super::model::{
 /// being away is meant to be seen (DOMAIN.md section 10).
 pub fn generate_copies(model: &Model, now: &Zoned) -> Change {
     let today = model.settings.working_day(now);
+    let work_days = model.settings.work_days();
     let mut after = model.clone();
 
     let schedules: Vec<Id> = model
@@ -45,7 +46,7 @@ pub fn generate_copies(model: &Model, now: &Zoned) -> Change {
                 break;
             }
             day = next;
-            if rule.falls_on(day) {
+            if rule.falls_on(day, &work_days) {
                 copy(&mut after, id, &title, day, now);
             }
         }

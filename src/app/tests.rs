@@ -6,7 +6,7 @@ use std::rc::Rc;
 use jiff::civil::Date;
 
 use crate::domain::tests::MemStore;
-use crate::domain::{Change, Placement, Rule, Schedule, Task, WorkDays, Write};
+use crate::domain::{Change, Placement, Rule, Schedule, Task, Weekday, WorkDays, Write};
 
 /// A window manager a test can question: what it was told, and whether
 /// it was there to be told at all.
@@ -2980,6 +2980,33 @@ fn a_later_day_start_puts_the_morning_back_on_yesterday() {
     assert_eq!(app.today(), on("2025-09-04"));
     assert_eq!(app.showing(), on("2025-09-04"), "the pane follows today");
     assert_eq!(app.settings().day_starts_at(), 8);
+}
+
+#[test]
+fn the_move_cards_next_work_day_follows_the_work_days_setting() {
+    let mut app = started();
+    add(&mut app, "Clean out the garage");
+    app.change_settings(changed(&app, |settings| {
+        settings.set_work_days(WorkDays::of([
+            Weekday::Sun,
+            Weekday::Mon,
+            Weekday::Tue,
+            Weekday::Wed,
+            Weekday::Thu,
+        ]))
+    }));
+
+    app.update(Action::MoveToDay);
+    let days: Vec<MoveTarget> = app
+        .move_choices()
+        .iter()
+        .map(|choice| choice.target)
+        .collect();
+
+    // Today is a Friday, so the next work day of a Sunday-to-Thursday
+    // week is the Sunday rather than the Monday next Monday is.
+    assert_eq!(days[2], MoveTarget::Day(on("2025-09-07")));
+    assert_eq!(days[3], MoveTarget::Day(on("2025-09-08")));
 }
 
 #[test]

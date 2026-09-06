@@ -8,6 +8,8 @@ use jiff::civil::{Date, Weekday as Civil};
 use serde::de::{Error as _, Unexpected};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
 
+use super::settings::{WeekStart, WorkDays};
+
 /// How many days `next_dates` walks per date it is asked for before it
 /// gives up. The widest gap the walked shapes can leave is a month, so a
 /// year is slack, and the bound is what keeps a rule that never falls due
@@ -28,8 +30,9 @@ pub enum Weekday {
 }
 
 impl Weekday {
-    /// The seven days in the order a week is written and a weekly rule
-    /// stores them, Monday first.
+    /// The seven days in the order the stored JSON lists them and a set
+    /// of them is held in, Monday first. Where a week is drawn, `week`
+    /// says the order instead.
     pub const ALL: [Weekday; 7] = [
         Weekday::Mon,
         Weekday::Tue,
@@ -39,6 +42,24 @@ impl Weekday {
         Weekday::Sat,
         Weekday::Sun,
     ];
+
+    /// The seven days in the order a week is laid out, from the day the
+    /// settings say a week begins on. The calendar's columns and the
+    /// repeat card's weekday row are both in this order.
+    pub fn week(start: WeekStart) -> [Weekday; 7] {
+        match start {
+            WeekStart::Monday => Weekday::ALL,
+            WeekStart::Sunday => [
+                Weekday::Sun,
+                Weekday::Mon,
+                Weekday::Tue,
+                Weekday::Wed,
+                Weekday::Thu,
+                Weekday::Fri,
+                Weekday::Sat,
+            ],
+        }
+    }
 
     /// The weekday a date falls on, which the repeat card needs to open
     /// on the weekday of the day it is about.
@@ -54,10 +75,11 @@ impl Weekday {
         }
     }
 
-    /// Monday to Friday, which is what "every work day" and the move
-    /// card's "next work day" both mean. No holidays, ever.
-    fn is_work_day(self) -> bool {
-        !matches!(self, Weekday::Sat | Weekday::Sun)
+    /// Whether the day is one of the working ones, which is what "every
+    /// work day" and the move card's "next work day" both ask. No
+    /// holidays, ever.
+    pub fn is_work_day(self, days: &WorkDays) -> bool {
+        days.contains(self)
     }
 }
 
@@ -125,10 +147,12 @@ impl Rule {
         }
     }
 
-    /// Whether `date` is one of the rule's dates.
-    pub fn falls_on(&self, date: Date) -> bool {
+    /// Whether `date` is one of the rule's dates. Only the work-days
+    /// shape asks which days are worked; the other four are the same
+    /// whatever the week looks like.
+    pub fn falls_on(&self, date: Date, work_days: &WorkDays) -> bool {
         match self {
-            Rule::Workdays => Weekday::of(date).is_work_day(),
+            Rule::Workdays => Weekday::of(date).is_work_day(work_days),
             Rule::Daily => true,
             Rule::Weekly { weekdays } => weekdays.contains(&Weekday::of(date)),
             Rule::Monthly { day } => {
@@ -153,7 +177,7 @@ impl Rule {
 
 /// The next `count` dates a rule falls on strictly after `after`. The
 /// repeat card's preview and copy generation are the same function.
-pub fn next_dates(rule: &Rule, after: Date, count: usize) -> Vec<Date> {
+pub fn next_dates(rule: &Rule, after: Date, count: usize, work_days: &WorkDays) -> Vec<Date> {
     if count == 0 || !rule.is_usable() {
         return Vec::new();
     }
@@ -168,7 +192,7 @@ pub fn next_dates(rule: &Rule, after: Date, count: usize) -> Vec<Date> {
     for _ in 0..HORIZON.saturating_mul(count) {
         let Ok(next) = date.tomorrow() else { break };
         date = next;
-        if rule.falls_on(date) {
+        if rule.falls_on(date, work_days) {
             dates.push(date);
             if dates.len() == count {
                 break;

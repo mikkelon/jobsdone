@@ -10,7 +10,7 @@ use jiff::civil::Date;
 use jiff::{Span, Zoned};
 
 use super::rule::{Rule, Weekday, next_dates};
-use super::settings::DateOrder;
+use super::settings::{DateOrder, WorkDays};
 
 /// `Fri 5 Sep`, or `Fri Sep 5` where the month comes first.
 pub fn day_label(date: Date, order: DateOrder) -> String {
@@ -64,12 +64,15 @@ pub fn parse_date(text: &str, today: Date) -> Option<Date> {
         _ => {}
     }
     if let Some(weekday) = weekday(&text) {
+        // A weekly shape names its own days, so which days are worked
+        // does not come into it.
         return next_dates(
             &Rule::Weekly {
                 weekdays: vec![weekday],
             },
             today,
             1,
+            &WorkDays::DEFAULT,
         )
         .first()
         .copied();
