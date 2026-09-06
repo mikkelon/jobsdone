@@ -3048,3 +3048,48 @@ fn the_date_order_is_the_locale_until_a_setting_says_otherwise() {
     }));
     assert_eq!(app.dates(), DateOrder::DayFirst);
 }
+
+#[test]
+fn the_desktop_command_saves_the_window_and_tells_the_window_manager() {
+    let desk = Desk::here();
+    let mut store = MemStore::new();
+
+    let said = set_window(
+        &mut store,
+        &desk,
+        Some(false),
+        Some(WindowSize::new(1000, 700)),
+    )
+    .expect("a window manager that took the rule");
+
+    assert_eq!(said, "the window tiles");
+    assert_eq!(desk.told(), [(false, WindowSize::new(1000, 700))]);
+    let saved = store.load().expect("the model").settings;
+    assert!(!saved.floating_window());
+    assert_eq!(saved.window_size(), WindowSize::new(1000, 700));
+}
+
+#[test]
+fn the_desktop_command_without_flags_writes_the_rule_the_settings_already_say() {
+    let desk = Desk::here();
+    let mut store = MemStore::new();
+
+    let said = set_window(&mut store, &desk, None, None).expect("a window manager");
+
+    assert_eq!(said, "the window floats at 870x650");
+    assert_eq!(desk.told(), [(true, WindowSize::default())]);
+}
+
+#[test]
+fn the_desktop_command_keeps_the_settings_a_window_manager_would_not_take() {
+    let desk = Desk::absent();
+    let mut store = MemStore::new();
+
+    let why = set_window(&mut store, &desk, Some(false), None).expect_err("no window manager");
+
+    assert_eq!(
+        why,
+        "Hyprland is not here; the setting is kept for when it is."
+    );
+    assert!(!store.load().expect("the model").settings.floating_window());
+}
