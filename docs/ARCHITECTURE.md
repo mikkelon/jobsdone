@@ -23,12 +23,12 @@ than one file, `src/<module>/*.rs`.
 
 | Module     | Responsibility                                                                                                  |
 |------------|-----------------------------------------------------------------------------------------------------------------|
-| `domain`   | The model, every rule, commands and their inverses, the views of the model, rule dates, and the working day.     |
+| `domain`   | The model, every rule, commands and their inverses, the views of the model, rule dates, the settings, and the working day. |
 | `storage`  | The SQLite implementation of `Store`: migrations, loading the model, committing a change, reporting the version. |
 | `input`    | A terminal event plus the current key context in, a named action out. Owns the key table.                       |
 | `app`      | Application state, the launch sequence, reloading, turning actions into commands, and the screen layout.        |
 | `ui`       | Drawing: application state in, a ratatui frame out, plus the layout of what was drawn.                          |
-| `terminal` | Raw mode, alternate screen, mouse capture, the panic hook, and the event loop with its 250 ms tick.              |
+| `terminal` | Raw mode, alternate screen, mouse capture while the setting asks for it, the panic hook, and the event loop with its 250 ms tick. |
 | `desktop`  | The window rule the program keeps for itself: the block in Hyprland's configuration, and the reload.             |
 | `main.rs`  | The command line, XDG paths, the locale, logging to the state directory, opening storage, building the desktop, running the terminal. |
 
@@ -87,8 +87,8 @@ Three absences are deliberate:
 Everything the program does to its data goes through four domain types.
 
 **`Model`** is the whole state as a value: every live and deleted task,
-placement, schedule, note, the undo stack and the meta table, loaded from
-storage in one go. It is small enough that loading it is well under a
+placement, schedule, note, the undo stack, the meta table and the
+settings, loaded from storage in one go. It is small enough that loading it is well under a
 millisecond (STACK.md section 3). Views are pure functions of a `Model`
 and a date.
 
@@ -236,8 +236,15 @@ adds it here first, the way a new dependency is added to section 2 first.
   from.
 - `Model::empty()` and `Model::apply(&mut self, &Change)`.
 - Views, each `(&Model, ...dates) -> value`: `day_view`, `backlog_view`,
-  `pile`, `surfaced`, `search`, `day_list`, `notes`, `next_dates`, and
-  `previous_review`, the lower bound of the reminder window.
+  `pile`, `surfaced`, `search`, `day_list`, `notes`, and
+  `previous_review`, the lower bound of the reminder window. Each reads
+  the settings it needs off the model it is given: the pile its horizon,
+  the surfaced set how far ahead a due date counts, the day list where a
+  week begins.
+- `next_dates(rule, after, count, &WorkDays)`: the dates a rule falls on,
+  which the repeat card's preview and generation share. It takes the work
+  days rather than a model, because the card previews a rule that has not
+  been saved to one (DOMAIN.md section 10).
 - `pile_again(&Model, today, &Pile) -> Pile` and
   `surfaced_again(&Model, today, &Surfaced) -> Surfaced`: the same two
   views again, from the value a review opened with rather than from the
@@ -268,13 +275,16 @@ adds it here first, the way a new dependency is added to section 2 first.
 
 - `Action`: the named actions. Cursor-relative (`Close` means the cursor
   row), never carrying an id. Includes `Tick`, `Resize`, `FocusGained`,
-  the mouse actions `MouseDown`, `MouseUp`, `MouseDrag`, `Scroll` with
-  cell coordinates, and in text fields `Insert(char)` and the editing
-  keys.
+  the page actions `NotesPage` and `SettingsPage`, the mouse actions
+  `MouseDown`, `MouseUp`, `MouseDrag`, `Scroll` with cell coordinates,
+  and in text fields `Insert(char)` and the editing keys.
 - `KeyContext`: `Home { pane, day }`, `Notes { pane }`,
-  `Review { step, asks }`, `Popup { kind }`, each with a text-field
+  `Settings { field }`, `Review { step, asks }`, `Popup { kind }`, each
+  with a text-field
   overlay, and
-  `KeyContext::text_field()` to read it. Home's overlay is a
+  `KeyContext::text_field()` to read it. The settings page's overlay is a
+  bool rather than a `Field`, because the page has one kind of field and
+  nothing to tell apart. Home's overlay is a
   `Option<Field>` rather than a bool, because the hint bar has to say
   which field it is: adding keeps the field open after Enter and
   renaming does not. Home also carries a `Shown`, which day the day pane
@@ -292,7 +302,9 @@ adds it here first, the way a new dependency is added to section 2 first.
   never a row of the hint bar. `ctrl-c` is answered before any context is
   consulted, because it means the same thing in all of them.
 - `Pane`, `NotesPane`, `ReviewStep`, `Shown`, `Field` and `PopupKind`:
-  what a context is of.
+  what a context is of. `PopupKind` includes `DeleteQuestion`, the card
+  `confirm_delete` puts in front of `x`, whose table is Enter to delete
+  and Escape to keep.
 - `action_for(Event, KeyContext) -> Option<Action>`.
 - `bindings(KeyContext) -> &[Binding]`: the rows of the key table for a
   context. The hint bar, the command palette and the help overlay are
@@ -340,6 +352,14 @@ adds it here first, the way a new dependency is added to section 2 first.
   which commits, works the day out again in case the day now starts at
   another hour, refreshes the views and hands a changed window setting to
   the desktop, whose answer the hint bar carries.
+- The settings page as rows: `SettingRow`, one per row of the page and so
+  one per work day, `SettingGroup`, the label a run of them is drawn
+  under, and `setting_rows() -> &[(SettingGroup, SettingRow)]`, the whole
+  list in the order it is drawn and the cursor walks it. `SettingDraft`
+  is a number or a size being typed on a row, read back with
+  `App::setting_draft()`; it is uncommitted text like any other (rule 8),
+  and Enter turns it into one `change_settings`. `SettingRow::is_typed()`
+  is what tells a row Enter opens a field on from one it steps.
 - `set_window(&mut dyn Store, &dyn Desktop, floating, size)`: the two
   window settings and the rule, from the command line rather than from
   the page, which is what `jobsdone desktop` runs. It loads, changes and
@@ -355,9 +375,10 @@ adds it here first, the way a new dependency is added to section 2 first.
 - `Layout`: which pane and which row occupies which cell rectangle, as a
   `narrow` flag, a `ListArea` per pane and a `RowArea` per row, over a
   `Rect` of the terminal's own cells. A row is named by a `RowId`, which
-  is a task, a schedule, a note or a day, because the backlog pane draws
-  the schedules under its tasks, the notes page has its own list, and the
-  day list's rows are dates rather than rows of the model. `app` may
+  is a task, a schedule, a note, a day or a setting, because the backlog
+  pane draws the schedules under its tasks, the notes page has its own
+  list, the day list's rows are dates rather than rows of the model, and
+  the settings page's are settings. `app` may
   not name ratatui, so the rectangle is its own.
   `App::set_layout(Layout)` stores the last one and the mouse actions are
   resolved against it.
@@ -367,13 +388,15 @@ adds it here first, the way a new dependency is added to section 2 first.
   `days`, `notes` and `review_count`, `page`, `pane`, `notes_pane`,
   `focused`, `popup`, `review`, `editor`, `message`, `cursor`,
   `palette_rows`, `search_results`, `move_choices`, `date_choices`,
-  `repeat_preview`, `draft` and `layout`.
-  `Page` is `Home` or `Notes`, and the review is neither: it is a mode
+  `repeat_preview`, `draft`, `setting_draft` and `layout`.
+  `Page` is `Home`, `Notes` or `Settings`, and the review is none of the
+  three: it is a mode
   over the page, `Review`, which the window draws instead of the panes
   while it is there. It holds the step on screen, the `Pile` and
   `Surfaced` each step opened with, and the `Decided` made for each row,
   and it answers `step`, `steps`, `pile`, `surfaced`, `decision` and
-  `progress`. `List` is `Day`, `Backlog`, `Days`, `Notes` or `Review`,
+  `progress`. `List` is `Day`, `Backlog`, `Days`, `Notes`, `Review` or
+  `Settings`,
   one cursor each, held by id, `Days` being the list the backlog pane
   becomes while the day pane is on another day; `Popup` carries the kind, the text typed into
   it, the caret, the selected row, the row it is about, and the `Card` it
@@ -388,9 +411,13 @@ adds it here first, the way a new dependency is added to section 2 first.
   the move card, its key and name from the key table and its day worked
   out here.
 - `Group`: which group of a pane a row is in, the schedule list under the
-  backlog and the stretches of the day list included. The domain decides what is in each; the application
+  backlog and the stretches of the day list included. The domain decides
+  what is in each; the application
   needs the name because a key means something different in each, and
-  `ui` because a group is drawn under its own rule.
+  `ui` because a group is drawn under its own rule. The settings page is
+  one group for all of its rows: every key on it means the same thing
+  wherever the cursor is, and the five labels it is drawn under are
+  `setting_rows()`.
 
 ### `ui`
 
@@ -441,9 +468,11 @@ Each rule, and what breaking it looks like in a diff.
    gained** when the stored version differs. Broken by: a command sent
    to `apply` without the version check in front of it.
 8. **Uncommitted text lives only in the app.** A title being edited, the
-   search string, the palette filter, a card being filled in and a note
+   search string, the palette filter, a card being filled in, a number
+   typed on a settings row and a note
    body between keystrokes are application state. Each becomes one
-   command on Enter, except a note body, which has no Enter of its own:
+   command on Enter, or on the settings page one `change_settings`,
+   except a note body, which has no Enter of its own:
    it becomes an `EditNote` on the first tick after it changes and again
    whenever the note is left, so at most a quarter of a second of typing
    is ever at risk and no keystroke costs a write. The save follows the
