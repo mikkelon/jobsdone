@@ -1614,6 +1614,8 @@ impl App {
         match self.page {
             Page::Notes => self.note_at_cursor().map(RowId::Note),
             Page::Home => self.task_at_cursor().map(RowId::Task),
+            // A setting is not a row that can go: `x` is not a key there.
+            Page::Settings => None,
         }
     }
 
@@ -1636,7 +1638,7 @@ impl App {
                     self.set_cursor(List::Notes, next);
                 }
             }
-            RowId::Schedule(_) | RowId::Day(_) => {}
+            RowId::Schedule(_) | RowId::Day(_) | RowId::Setting(_) => {}
         }
     }
 
