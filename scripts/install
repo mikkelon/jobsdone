@@ -1,12 +1,17 @@
 #!/usr/bin/env bash
 # Install jobsdone for the current user: the binary, a launcher entry, and
-# on Omarchy the Hyprland window rule and, if wanted and free, the keybind.
+# on Omarchy the keybind and the window the app asks Hyprland for.
 #
-#   scripts/install [--keybind | --no-keybind]
+#   scripts/install [--keybind [KEYS] | --no-keybind] [--floating | --tiled] [--size WxH]
 #
-# Without a flag the keybind is offered at the prompt when a terminal is
-# attached and skipped otherwise. Running again updates everything in
-# place. scripts/uninstall takes it all out again and leaves the data.
+# --keybind binds KEYS, or SUPER + SHIFT + J when none are given, if the
+# keys are free; --no-keybind binds nothing. With neither, the keybind is
+# offered at the prompt when a terminal is attached and skipped otherwise.
+# --floating, --tiled and --size are the window the app opens in: they are
+# settings, and the app writes the Hyprland rule for them itself. A window
+# flag left off keeps the setting as it is. Running the script again
+# updates everything in place; scripts/uninstall takes it all out again
+# and leaves the data.
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -14,26 +19,58 @@ DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 
 APP_ID="org.omarchy.jobsdone"       # Omarchy's app-id convention for TUIs
-KEYBIND="SUPER + SHIFT + J"
+BIND_NAME="Jobsdone"                # what the keybind calls itself in Hyprland
+BINARY="$HOME/.local/bin/jobsdone"
 DESKTOP_FILE="$DATA_HOME/applications/jobsdone.desktop"
 ICON_FILE="$DATA_HOME/icons/hicolor/scalable/apps/jobsdone.svg"
 BINDINGS="$CONFIG_HOME/hypr/bindings.lua"
-BEGIN="-- jobsdone: begin (written by scripts/install; scripts/uninstall removes it)"
-END="-- jobsdone: end"
 
-keybind_choice=""
-case "${1:-}" in
-    "") ;;
-    --keybind) keybind_choice=yes ;;
-    --no-keybind) keybind_choice=no ;;
-    *) sed -n '2,9p' "$0" | sed 's/^# \{0,1\}//'; exit 2 ;;
-esac
+# The keybind is the script's; the window rule is the program's, in a
+# block of its own that `jobsdone desktop` writes. A machine installed
+# from before that split has one block holding both, which is taken out
+# when it is found.
+KEYBIND_BEGIN="-- jobsdone: keybind (begin)"
+KEYBIND_END="-- jobsdone: keybind (end)"
+BOTH_BEGIN="-- jobsdone: begin"
+BOTH_END="-- jobsdone: end"
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'install: %s\n' "$*" >&2; exit 1; }
+# The header above, which is the usage message.
+usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; }
 
 on_omarchy() { [ -d "${OMARCHY_PATH:-/usr/share/omarchy}" ] && command -v omarchy-launch-tui >/dev/null; }
 hyprland_running() { [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && command -v hyprctl >/dev/null; }
+
+# --- the command line --------------------------------------------------------
+
+KEYBIND="SUPER + SHIFT + J"
+keys_given=no
+keybind_choice=""        # yes, no, or empty for "ask"
+window=()                # the flags `jobsdone desktop` is given
+
+while [ $# -gt 0 ]; do
+    case "$1" in
+        --keybind)
+            keybind_choice=yes
+            case "${2:-}" in
+                "" | -*) ;;
+                *) KEYBIND="$2"; keys_given=yes; shift ;;
+            esac
+            ;;
+        --no-keybind) keybind_choice=no ;;
+        --floating | --tiled) window+=("$1") ;;
+        --size)
+            case "${2:-}" in
+                [0-9]*x[0-9]*) window+=(--size "$2"); shift ;;
+                *) usage >&2; exit 2 ;;
+            esac
+            ;;
+        -h | --help) usage; exit 0 ;;
+        *) usage >&2; exit 2 ;;
+    esac
+    shift
+done
 
 # --- the binary --------------------------------------------------------------
 
@@ -43,7 +80,7 @@ hyprland_running() { [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && command -v hyp
 command -v cargo >/dev/null || die "cargo was not found. Install Rust first: on Arch 'sudo pacman -S rustup && rustup default stable', elsewhere https://rustup.rs"
 say "building and installing the binary with cargo..."
 (cd "$ROOT" && cargo install --path . --root "$HOME/.local" --quiet)
-say "installed $HOME/.local/bin/jobsdone"
+say "installed $BINARY"
 case ":$PATH:" in
     *":$HOME/.local/bin:"*) ;;
     *) say "note: $HOME/.local/bin is not on your PATH in this shell" ;;
@@ -82,7 +119,7 @@ command -v update-desktop-database >/dev/null && update-desktop-database "$(dirn
 command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q "$DATA_HOME/icons/hicolor" 2>/dev/null || true
 say "installed the launcher entry $DESKTOP_FILE"
 
-# --- Omarchy: window rule and keybind ---------------------------------------
+# --- Omarchy: the keybind and the window ------------------------------------
 
 if ! on_omarchy; then
     say "not an Omarchy machine; the desktop integration is left to you."
@@ -90,38 +127,124 @@ if ! on_omarchy; then
     exit 0
 fi
 
-# What the keybind is bound to right now, or nothing. Hyprland answers
-# exactly when it runs; otherwise the user's own bindings file is the best
-# available witness.
+# Hyprland reports a bind as a modmask and a key, so keys written for a
+# person are read into the same two things to ask what they are bound to.
+modmask_of() {
+    local mask=0 part
+    for part in ${1//+/ }; do
+        case "${part^^}" in
+            SHIFT) mask=$((mask | 1)) ;;
+            CAPS | CAPSLOCK) mask=$((mask | 2)) ;;
+            CTRL | CONTROL) mask=$((mask | 4)) ;;
+            ALT) mask=$((mask | 8)) ;;
+            SUPER | MOD | WIN | LOGO) mask=$((mask | 64)) ;;
+        esac
+    done
+    printf '%s' "$mask"
+}
+
+# The key the modifiers are held down for, which is the last one written.
+key_of() {
+    local part key=""
+    for part in ${1//+/ }; do
+        case "${part^^}" in
+            SHIFT | CAPS | CAPSLOCK | CTRL | CONTROL | ALT | SUPER | MOD | WIN | LOGO) ;;
+            *) key="$part" ;;
+        esac
+    done
+    printf '%s' "${key,,}"
+}
+
+same_keys() { [ "$(modmask_of "$1")+$(key_of "$1")" = "$(modmask_of "$2")+$(key_of "$2")" ]; }
+
+# What the keys are bound to now, or nothing. Hyprland answers exactly
+# while it is running; otherwise the bindings file is the best witness
+# there is. A bind of our own is not an answer: it is the one about to be
+# written again.
 keybind_taken_by() {
+    local taken=""
     if hyprland_running; then
-        hyprctl binds -j 2>/dev/null | python3 -c '
+        taken="$( (hyprctl binds -j 2>/dev/null || true) | python3 -c '
 import json, sys
+mask, key = int(sys.argv[1]), sys.argv[2]
 for bind in json.load(sys.stdin):
-    # SUPER is 64, SHIFT is 1 in Hyprland modmasks.
-    if bind["modmask"] == 65 and bind["key"].lower() == "j":
+    if bind["modmask"] == mask and bind["key"].lower() == key:
         print(bind["description"] or bind["dispatcher"] + " " + bind["arg"])
         break
-'
+' "$(modmask_of "$KEYBIND")" "$(key_of "$KEYBIND")" || true)"
     elif [ -f "$BINDINGS" ]; then
-        grep -v '^[[:space:]]*--' "$BINDINGS" | grep -oE "o\.bind\(\"$KEYBIND\",[[:space:]]*\"[^\"]*\"" |
-            head -1 | sed -E 's/.*,[[:space:]]*"([^"]*)"/\1/' || true
+        local pattern
+        pattern="$(printf '%s' "$KEYBIND" | sed -E 's/[[:space:]]*\+[[:space:]]*/[[:space:]]*\\+[[:space:]]*/g')"
+        taken="$(grep -v '^[[:space:]]*--' "$BINDINGS" |
+            grep -ioE "o\.bind\(\"$pattern\",[[:space:]]*\"[^\"]*\"" |
+            head -1 | sed -E 's/.*,[[:space:]]*"([^"]*)"/\1/' || true)"
+    fi
+    [ "$taken" = "$BIND_NAME" ] || printf '%s' "$taken"
+}
+
+# The keys a block of ours binds, if it is there and binds any.
+block_keys() {
+    [ -f "$BINDINGS" ] || return 0
+    awk -v begin="$1" -v end="$2" '
+        index($0, begin) == 1 { inside = 1; next }
+        index($0, end) == 1 { inside = 0 }
+        inside
+    ' "$BINDINGS" | grep -oE 'o\.bind\("[^"]*"' | head -1 | sed -E 's/o\.bind\("([^"]*)"/\1/' || true
+}
+
+remove_block() {
+    local begin="$1" end="$2"
+    [ -f "$BINDINGS" ] && grep -qF -- "$begin" "$BINDINGS" || return 0
+    # The block, and the blank line that was under it, so that taking it
+    # out and putting it back leaves the file as it was.
+    awk -v begin="$begin" -v end="$end" '
+        index($0, begin) == 1 { inside = 1 }
+        inside { if (index($0, end) == 1) { inside = 0; blank = 1 } next }
+        blank && $0 ~ /^[[:space:]]*$/ { blank = 0; next }
+        { blank = 0; print }
+    ' "$BINDINGS" > "$BINDINGS.jobsdone"
+    printf '%s\n' "$(cat "$BINDINGS.jobsdone")" > "$BINDINGS"
+    rm -f "$BINDINGS.jobsdone"
+}
+
+# The block where it already is, so that rewriting it never moves anybody
+# else's lines, and at the end of the file otherwise.
+write_block() {
+    local begin="$1" end="$2" body="$3"
+    if grep -qF -- "$begin" "$BINDINGS"; then
+        awk -v begin="$begin" -v end="$end" -v body="$body" '
+            index($0, begin) == 1 { print body; inside = 1; next }
+            index($0, end) == 1 { inside = 0; next }
+            !inside { print }
+        ' "$BINDINGS" > "$BINDINGS.jobsdone"
+        mv "$BINDINGS.jobsdone" "$BINDINGS"
+    else
+        printf '\n%s\n' "$body" >> "$BINDINGS"
     fi
 }
 
-block_present() { [ -f "$BINDINGS" ] && grep -qF -- "$BEGIN" "$BINDINGS"; }
-block_has_keybind() {
-    block_present && awk -v b="$BEGIN" -v e="$END" '$0 == b { inside = 1 } inside && /o\.bind\(/ { found = 1 } $0 == e { inside = 0 } END { exit !found }' "$BINDINGS"
-}
+mkdir -p "$(dirname "$BINDINGS")"
+touch "$BINDINGS"
+
+ours="$(block_keys "$KEYBIND_BEGIN" "$KEYBIND_END")"
+if grep -qF -- "$BOTH_BEGIN" "$BINDINGS"; then
+    [ -n "$ours" ] || ours="$(block_keys "$BOTH_BEGIN" "$BOTH_END")"
+    remove_block "$BOTH_BEGIN" "$BOTH_END"
+    say "took the single block an earlier install left out of $BINDINGS"
+fi
+# The keys already bound stand unless another set was asked for.
+[ "$keys_given" = yes ] || [ -z "$ours" ] || KEYBIND="$ours"
 
 want_keybind=no
-if block_has_keybind; then
+if [ "$keybind_choice" = no ]; then
+    want_keybind=no
+elif [ -n "$ours" ] && same_keys "$ours" "$KEYBIND"; then
     want_keybind=yes   # already ours; keep it
 else
     taken="$(keybind_taken_by)"
     if [ -n "$taken" ]; then
         say "$KEYBIND is already bound to '$taken', so no keybind is added. Bind one yourself with"
-        say "    o.bind(\"<keys>\", \"Jobsdone\", { tui = \"jobsdone\" })"
+        say "    o.bind(\"<keys>\", \"$BIND_NAME\", { tui = \"jobsdone\" })"
         say "in $BINDINGS."
     elif [ -n "$keybind_choice" ]; then
         want_keybind="$keybind_choice"
@@ -134,41 +257,24 @@ else
     fi
 fi
 
-mkdir -p "$(dirname "$BINDINGS")"
-touch "$BINDINGS"
-block="$BEGIN
-o.window(\"$APP_ID\", { float = true, center = true, size = { 870, 650 } })"
 if [ "$want_keybind" = yes ]; then
-    block="$block
-o.bind(\"$KEYBIND\", \"Jobsdone\", { tui = \"jobsdone\" })"
-fi
-block="$block
-$END"
-
-if block_present; then
-    python3 - "$BINDINGS" "$BEGIN" "$END" "$block" <<'PY'
-import re, sys
-path, begin, end, block = sys.argv[1:]
-text = open(path).read()
-pattern = re.compile(re.escape(begin) + r".*?" + re.escape(end) + r"\n?", re.S)
-open(path, "w").write(pattern.sub(lambda _: block + "\n", text, count=1))
-PY
+    write_block "$KEYBIND_BEGIN" "$KEYBIND_END" "$KEYBIND_BEGIN
+o.bind(\"$KEYBIND\", \"$BIND_NAME\", { tui = \"jobsdone\" })
+$KEYBIND_END"
+    say "wrote the $KEYBIND keybind to $BINDINGS"
 else
-    printf '\n%s\n' "$block" >> "$BINDINGS"
+    remove_block "$KEYBIND_BEGIN" "$KEYBIND_END"
 fi
-say "wrote the window rule$([ "$want_keybind" = yes ] && echo " and the $KEYBIND keybind") to $BINDINGS"
+
+# The window rule is the program's own block, written from the settings
+# these flags change, and it is what reloads Hyprland.
+"$BINARY" desktop "${window[@]}"
 
 if hyprland_running; then
-    hyprctl reload >/dev/null
-    errors="$(hyprctl configerrors 2>/dev/null || true)"
-    if [ -n "$errors" ] && [ "$errors" != "no errors" ]; then
-        say "Hyprland reports config errors after the reload:"
-        say "$errors"
-        exit 1
+    if [ "$want_keybind" = yes ]; then
+        say "press $KEYBIND to open Jobsdone"
     fi
-    say "Hyprland reloaded"
-    [ "$want_keybind" = yes ] && say "press $KEYBIND to open Jobsdone"
 else
-    say "Hyprland is not running here; the rule takes effect at the next login"
+    say "Hyprland is not running here; what was written takes effect at the next login"
 fi
 exit 0
