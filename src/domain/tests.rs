@@ -138,6 +138,14 @@ impl World {
         self.commit(&change);
     }
 
+    /// One setting moved, committed the way the application does it.
+    fn set(&mut self, change: impl FnOnce(&mut Settings)) {
+        let mut settings = self.model.settings.clone();
+        change(&mut settings);
+        let change = change_settings(&self.model, settings).expect("the settings");
+        self.commit(&change);
+    }
+
     fn start_review(&mut self) -> bool {
         match start_review(&self.model, self.today()) {
             Some(change) => {
@@ -1113,6 +1121,43 @@ fn a_waiting_task_is_never_on_the_pile() {
     });
 
     world.clock("2026-09-07T09:00:00");
+    assert_eq!(world.pile().total, 0);
+}
+
+#[test]
+fn the_horizon_leaves_an_older_day_out_of_the_pile_and_marks_it_still_open() {
+    let mut world = World::at("2026-09-01T09:00:00");
+    world.add("Order new office chair", day("2026-09-01"));
+    world.add("Chase the invoice", day("2026-09-20"));
+
+    world.clock("2026-09-25T09:00:00");
+    assert_eq!(world.pile().total, 2, "no horizon reaches every day");
+
+    world.set(|settings| settings.set_pile_horizon_days(10));
+
+    assert_eq!(titles(&world.pile().days[0].rows), ["Chase the invoice"]);
+    assert_eq!(world.pile().total, 1);
+
+    // The old task is where it always was, and its row says so without
+    // asking for it back.
+    let old = &world.day("2026-09-01").plan[0];
+    assert!(!old.on_the_pile);
+    assert!(old.still_open);
+    let recent = &world.day("2026-09-20").plan[0];
+    assert!(recent.on_the_pile);
+    assert!(!recent.still_open);
+}
+
+#[test]
+fn a_day_exactly_as_old_as_the_horizon_is_still_on_the_pile() {
+    let mut world = World::at("2026-09-01T09:00:00");
+    world.add("Order new office chair", day("2026-09-01"));
+    world.clock("2026-09-11T09:00:00");
+
+    world.set(|settings| settings.set_pile_horizon_days(10));
+    assert_eq!(world.pile().total, 1, "ten days ago is not more than ten");
+
+    world.set(|settings| settings.set_pile_horizon_days(9));
     assert_eq!(world.pile().total, 0);
 }
 

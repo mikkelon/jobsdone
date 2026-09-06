@@ -29,8 +29,11 @@ pub struct Row {
     pub repeat: Option<Rule>,
     /// `was focus`: closed and focus.
     pub was_focus: bool,
-    /// `on the pile`: open, on a day before today.
+    /// `on the pile`: open, on a day before today the pile still
+    /// reaches.
     pub on_the_pile: bool,
+    /// `still open`: the same, on a day beyond the pile's horizon.
+    pub still_open: bool,
     /// `←backlog`: it came from the backlog on the day being drawn.
     pub from_backlog: bool,
     /// Whether the Done group shows a time or a date: a task closed from
@@ -268,14 +271,16 @@ pub fn backlog_view(model: &Model, today: Date) -> BacklogView {
     view
 }
 
-/// Every unfinished task from a day that has passed, however old.
+/// Every unfinished task from a day that has passed, back as far as
+/// the horizon reaches.
 pub fn pile(model: &Model, today: Date) -> Pile {
+    let horizon = horizon_of(model, today);
     let mut dates: Vec<Date> = model
         .tasks
         .values()
         .filter(|task| task.is_live() && task.is_open())
         .filter_map(|task| task.day)
-        .filter(|day| *day < today)
+        .filter(|day| *day < today && horizon.is_none_or(|earliest| *day >= earliest))
         .collect();
     dates.sort_unstable();
     dates.dedup();
@@ -521,6 +526,9 @@ pub fn notes(model: &Model) -> NotesView {
 /// day of its own.
 fn row_of(model: &Model, task: &Task, today: Date, on: Option<Date>) -> Row {
     let placement = on.and_then(|day| model.placement(task.id, day));
+    let left_open = task.is_open() && task.day.is_some_and(|day| day < today);
+    let within_the_horizon =
+        horizon_of(model, today).is_none_or(|earliest| task.day.is_some_and(|day| day >= earliest));
     let from_backlog = placement.is_some_and(|placement| {
         matches!(placement.from_place, FromPlace::Backlog)
             && Some(model.settings.working_day(&placement.placed_at)) == on
@@ -543,13 +551,22 @@ fn row_of(model: &Model, task: &Task, today: Date, on: Option<Date>) -> Row {
             .and_then(|id| model.schedule(id))
             .map(|schedule| schedule.rule.clone()),
         was_focus: !task.is_open() && task.focus,
-        on_the_pile: task.is_open() && task.day.is_some_and(|day| day < today),
+        on_the_pile: left_open && within_the_horizon,
+        still_open: left_open && !within_the_horizon,
         from_backlog,
         closed_on_this_day: task
             .closed_at
             .as_ref()
             .is_some_and(|at| Some(model.settings.working_day(at)) == task.day),
     }
+}
+
+/// The oldest day the pile reaches back to, or none while the horizon
+/// is off. A task on a day before it stays where it is and is left out
+/// of the pile and its count (DOMAIN.md section 19).
+fn horizon_of(model: &Model, today: Date) -> Option<Date> {
+    let days = model.settings.pile_horizon_days();
+    (days > 0).then(|| today.saturating_sub(Span::new().days(i64::from(days))))
 }
 
 /// How many days ago a day was, which the screen renders relatively.

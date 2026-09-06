@@ -512,6 +512,7 @@ fn every_chip() -> domain::Row {
         }),
         was_focus: true,
         on_the_pile: true,
+        still_open: false,
         from_backlog: true,
         closed_on_this_day: true,
     }
@@ -1606,6 +1607,37 @@ fn no_width_a_crowded_row_can_take_makes_the_drawing_panic() {
             }
         }
     }
+}
+
+/// A day the pile no longer reaches: the row says the task is open
+/// without the red of a row asking to be dealt with.
+#[test]
+fn a_task_beyond_the_pile_horizon_is_marked_still_open() {
+    let mut row = every_chip();
+    row.title = "Order new office chair".to_owned();
+    row.waiting = false;
+    row.repeat = None;
+    row.due = None;
+    row.remind = None;
+    row.was_focus = false;
+    row.on_the_pile = false;
+    row.still_open = true;
+    let drawn = one_row(
+        80,
+        &row,
+        Look {
+            kind: Kind::Open,
+            today: on("2025-09-05"),
+            dates: DateOrder::DayFirst,
+            narrow: false,
+            moving: false,
+            note: None,
+            whole: false,
+        },
+    );
+
+    assert!(drawn.contains("still open"), "{drawn:?}");
+    assert!(!drawn.contains("on the pile"), "{drawn:?}");
 }
 
 /// A title that is cut says so: the row ends in an ellipsis rather than

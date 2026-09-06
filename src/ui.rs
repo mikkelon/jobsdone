@@ -1321,6 +1321,15 @@ fn chips_of(row: &domain::Row, look: Look) -> Vec<Chip> {
             style: Style::new().fg(Color::Red),
         });
     }
+    // The same task on a day the pile no longer reaches. Dim, not red:
+    // the horizon is the person's own decision to stop being asked.
+    if row.still_open && look.note.is_none() {
+        chips.push(Chip {
+            text: "still open".to_owned(),
+            short: "open",
+            style: dim(),
+        });
+    }
     chips
 }
 
