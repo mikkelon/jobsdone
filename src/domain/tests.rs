@@ -1377,6 +1377,66 @@ fn an_unclosed_copy_lands_on_the_pile() {
 }
 
 #[test]
+fn the_backfill_cap_makes_copies_for_the_last_days_only() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let id = world.add("Write standup notes", day("2026-09-07"));
+    world.must(Command::CreateSchedule {
+        task: id,
+        rule: Rule::Daily,
+    });
+    world.set(|settings| settings.set_backfill_days(3));
+
+    world.clock("2026-09-14T09:00:00");
+    world.generate();
+
+    let mut copies: Vec<String> = world
+        .model
+        .tasks
+        .values()
+        .filter_map(|task| task.scheduled_on)
+        .map(|date| date.to_string())
+        .collect();
+    copies.sort();
+    assert_eq!(
+        copies,
+        [
+            "2026-09-07",
+            "2026-09-11",
+            "2026-09-12",
+            "2026-09-13",
+            "2026-09-14"
+        ]
+    );
+}
+
+#[test]
+fn a_date_the_backfill_cap_skipped_is_never_copied_later() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let id = world.add("Write standup notes", day("2026-09-07"));
+    world.must(Command::CreateSchedule {
+        task: id,
+        rule: Rule::Daily,
+    });
+    world.set(|settings| settings.set_backfill_days(3));
+
+    world.clock("2026-09-14T09:00:00");
+    world.generate();
+    let schedule = world.model.schedules.values().next().expect("a schedule");
+    assert_eq!(
+        schedule.generated_through,
+        on("2026-09-14"),
+        "caught up to today whether or not every date was copied"
+    );
+
+    // The cap off again, and the days it skipped stay skipped.
+    world.set(|settings| settings.set_backfill_days(0));
+    world.generate();
+
+    assert_eq!(world.day("2026-09-08").counts.planned, 0);
+    assert_eq!(world.day("2026-09-14").counts.planned, 1);
+}
+
+#[test]
 fn editing_a_copys_title_renames_the_copy_or_the_schedule_too() {
     let mut world = World::at("2026-09-07T09:00:00");
     let first = world.add("Write standup notes", day("2026-09-07"));
