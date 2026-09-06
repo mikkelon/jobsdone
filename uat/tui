@@ -52,7 +52,7 @@ cmd_start() {
     tmux new-session -d -s "$SESSION" -x "$cols" -y "$rows" \
         -e JOBSDONE_DATA_DIR="$data" -e XDG_STATE_HOME="$data/state" \
         -e JOBSDONE_LOG=debug -e TERM=xterm-256color \
-        "$BIN; echo '[jobsdone exited '\$?']'; sleep 3600"
+        "env -u NO_COLOR $BIN; echo '[jobsdone exited '\$?']'; sleep 3600"
     tmux set-option -w -t "$SESSION:" window-size manual >/dev/null
     tmux resize-window -t "$SESSION:" -x "$cols" -y "$rows" 2>/dev/null || true
     sleep 0.8

@@ -226,8 +226,11 @@ On Omarchy, recognised by `/usr/share/omarchy` and `omarchy-launch-tui`:
   to say. From the settings page the rule is written when the keys have
   been quiet for a tick rather than on the keystroke, so a held key costs
   one reload; a floating window is then given the size on the spot, with
-  `hyprctl dispatch resizeactive exact W H` and `centerwindow`, so the
-  size being chosen is the size on screen.
+  `hyprctl dispatch 'hl.dsp.window.resize({ x = W, y = H, relative = false })'`
+  and `'hl.dsp.window.center()'`, so the size being chosen is the size on
+  screen. Hyprland reads a dispatch as a Lua expression, the form its own
+  configuration binds keys with, and answers `ok` or the reason; the
+  program trusts the answer, not the exit code, which is clean either way.
 
 Some machines have one block instead, `-- jobsdone: begin` to
 `-- jobsdone: end`, holding both. An install that finds it takes it out,

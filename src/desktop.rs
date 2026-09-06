@@ -88,14 +88,13 @@ impl Desktop for Hyprland {
         if env::var_os(SIGNATURE).is_none() {
             return Ok(false);
         }
-        hyprctl(&[
-            "dispatch",
-            "resizeactive",
-            "exact",
-            &size.width.to_string(),
-            &size.height.to_string(),
-        ])?;
-        hyprctl(&["dispatch", "centerwindow"])?;
+        // Hyprland reads a dispatch as a Lua expression naming a
+        // dispatcher, the way its configuration does.
+        dispatch(&format!(
+            "hl.dsp.window.resize({{ x = {}, y = {}, relative = false }})",
+            size.width, size.height
+        ))?;
+        dispatch("hl.dsp.window.center()")?;
         Ok(true)
     }
 }
@@ -154,7 +153,7 @@ fn reload() -> Result<(), String> {
     if env::var_os(SIGNATURE).is_none() {
         return Ok(());
     }
-    hyprctl(&["reload"])?;
+    ok(&hyprctl(&["reload"])?, "reload")?;
     let errors = hyprctl(&["configerrors"])?;
     let first = errors
         .lines()
@@ -171,5 +170,29 @@ fn hyprctl(arguments: &[&str]) -> Result<String, String> {
         .args(arguments)
         .output()
         .map_err(|error| format!("hyprctl {} could not be run: {error}", arguments.join(" ")))?;
+    if !output.status.success() {
+        return Err(format!(
+            "hyprctl {} failed: {}",
+            arguments.join(" "),
+            String::from_utf8_lossy(&output.stderr).trim()
+        ));
+    }
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+/// One dispatcher, run on the window that has the keyboard.
+fn dispatch(expression: &str) -> Result<(), String> {
+    ok(&hyprctl(&["dispatch", expression])?, expression)
+}
+
+/// Hyprland answers a dispatch or a reload it took with `ok`, and
+/// anything else with the reason, on stdout and with a clean exit, so
+/// the answer is the only witness.
+fn ok(answer: &str, what: &str) -> Result<(), String> {
+    let answer = answer.trim();
+    if answer == "ok" {
+        Ok(())
+    } else {
+        Err(format!("Hyprland did not take {what}: {answer}"))
+    }
 }

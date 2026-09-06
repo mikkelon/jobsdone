@@ -238,7 +238,7 @@ fn about(row: SettingRow) -> &'static str {
         }
         SettingRow::FloatingWindow => {
             "On Hyprland, whether the app opens in a centred floating window or tiles. Written \
-             to the Hyprland rule the moment it changes."
+             to the Hyprland rule once the keys have gone quiet."
         }
         SettingRow::WindowSize => {
             "The floating window's size in logical pixels. h and l step through five sizes, \

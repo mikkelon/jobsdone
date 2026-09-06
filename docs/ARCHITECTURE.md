@@ -443,9 +443,11 @@ adds it here first, the way a new dependency is added to section 2 first.
   block between `-- jobsdone: window (begin)` and `(end)` in
   `$XDG_CONFIG_HOME/hypr/bindings.lua` and reloading a running Hyprland.
   Off Hyprland `apply_window` says so in a sentence and writes nothing.
-  `preview` is `hyprctl dispatch resizeactive exact W H` and then
-  `centerwindow`, answering `true`; where no Hyprland is running there is
-  no window to dispatch to, which is `false` rather than a failure.
+  `preview` dispatches `hl.dsp.window.resize({ x = W, y = H, relative =
+  false })` and then `hl.dsp.window.center()`, the Lua form Hyprland
+  reads a dispatch in, and answers `true` once both were taken; an answer
+  other than `ok` is the error. Where no Hyprland is running there is no
+  window to dispatch to, which is `false` rather than a failure.
 
 ### `terminal`
 
