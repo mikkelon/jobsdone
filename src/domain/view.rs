@@ -308,6 +308,8 @@ pub fn pile(model: &Model, today: Date) -> Pile {
 /// The tasks a date or a schedule puts in front of the person today.
 pub fn surfaced(model: &Model, today: Date) -> Surfaced {
     let previous = previous_review(model, today);
+    // How far ahead a due date is allowed to see (DOMAIN.md section 8).
+    let ahead = today.saturating_add(Span::new().days(i64::from(model.settings.due_ahead_days())));
     let mut view = Surfaced::default();
 
     for task in model.tasks.values() {
@@ -319,7 +321,7 @@ pub fn surfaced(model: &Model, today: Date) -> Surfaced {
         if task.is_open() && task.day.is_none() {
             // Waiting suppresses due, not remind: that is the whole of
             // "not nagged about" (DOMAIN.md section 9).
-            if !task.waiting && task.due_on.is_some_and(|due| due <= today) {
+            if !task.waiting && task.due_on.is_some_and(|due| due <= ahead) {
                 view.due.push(row());
             }
             let reminded = task.remind_on.is_some_and(|remind| {

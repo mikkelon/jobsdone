@@ -1064,6 +1064,47 @@ fn overdue_due_dates_surface_before_the_rest() {
     );
 }
 
+#[test]
+fn a_due_task_surfaces_as_early_as_the_setting_says() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let id = world.add("Renew the domain", Place::Backlog);
+    world.must(Command::SetDue {
+        task: id,
+        date: Some(on("2026-09-10")),
+    });
+    assert!(world.surfaced().due.is_empty(), "three days off");
+
+    world.set(|settings| settings.set_due_ahead_days(3));
+
+    assert_eq!(titles(&world.surfaced().due), ["Renew the domain"]);
+    assert!(
+        !world.surfaced().due[0].due.expect("a due chip").overdue,
+        "seen early is not late"
+    );
+}
+
+#[test]
+fn surfacing_early_leaves_the_overdue_ones_first() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let late = world.add("Renew the domain", Place::Backlog);
+    world.must(Command::SetDue {
+        task: late,
+        date: Some(on("2026-09-04")),
+    });
+    let soon = world.add("File the VAT return", Place::Backlog);
+    world.must(Command::SetDue {
+        task: soon,
+        date: Some(on("2026-09-09")),
+    });
+
+    world.set(|settings| settings.set_due_ahead_days(7));
+
+    assert_eq!(
+        titles(&world.surfaced().due),
+        ["Renew the domain", "File the VAT return"]
+    );
+}
+
 // ---- the pile --------------------------------------------------------
 
 #[test]
