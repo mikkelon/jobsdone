@@ -410,8 +410,8 @@ impl Review {
 }
 
 /// The hint bar's last word: what just happened, and whether `u` takes it
-/// back. It stands until the next key or for a few seconds, whichever
-/// comes first (DESIGN.md section 8).
+/// back. It stands until the next key or for the seconds
+/// `message_seconds` names, whichever comes first (DESIGN.md section 8).
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Message {
     pub text: String,
@@ -708,8 +708,8 @@ pub struct App {
 
 impl App {
     /// Loads the model and runs the launch sequence: the recurring copies
-    /// for every scheduled date since the last launch, and then the
-    /// review gate, unless the review is set to be opened by hand.
+    /// owed since the last launch, and then the review gate, unless the
+    /// review is set to be opened by hand.
     pub fn new(
         store: Box<dyn Store>,
         desktop: Box<dyn Desktop>,
@@ -755,7 +755,8 @@ impl App {
         Ok(app)
     }
 
-    /// The copies for every scheduled date since the last launch.
+    /// The copies for every scheduled date since the last launch that
+    /// the backfill setting still reaches.
     ///
     /// Recurring schedules are the one thing in the program that creates
     /// tasks on their own (DESIGN.md section 7). Generation is not a user
@@ -810,8 +811,9 @@ impl App {
                     self.showing = today;
                 }
                 self.today = today;
-                // A window left open past 05:00 has reached a new day
-                // without a launch, and today's copies are owed to it.
+                // A window left open past the hour the day starts has
+                // reached a new day without a launch, and today's copies
+                // are owed to it.
                 if rolled {
                     self.generate(&now);
                 }

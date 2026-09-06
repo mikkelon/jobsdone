@@ -1,6 +1,7 @@
 //! The popups drawn over a page: the command palette, search, the help
-//! overlay, the move, date and repeat cards, and the question a recurring
-//! copy asks.
+//! overlay, the move, date and repeat cards, and the two questions, the
+//! one a recurring copy asks and the one `confirm_delete` puts in front
+//! of `x`.
 //!
 //! They are lazygit-shaped: a centred box with an accent border, drawn
 //! over the panes with nothing behind it dimmed (DESIGN.md section 2).

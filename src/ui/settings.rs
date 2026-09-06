@@ -238,8 +238,8 @@ fn about(row: SettingRow) -> &'static str {
              again and the keyboard does everything."
         }
         SettingRow::DateOrder => {
-            "Fri 5 Sep or Fri Sep 5, everywhere a date is written. The locale is what LC_TIME \
-             says about where you are."
+            "Fri 5 Sep or Fri Sep 5, everywhere a date is written. The locale is what LC_ALL, \
+             LC_TIME or LANG says about where you are."
         }
         SettingRow::MessageSeconds => {
             "How long \"closed X · u undo\" stays in the hint bar when no key follows it."

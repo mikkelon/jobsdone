@@ -1,8 +1,9 @@
 //! The model, every rule, commands and their inverses, the views of the
-//! model, rule dates, and the working day.
+//! model, rule dates, the settings, and the working day.
 //!
 //! The domain imports nothing else in the crate, reads no clock and knows
-//! no I/O. It is handed an instant and derives the working day itself.
+//! no I/O. It is handed an instant and derives the working day itself,
+//! from the hour the settings say a day begins.
 
 use std::fmt;
 

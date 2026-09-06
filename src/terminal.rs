@@ -1,5 +1,5 @@
-//! Raw mode, alternate screen, mouse capture, the panic hook, and the
-//! event loop with its 250 ms tick.
+//! Raw mode, alternate screen, mouse capture while the `mouse` setting
+//! asks for it, the panic hook, and the event loop with its 250 ms tick.
 //!
 //! Events go in and frames come out. This module never sees time: a tick
 //! is an action like any other.

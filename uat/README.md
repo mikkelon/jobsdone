@@ -49,9 +49,10 @@ row 6; the hint bar is the second-to-last row. Column 1 is the margin.
 
 ## Standing on another day
 
-The app reads the real clock and the working day rolls at 05:00. There
-is no override, so a flow that needs "yesterday" is set up by writing the
-scratch database directly between a `stop` and a `start`:
+The app reads the real clock and the working day rolls at the hour
+`day_starts_at` names, 05:00 out of the box. There is no clock override,
+so a flow that needs "yesterday" is set up by writing the scratch
+database directly between a `stop` and a `start`:
 
     uat/tui stop
     uat/tui sql "update tasks set day = date('now', '-1 day') where id = 3"
@@ -61,15 +62,19 @@ scratch database directly between a `stop` and a `start`:
 
 Dates are `YYYY-MM-DD`; instants are RFC 3339 with a zone, the way the
 app writes them (`select created_at from tasks limit 1` shows the shape).
-The columns are in `migrations/0001_initial.sql` and their meaning in
-`docs/DOMAIN.md` section 17. The two `meta` keys that gate the review
-are `review_on` and `review_before`; deleting them makes the next launch
+The columns are in `migrations/` and their meaning in `docs/DOMAIN.md`
+section 17. The `settings` table is key and value text, the keys of
+section 19; a row written there is what the app would have written from
+the settings page, so a setting can be stood on the same way a date is.
+The two `meta` keys that gate the review are `review_on` and
+`review_before`; deleting them makes the next launch
 count as the first of the day. A schedule's `generated_through` is the
 last date copies were made for; moving it back makes the next launch
 create the copies since.
 
-Say in the report which tests stood on a written-in date, since a rule
-that only fails at a real 05:00 rollover is not one this can catch.
+Say in the report which tests stood on a written-in date or a
+written-in setting, since a rule that only fails at a real rollover is
+not one this can catch.
 
 ## What to look at
 
