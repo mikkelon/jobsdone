@@ -9,7 +9,9 @@ use ratatui::{Terminal, TerminalOptions, Viewport};
 
 use crate::app::{App, Desktop, Locale, WindowSize};
 use crate::domain::tests::MemStore;
-use crate::domain::{DueChip, FromPlace, Model, Note, Placement, Schedule, Task, Weekday};
+use crate::domain::{
+    DueChip, FromPlace, Model, Note, Placement, Schedule, Task, WeekStart, Weekday, WorkDays,
+};
 use crate::input::Action;
 
 /// The wireframes are the source of truth for the layout, so the test is a
@@ -1375,6 +1377,41 @@ fn the_date_card_types_picks_and_walks_the_month() {
     assert!(text.contains(" Mo Tu We Th Fr Sa Su"));
     assert!(text.contains("⏎ set"));
     assert!(text.contains("tab calendar"));
+}
+
+#[test]
+fn a_sunday_week_opens_the_calendar_and_the_repeat_row_on_sunday() {
+    let mut app = app();
+    let mut settings = app.settings().clone();
+    settings.set_week_starts_on(WeekStart::Sunday);
+    settings.set_work_days(WorkDays::of([
+        Weekday::Sun,
+        Weekday::Mon,
+        Weekday::Tue,
+        Weekday::Wed,
+        Weekday::Thu,
+    ]));
+    app.change_settings(settings);
+
+    app.update(Action::PaneRight);
+    app.update(Action::DueBy);
+    let text = look(&app, 120, 36).join("\n");
+    assert!(text.contains(" Su Mo Tu We Th Fr Sa"));
+    assert!(
+        text.contains(" 31  1  2  3  4  5  6"),
+        "the month opens on the Sunday before it"
+    );
+
+    app.update(Action::Cancel);
+    app.update(Action::Repeat);
+    app.update(Action::EveryWeek);
+    let text = look(&app, 120, 36).join("\n");
+
+    assert!(text.contains("Sun–Thu"), "the days every work day means");
+    assert!(
+        text.contains(" Su  Mo  Tu  We  Th [Fr] Sa "),
+        "the weekdays from Sunday, the one in the set bracketed"
+    );
 }
 
 #[test]

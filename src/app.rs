@@ -1577,7 +1577,12 @@ impl App {
     /// "next Monday" are the rules' own definitions of those days
     /// (DOMAIN.md section 10); the rest are arithmetic.
     fn day_for(&self, action: Action) -> Option<Date> {
-        let next = |rule: Rule| domain::next_dates(&rule, self.today, 1).first().copied();
+        let work_days = self.model.settings.work_days();
+        let next = |rule: Rule| {
+            domain::next_dates(&rule, self.today, 1, &work_days)
+                .first()
+                .copied()
+        };
         match action {
             Action::ToToday => Some(self.today),
             Action::Tomorrow => self.today.tomorrow().ok(),
@@ -1941,7 +1946,10 @@ impl App {
                 Some(Rule::Weekly { weekdays }) => weekdays.clone(),
                 _ => vec![Weekday::of(anchor)],
             },
-            weekday: Weekday::of(anchor) as usize,
+            weekday: Weekday::week(self.model.settings.week_starts_on())
+                .iter()
+                .position(|day| *day == Weekday::of(anchor))
+                .unwrap_or(0),
             month_day: match &rule {
                 Some(Rule::Monthly { day }) => *day,
                 _ => MonthDay::Day(anchor.day() as u8),
@@ -2029,6 +2037,7 @@ impl App {
     /// `space` on the weekly shape: the highlighted weekday joins the
     /// set, or leaves it.
     fn pick_a_weekday(&mut self) {
+        let week = Weekday::week(self.model.settings.week_starts_on());
         let Some(popup) = &mut self.popup else {
             return;
         };
@@ -2038,7 +2047,7 @@ impl App {
         let Card::Repeat(draft) = &mut popup.card else {
             return;
         };
-        let day = Weekday::ALL[draft.weekday.min(6)];
+        let day = week[draft.weekday.min(6)];
         match draft.weekdays.iter().position(|other| *other == day) {
             Some(at) => {
                 draft.weekdays.remove(at);
@@ -2078,7 +2087,12 @@ impl App {
             return Vec::new();
         };
         match self.drafted_rule() {
-            Some(rule) => domain::next_dates(&rule, after.after.max(self.today), PREVIEW),
+            Some(rule) => domain::next_dates(
+                &rule,
+                after.after.max(self.today),
+                PREVIEW,
+                &self.model.settings.work_days(),
+            ),
             None => Vec::new(),
         }
     }

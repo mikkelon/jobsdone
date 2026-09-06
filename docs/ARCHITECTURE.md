@@ -244,9 +244,11 @@ adds it here first, the way a new dependency is added to section 2 first.
   model. A review keeps the rows it opened with while the tasks in them
   change under its decisions (DOMAIN.md section 13), so the days and the
   ids come from the old value and everything else from the model.
-- `Weekday::of(date)` and `Weekday::ALL`, so a card can open on the
-  weekday of a day and lay the seven of them out without a second
-  mapping of jiff's weekdays or a second idea of where a week starts.
+- `Weekday::of(date)`, `Weekday::ALL` in the order a set of them is
+  stored, `Weekday::week(start)` in the order a week is drawn, and
+  `Weekday::is_work_day(&WorkDays)`, so a card can open on the weekday of
+  a day and lay the seven of them out without a second mapping of jiff's
+  weekdays or a second idea of where a week starts.
 - `parse_date(text, today) -> Option<Date>`: the date a typed line means
   (DOMAIN.md section 2). It takes no model: the date card previews what
   is typed on every keystroke, and what a shape means is a rule whether

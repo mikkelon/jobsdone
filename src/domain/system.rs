@@ -20,6 +20,7 @@ use super::model::{
 pub fn generate_copies(model: &Model, now: &Zoned) -> Change {
     let today = model.settings.working_day(now);
     let backfill = backfill_floor(model, today);
+    let work_days = model.settings.work_days();
     let mut after = model.clone();
 
     let schedules: Vec<Id> = model
@@ -48,7 +49,7 @@ pub fn generate_copies(model: &Model, now: &Zoned) -> Change {
                 break;
             }
             day = next;
-            if rule.falls_on(day) && backfill.is_none_or(|earliest| day >= earliest) {
+            if rule.falls_on(day, &work_days) && backfill.is_none_or(|earliest| day >= earliest) {
                 copy(&mut after, id, &title, day, now);
             }
         }

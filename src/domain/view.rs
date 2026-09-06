@@ -11,6 +11,7 @@ use jiff::{Span, Zoned};
 
 use super::model::{FromPlace, Id, Model, Note, Place, REVIEW_BEFORE, REVIEW_ON, Task};
 use super::rule::{Rule, Weekday};
+use super::settings::WeekStart;
 
 /// A task as a screen draws it, with every decision the domain owns
 /// already made.
@@ -472,7 +473,7 @@ pub fn day_list(model: &Model, today: Date) -> DayList {
 
     let mut stretches: Vec<DayStretch> = Vec::new();
     for row in days.into_values().rev() {
-        let stretch = stretch_of(row.day, today);
+        let stretch = stretch_of(row.day, today, model.settings.week_starts_on());
         match stretches.last_mut() {
             Some(last) if last.stretch == stretch => last.days.push(row),
             _ => stretches.push(DayStretch {
@@ -484,14 +485,20 @@ pub fn day_list(model: &Model, today: Date) -> DayList {
     DayList { stretches }
 }
 
-/// The Monday of the week a date is in, because a week begins on a
-/// Monday everywhere else in the program too.
-fn monday_of(date: Date) -> Date {
-    date.saturating_sub(Span::new().days(Weekday::of(date) as i64))
+/// The first day of the week a date is in, on the day the settings say
+/// a week begins on.
+fn week_start_of(date: Date, start: WeekStart) -> Date {
+    // `Weekday::of` counts from Monday, so a Sunday-start week is the
+    // same count shifted round by one.
+    let gone = match start {
+        WeekStart::Monday => Weekday::of(date) as i64,
+        WeekStart::Sunday => (Weekday::of(date) as i64 + 1) % 7,
+    };
+    date.saturating_sub(Span::new().days(gone))
 }
 
-fn stretch_of(day: Date, today: Date) -> Stretch {
-    let this = monday_of(today);
+fn stretch_of(day: Date, today: Date, start: WeekStart) -> Stretch {
+    let this = week_start_of(today, start);
     if day >= this.saturating_add(Span::new().days(7)) {
         Stretch::Later
     } else if day >= this {

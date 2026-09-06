@@ -156,6 +156,15 @@ impl World {
         }
     }
 
+    /// A setting changed the way the page changes it, committed and
+    /// loaded back.
+    fn change_setting(&mut self, change: impl FnOnce(&mut Settings)) {
+        let mut settings = self.model.settings.clone();
+        change(&mut settings);
+        let change = change_settings(&self.model, settings).expect("the settings");
+        self.commit(&change);
+    }
+
     fn commit(&mut self, change: &Change) {
         self.store.commit(change).expect("the in-memory store");
         self.model = self.store.load().expect("the in-memory store");
@@ -806,20 +815,8 @@ fn the_day_list_is_broken_into_stretches_of_the_calendar() {
         world.add(date, day(date));
     }
 
-    let list = day_list(&world.model, world.today());
-    let stretches: Vec<(Stretch, Vec<String>)> = list
-        .stretches
-        .iter()
-        .map(|stretch| {
-            (
-                stretch.stretch,
-                stretch.days.iter().map(|row| row.day.to_string()).collect(),
-            )
-        })
-        .collect();
-
     assert_eq!(
-        stretches,
+        stretches(&world),
         [
             (Stretch::Later, vec!["2026-09-14".to_owned()]),
             (
@@ -833,6 +830,41 @@ fn the_day_list_is_broken_into_stretches_of_the_calendar() {
             (Stretch::Earlier, vec!["2026-08-28".to_owned()]),
         ]
     );
+}
+
+#[test]
+fn a_week_that_begins_on_sunday_moves_the_stretches_with_it() {
+    // A Monday, so the Sunday before it is last week where a week
+    // begins on a Monday and this week where it begins on a Sunday.
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.change_setting(|settings| settings.set_week_starts_on(WeekStart::Sunday));
+    for date in ["2026-09-13", "2026-09-07", "2026-09-06"] {
+        world.add(date, day(date));
+    }
+
+    assert_eq!(
+        stretches(&world),
+        [
+            (Stretch::Later, vec!["2026-09-13".to_owned()]),
+            (
+                Stretch::ThisWeek,
+                vec!["2026-09-07".to_owned(), "2026-09-06".to_owned()]
+            ),
+        ]
+    );
+}
+
+fn stretches(world: &World) -> Vec<(Stretch, Vec<String>)> {
+    day_list(&world.model, world.today())
+        .stretches
+        .iter()
+        .map(|stretch| {
+            (
+                stretch.stretch,
+                stretch.days.iter().map(|row| row.day.to_string()).collect(),
+            )
+        })
+        .collect()
 }
 
 // ---- the backlog, dates and waiting ----------------------------------
@@ -1586,17 +1618,38 @@ fn a_repeat_that_never_comes_round_is_refused() {
 // ---- rule dates ------------------------------------------------------
 
 fn dates(rule: &Rule, after: &str, count: usize) -> Vec<String> {
-    next_dates(rule, on(after), count)
+    dates_worked(rule, after, count, WorkDays::default())
+}
+
+fn dates_worked(rule: &Rule, after: &str, count: usize, work_days: WorkDays) -> Vec<String> {
+    next_dates(rule, on(after), count, &work_days)
         .iter()
         .map(|date| date.to_string())
         .collect()
 }
 
 #[test]
-fn work_days_are_monday_to_friday_with_no_holidays() {
+fn work_days_are_monday_to_friday_until_the_settings_say_otherwise() {
     assert_eq!(
         dates(&Rule::Workdays, "2026-09-10", 4),
         ["2026-09-11", "2026-09-14", "2026-09-15", "2026-09-16"]
+    );
+}
+
+#[test]
+fn a_work_days_rule_repeats_over_a_sunday_to_thursday_week() {
+    let week = WorkDays::of([
+        Weekday::Sun,
+        Weekday::Mon,
+        Weekday::Tue,
+        Weekday::Wed,
+        Weekday::Thu,
+    ]);
+
+    // From a Thursday: the Friday and the Saturday are skipped.
+    assert_eq!(
+        dates_worked(&Rule::Workdays, "2026-09-10", 4, week),
+        ["2026-09-13", "2026-09-14", "2026-09-15", "2026-09-16"]
     );
 }
 

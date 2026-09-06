@@ -15,7 +15,7 @@ use super::{
     Canvas, DateOrder, Rows, accent, bold, count, cursor, day_label, dim, place_label, plain,
 };
 use crate::app::{App, DateDraft, DateKind, MoveTarget, Popup, RepeatDraft, RowId};
-use crate::domain::{self, Row, Weekday};
+use crate::domain::{self, Row, WeekStart, Weekday, WorkDays};
 use crate::input::{
     self, Action, Binding, KeyContext, NotesPane, Pane, PopupKind, ReviewStep, Shown,
 };
@@ -442,7 +442,8 @@ fn date_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
         return;
     };
     let choices = app.date_choices();
-    let weeks = weeks_of(draft.on);
+    let start = app.settings().week_starts_on();
+    let weeks = weeks_of(draft.on, start);
     let width = DATE_WIDTH.min(canvas.width().saturating_sub(4));
     let body = rows.bottom - rows.top + 1;
 
@@ -503,6 +504,7 @@ fn date_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
             &weeks,
             draft,
             app.today(),
+            start,
         );
     }
     let last = y + height - 3;
@@ -548,12 +550,13 @@ fn no_date(kind: DateKind) -> &'static str {
     }
 }
 
-/// The whole weeks a month is spread over, Monday first, so that the
-/// days either side of it are drawn dim rather than left blank.
-fn weeks_of(on: Date) -> Vec<Vec<Date>> {
+/// The whole weeks a month is spread over, from the day a week begins
+/// on, so that the days either side of it are drawn dim rather than left
+/// blank.
+fn weeks_of(on: Date, start: WeekStart) -> Vec<Vec<Date>> {
     let first = on.first_of_month();
     let mut day = first
-        .nth_weekday_of_month(1, Civil::Monday)
+        .nth_weekday_of_month(1, first_column(start))
         .unwrap_or(first);
     if day > first {
         day = day.saturating_sub(Span::new().days(7));
@@ -571,6 +574,14 @@ fn weeks_of(on: Date) -> Vec<Vec<Date>> {
     weeks
 }
 
+/// The day of the week the leftmost column of the calendar is.
+fn first_column(start: WeekStart) -> Civil {
+    match start {
+        WeekStart::Monday => Civil::Monday,
+        WeekStart::Sunday => Civil::Sunday,
+    }
+}
+
 /// The month the card is on: its name, the weekdays, and the days, with
 /// the day the card is on marked and today in bold.
 fn calendar(
@@ -580,11 +591,16 @@ fn calendar(
     weeks: &[Vec<Date>],
     draft: &DateDraft,
     today: Date,
+    start: WeekStart,
 ) {
     let month = draft.on.strftime("%B %Y").to_string();
     let left = |text: &str| x + CALENDAR.saturating_sub(count(text)) / 2;
     canvas.put(left(&month), y, &month, dim());
-    canvas.put(x, y + 1, " Mo Tu We Th Fr Sa Su", dim());
+    let heads: Vec<&str> = Weekday::week(start)
+        .iter()
+        .map(|day| super::short_weekday(*day))
+        .collect();
+    canvas.put(x, y + 1, &format!(" {}", heads.join(" ")), dim());
 
     for (down, week) in weeks.iter().enumerate() {
         for (across, day) in week.iter().enumerate() {
@@ -650,7 +666,7 @@ fn repeat_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
             *shape,
             draft,
             at == popup.selected,
-            app.dates(),
+            app,
         );
         if at == popup.selected {
             canvas.restyle(x + 1, row, width - 2, cursor());
@@ -698,17 +714,24 @@ fn shape_of(
     shape: Action,
     draft: &RepeatDraft,
     selected: bool,
-    dates: DateOrder,
+    app: &App,
 ) {
+    let dates = app.dates();
+    let start = app.settings().week_starts_on();
     match shape {
         Action::EveryWorkDay => {
-            canvas.rput(right, y, "Mon–Fri", dim());
+            canvas.rput(
+                right,
+                y,
+                &work_days_label(app.settings().work_days(), start),
+                dim(),
+            );
         }
         Action::EveryWeek => {
             // Seven cells of four: the days in the set are bracketed and
             // the one the keys are on is marked.
             let left = right.saturating_sub(4 * 7 - 1);
-            for (at, day) in Weekday::ALL.iter().enumerate() {
+            for (at, day) in Weekday::week(start).iter().enumerate() {
                 let on = draft.weekdays.contains(day);
                 let text = if on {
                     format!("[{}]", super::short_weekday(*day))
@@ -742,6 +765,26 @@ fn shape_of(
             canvas.rput(right, y, "copies stay", dim());
         }
         _ => {}
+    }
+}
+
+/// The work days, as `Mon–Fri` where they run together in the week and
+/// as the days themselves where they do not.
+fn work_days_label(days: WorkDays, start: WeekStart) -> String {
+    let week = Weekday::week(start);
+    let at: Vec<usize> = week
+        .iter()
+        .enumerate()
+        .filter(|(_, day)| days.contains(**day))
+        .map(|(at, _)| at)
+        .collect();
+    let named = |at: &usize| super::weekday_name(week[*at]);
+    let runs = at.windows(2).all(|pair| pair[1] == pair[0] + 1);
+    match at.as_slice() {
+        [] => String::new(),
+        [one] => named(one).to_owned(),
+        [first, .., last] if runs => format!("{}–{}", named(first), named(last)),
+        _ => at.iter().map(named).collect::<Vec<_>>().join(" "),
     }
 }
 

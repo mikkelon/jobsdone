@@ -220,10 +220,11 @@ pile, so a day beyond the horizon still says what it left open. Today's
 own open tasks are the working list and a future day's are a plan, so
 neither is counted there; the row says "today" instead.
 
-The list is newest day first, broken into four stretches by the Monday
-of the week today is in: **later** (after this week), **this week**,
-**last week**, and **earlier**. A stretch with no day in it is not
-drawn, which is why a list of one old day is one group.
+The list is newest day first, broken into four stretches by the first
+day of the week today is in, which `week_starts_on` names: **later**
+(after this week), **this week**, **last week**, and **earlier**. A
+stretch with no day in it is not drawn, which is why a list of one old
+day is one group.
 
 ## 7. Views of the backlog
 
@@ -305,7 +306,7 @@ Exactly five shapes, stored as JSON in `rule`:
 
 | Shape          | JSON                                             | Dates                                                    |
 |----------------|--------------------------------------------------|----------------------------------------------------------|
-| work days      | `{"kind":"workdays"}`                            | Monday to Friday. No holidays, ever.                     |
+| work days      | `{"kind":"workdays"}`                            | The days `work_days` names, Monday to Friday by default. No holidays, ever. |
 | every day      | `{"kind":"daily"}`                               |                                                          |
 | weekly         | `{"kind":"weekly","weekdays":["mon","thu"]}`     | The listed weekdays, at least one.                       |
 | monthly        | `{"kind":"monthly","day":15}` or `"day":"last"`  | Day N clamped to the month's last day; or the last day.  |
@@ -313,10 +314,13 @@ Exactly five shapes, stored as JSON in `rule`:
 
 "Every N weeks" is one weekday (that of `from`); "weekly" is a set of
 weekdays. They do not overlap. The "Next work day" shortcut in the move
-card uses the same Monday-to-Friday definition as the work-days rule.
+card reads `work_days` the same way the work-days rule does, so the two
+never disagree about which day comes next.
 
-`next_dates(rule, after, count)` is a pure function used both by the
-repeat card's preview and by generation.
+`next_dates(rule, after, count, work_days)` is a pure function used both
+by the repeat card's preview and by generation. It takes the work days
+rather than reading them off a model, because the repeat card previews a
+rule that has not been saved to one.
 
 ### Creating a schedule from a task
 
