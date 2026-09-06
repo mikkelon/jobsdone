@@ -11,8 +11,8 @@ use rusqlite::types::Type;
 use rusqlite::{Connection, ErrorCode, Row, Transaction, params};
 
 use crate::domain::{
-    Change, Command, FromPlace, Model, Note, Placement, Rule, Schedule, Store, StoreError, Task,
-    UndoEntry, Write,
+    Change, Command, FromPlace, Model, Note, Placement, Rule, Schedule, Settings, Store,
+    StoreError, Task, UndoEntry, Write,
 };
 
 #[cfg(test)]
@@ -21,7 +21,10 @@ mod tests;
 /// The migrations, in order, compiled into the binary. Adding one is a
 /// line here and a file beside the others; the file sets `user_version`
 /// as its last statement.
-const MIGRATIONS: &[(u32, &str)] = &[(1, include_str!("../migrations/0001_initial.sql"))];
+const MIGRATIONS: &[(u32, &str)] = &[
+    (1, include_str!("../migrations/0001_initial.sql")),
+    (2, include_str!("../migrations/0002_settings.sql")),
+];
 
 /// `placements.from_place` is `new`, `backlog`, or the date the task came
 /// from, which is the one column that is not a plain value.
@@ -121,6 +124,14 @@ impl Store for Sqlite {
             let (key, value) = row?;
             model.meta.insert(key, value);
         }
+
+        let mut settings = self.conn.prepare("SELECT key, value FROM settings")?;
+        let rows = settings
+            .query_map([], |row| {
+                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+            })?
+            .collect::<rusqlite::Result<Vec<(String, String)>>>()?;
+        model.settings = Settings::from_pairs(rows);
 
         Ok(model)
     }
@@ -264,6 +275,19 @@ fn write_row(tx: &Transaction<'_>, write: &Write) -> Result<(), StoreError> {
                  ON CONFLICT (key) DO UPDATE SET value = excluded.value",
                 params![key, value],
             )?;
+        }
+        // The whole table at once, so that a key this build does not
+        // write is a key it does not keep either. A key it does not know
+        // is another matter: the delete takes those too, which is the
+        // price of the value being whole.
+        Write::PutSettings(settings) => {
+            tx.execute("DELETE FROM settings", [])?;
+            for (key, value) in settings.to_pairs() {
+                tx.execute(
+                    "INSERT INTO settings (key, value) VALUES (?1, ?2)",
+                    params![key, value],
+                )?;
+            }
         }
     }
     Ok(())

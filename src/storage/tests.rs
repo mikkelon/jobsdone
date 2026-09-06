@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use jiff::Zoned;
 
-use crate::domain::{self, Change, Command, Id, Place, Rule};
+use crate::domain::{self, Change, Command, Context, DateOrder, Id, Place, Rule, Settings, Write};
 
 /// The database the writer of the kill test writes to. Its presence is
 /// what tells that process it is the child rather than a test run.
@@ -64,7 +64,12 @@ impl Scratch {
     }
 
     fn run(&mut self, command: Command) {
-        let change = domain::apply(&self.model, command, &self.now, UNDO_CAP).expect("a command");
+        let ctx = Context {
+            now: self.now.clone(),
+            undo_cap: UNDO_CAP,
+            dates: DateOrder::DayFirst,
+        };
+        let change = domain::apply(&self.model, command, &ctx).expect("a command");
         self.commit(&change);
     }
 
@@ -110,7 +115,7 @@ fn a_fresh_database_is_migrated_to_the_latest_schema() {
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user_version");
 
-    assert_eq!(user_version, 1);
+    assert_eq!(user_version, 2);
     assert_eq!(store.load().expect("load"), Model::empty());
 }
 
@@ -134,6 +139,7 @@ fn the_schema_of_domain_section_17_is_what_was_created() {
             "notes",
             "placements",
             "schedules",
+            "settings",
             "tasks",
             "undo_log"
         ]
@@ -290,7 +296,9 @@ fn an_instant_reads_back_as_the_instant_that_was_written() {
     let task = reopened.task(id).expect("the task");
     assert_eq!(task.closed_at, world.model.task(id).expect("it").closed_at);
     assert_eq!(
-        task.closed_at.as_ref().map(domain::working_day),
+        task.closed_at
+            .as_ref()
+            .map(|at| Settings::default().working_day(at)),
         Some("2026-09-04".parse().expect("a date"))
     );
 }
@@ -324,6 +332,37 @@ fn the_version_moves_when_another_instance_writes() {
             .map(String::as_str),
         Some("2026-09-06")
     );
+}
+
+// ---- settings --------------------------------------------------------
+
+#[test]
+fn the_settings_read_back_as_what_was_committed() {
+    let mut world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
+    let mut settings = Settings::default();
+    settings.set_day_starts_at(8);
+    settings.set_window_size(domain::WindowSize::new(1200, 800));
+    settings.set_confirm_delete(true);
+
+    world.commit(&Change {
+        writes: vec![Write::PutSettings(settings.clone())],
+    });
+
+    assert_eq!(world.reopened().settings, settings);
+}
+
+#[test]
+fn a_settings_key_this_build_does_not_know_is_ignored() {
+    let (_dir, store) = scratch();
+    store
+        .conn
+        .execute(
+            "INSERT INTO settings (key, value) VALUES ('what_a_later_version_added', 'whatever')",
+            [],
+        )
+        .expect("a row from another version");
+
+    assert_eq!(store.load().expect("load").settings, Settings::default());
 }
 
 // ---- one command, one transaction ------------------------------------
@@ -409,7 +448,12 @@ fn undoing_a_repeat_takes_the_schedule_row_with_it() {
     });
     assert_eq!(world.reopened().schedules.len(), 1);
 
-    let undone = domain::undo(&world.model, &world.now).expect("something to undo");
+    let ctx = Context {
+        now: world.now.clone(),
+        undo_cap: UNDO_CAP,
+        dates: DateOrder::DayFirst,
+    };
+    let undone = domain::undo(&world.model, &ctx).expect("something to undo");
     world.commit(&undone.change);
 
     let reopened = world.reopened();
@@ -497,7 +541,12 @@ fn the_writer_a_kill_stops() {
             title: format!("Task {}", model.tasks.len() + 1),
             place: Place::Backlog,
         };
-        let change = domain::apply(&model, command, &now, usize::MAX).expect("an add");
+        let ctx = Context {
+            now: now.clone(),
+            undo_cap: usize::MAX,
+            dates: DateOrder::DayFirst,
+        };
+        let change = domain::apply(&model, command, &ctx).expect("an add");
         if store.commit(&change).is_err() {
             return;
         }
