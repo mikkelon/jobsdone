@@ -6,13 +6,13 @@
 
 use std::fmt;
 
-use jiff::civil::Date;
-use jiff::{Span, Zoned};
+use jiff::Zoned;
 
 mod command;
 mod date;
 mod model;
 mod rule;
+mod settings;
 mod system;
 mod view;
 
@@ -20,12 +20,15 @@ mod view;
 pub(crate) mod tests;
 
 pub use self::command::{Command, Undone, apply, undo};
-pub use self::date::parse_date;
+pub use self::date::{day_label, parse_date, short_label, stamp_label};
 pub use self::model::{
     Change, FromPlace, Id, Model, Note, Place, Placement, REVIEW_BEFORE, REVIEW_ON, Schedule, Task,
     UndoEntry, Write,
 };
 pub use self::rule::{MonthDay, Rule, Weekday, next_dates};
+pub use self::settings::{
+    DateOrder, DateStyle, Settings, WeekStart, WindowSize, WorkDays, change_settings,
+};
 pub use self::system::{generate_copies, start_review};
 pub use self::view::{
     BacklogView, DayCounts, DayList, DayListRow, DayStretch, DayView, DueChip, NoteRow, NotesView,
@@ -33,15 +36,15 @@ pub use self::view::{
     day_view, notes, pile, pile_again, previous_review, search, surfaced, surfaced_again,
 };
 
-/// The hour a day begins, so 01:30 on Saturday belongs to Friday. A
-/// constant, not a setting (DOMAIN.md section 2).
-const DAY_STARTS_AT: i64 = 5;
-
-/// The working day of an instant.
-pub fn working_day(instant: &Zoned) -> Date {
-    instant
-        .saturating_sub(Span::new().hours(DAY_STARTS_AT))
-        .date()
+/// What the domain is told about the world outside it: the instant the
+/// action was given, how long the undo stack is held to, and the order
+/// dates are written in. The domain reads no clock, chooses no cap and
+/// knows no locale, so all three come in with the command.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Context {
+    pub now: Zoned,
+    pub undo_cap: usize,
+    pub dates: DateOrder,
 }
 
 /// Why a command was refused, as the sentence the hint bar shows.

@@ -11,7 +11,6 @@ use jiff::{Span, Zoned};
 
 use super::model::{FromPlace, Id, Model, Note, Place, REVIEW_BEFORE, REVIEW_ON, Task};
 use super::rule::{Rule, Weekday};
-use super::working_day;
 
 /// A task as a screen draws it, with every decision the domain owns
 /// already made.
@@ -524,7 +523,7 @@ fn row_of(model: &Model, task: &Task, today: Date, on: Option<Date>) -> Row {
     let placement = on.and_then(|day| model.placement(task.id, day));
     let from_backlog = placement.is_some_and(|placement| {
         matches!(placement.from_place, FromPlace::Backlog)
-            && Some(working_day(&placement.placed_at)) == on
+            && Some(model.settings.working_day(&placement.placed_at)) == on
     });
 
     Row {
@@ -549,7 +548,7 @@ fn row_of(model: &Model, task: &Task, today: Date, on: Option<Date>) -> Row {
         closed_on_this_day: task
             .closed_at
             .as_ref()
-            .is_some_and(|at| Some(working_day(at)) == task.day),
+            .is_some_and(|at| Some(model.settings.working_day(at)) == task.day),
     }
 }
 

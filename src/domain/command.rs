@@ -9,11 +9,13 @@ use jiff::Zoned;
 use jiff::civil::Date;
 use serde::{Deserialize, Serialize};
 
+use super::date::day_label;
 use super::model::{
     Change, FromPlace, Id, Model, Note, Place, Placement, Schedule, Task, UndoEntry, Write, diff,
 };
 use super::rule::Rule;
-use super::{Rejected, working_day};
+use super::settings::DateOrder;
+use super::{Context, Rejected};
 
 /// One change to the model, carrying ids and never cursor positions.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
@@ -140,17 +142,14 @@ pub struct Undone {
 
 /// Every user command: what it would change, or why it is refused.
 ///
-/// `undo_cap` is the length the undo stack is held to. The domain does
-/// not choose the number (DOMAIN.md section 11).
-pub fn apply(
-    model: &Model,
-    command: Command,
-    now: &Zoned,
-    undo_cap: usize,
-) -> Result<Change, Rejected> {
-    let today = working_day(now);
+/// The context carries the instant it was given, the length the undo
+/// stack is held to and the order dates are written in; the domain
+/// chooses none of the three (DOMAIN.md section 11).
+pub fn apply(model: &Model, command: Command, ctx: &Context) -> Result<Change, Rejected> {
+    let now = &ctx.now;
+    let today = model.settings.working_day(now);
     let mut after = model.clone();
-    let entry = run(&mut after, &command, now, today)?;
+    let entry = run(&mut after, &command, now, today, ctx.dates)?;
 
     let mut writes = diff(model, &after);
     if let Some(Entry { label, inverse }) = entry {
@@ -160,7 +159,7 @@ pub fn apply(
             label,
             inverse,
         }));
-        writes.push(Write::TruncateUndo(undo_cap));
+        writes.push(Write::TruncateUndo(ctx.undo_cap));
     }
     Ok(Change { writes })
 }
@@ -168,14 +167,15 @@ pub fn apply(
 /// Pops the top entry and returns its inverse's change, with nothing
 /// pushed. An inverse whose precondition no longer holds, because another
 /// window has moved on, drops the entry instead of applying it.
-pub fn undo(model: &Model, now: &Zoned) -> Result<Undone, Rejected> {
+pub fn undo(model: &Model, ctx: &Context) -> Result<Undone, Rejected> {
     let Some(entry) = model.undo.last() else {
         return Err(Rejected("There is nothing to undo.".to_owned()));
     };
-    let today = working_day(now);
+    let now = &ctx.now;
+    let today = model.settings.working_day(now);
     let mut after = model.clone();
 
-    match run(&mut after, &entry.inverse, now, today) {
+    match run(&mut after, &entry.inverse, now, today, ctx.dates) {
         Ok(_) => {
             let mut writes = diff(model, &after);
             writes.push(Write::PopUndo(entry.id));
@@ -249,6 +249,7 @@ fn run(
     command: &Command,
     now: &Zoned,
     today: Date,
+    dates: DateOrder,
 ) -> Result<Option<Entry>, Rejected> {
     match command {
         Command::AddTask { title, place } => {
@@ -413,7 +414,11 @@ fn run(
             set_task(model, id, |task| task.waiting = false);
 
             Ok(Entry::new(
-                format!("Moved {} to {}", named(&title), place_name(*place, today)),
+                format!(
+                    "Moved {} to {}",
+                    named(&title),
+                    place_name(*place, today, dates)
+                ),
                 Command::MoveBack {
                     task: id,
                     place: from,
@@ -866,10 +871,10 @@ fn named(title: &str) -> String {
 /// The most characters of a title a label quotes.
 const NAMED_MOST: usize = 40;
 
-fn place_name(place: Place, today: Date) -> String {
+fn place_name(place: Place, today: Date, dates: DateOrder) -> String {
     match place {
         Place::Backlog => "the backlog".to_owned(),
         Place::Day(day) if day == today => "today".to_owned(),
-        Place::Day(day) => day.strftime("%a %-d %b").to_string(),
+        Place::Day(day) => day_label(day, dates),
     }
 }

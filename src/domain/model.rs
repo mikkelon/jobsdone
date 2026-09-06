@@ -8,6 +8,7 @@ use jiff::civil::Date;
 use serde::{Deserialize, Serialize};
 
 use super::rule::Rule;
+use super::settings::Settings;
 
 /// The id of a row. New ids come from the domain: the largest one in the
 /// model plus one (ARCHITECTURE.md section 3).
@@ -162,6 +163,9 @@ pub struct Model {
     pub undo: Vec<UndoEntry>,
     /// The `meta` table: `review_on`, `review_before`.
     pub meta: BTreeMap<String, String>,
+    /// The `settings` table, read into one typed value (DOMAIN.md
+    /// section 19).
+    pub settings: Settings,
 }
 
 impl Model {
@@ -240,6 +244,7 @@ impl Model {
                 Write::SetMeta { key, value } => {
                     self.meta.insert(key.clone(), value.clone());
                 }
+                Write::PutSettings(settings) => self.settings = settings.clone(),
             }
         }
     }
@@ -275,6 +280,9 @@ pub enum Write {
         key: String,
         value: String,
     },
+    /// Every settings row at once: the table is one value, so a change
+    /// to it is one write.
+    PutSettings(Settings),
 }
 
 /// The writes that turn one model into another: whole rows, and in an
@@ -323,6 +331,9 @@ pub(super) fn diff(before: &Model, after: &Model) -> Vec<Write> {
                 value: value.clone(),
             });
         }
+    }
+    if before.settings != after.settings {
+        writes.push(Write::PutSettings(after.settings.clone()));
     }
     writes
 }

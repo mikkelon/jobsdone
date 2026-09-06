@@ -1,13 +1,41 @@
-//! Reading a date somebody typed (DOMAIN.md section 2).
+//! Reading a date somebody typed, and writing one (DOMAIN.md section 2).
 //!
 //! The date card is the one place in the program where a date is written
 //! rather than picked, and what the few shapes mean is a rule about
-//! dates, not a detail of the card.
+//! dates, not a detail of the card. Which way round a date is written is
+//! a rule too, so every date on screen is formatted by one of the three
+//! labels here and by nothing else.
 
-use jiff::Span;
 use jiff::civil::Date;
+use jiff::{Span, Zoned};
 
 use super::rule::{Rule, Weekday, next_dates};
+use super::settings::DateOrder;
+
+/// `Fri 5 Sep`, or `Fri Sep 5` where the month comes first.
+pub fn day_label(date: Date, order: DateOrder) -> String {
+    match order {
+        DateOrder::DayFirst => date.strftime("%a %-d %b").to_string(),
+        DateOrder::MonthFirst => date.strftime("%a %b %-d").to_string(),
+    }
+}
+
+/// The same without the weekday: `5 Sep` or `Sep 5`.
+pub fn short_label(date: Date, order: DateOrder) -> String {
+    match order {
+        DateOrder::DayFirst => date.strftime("%-d %b").to_string(),
+        DateOrder::MonthFirst => date.strftime("%b %-d").to_string(),
+    }
+}
+
+/// A day and the time of it: `Fri 5 Sep 08:12`.
+pub fn stamp_label(instant: &Zoned, order: DateOrder) -> String {
+    format!(
+        "{} {}",
+        day_label(instant.date(), order),
+        instant.strftime("%H:%M")
+    )
+}
 
 /// How far ahead a day of the month with no month named is looked for.
 /// Twelve months is every month a "31" can miss.

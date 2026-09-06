@@ -8,7 +8,6 @@ use super::command::{end_of, next_id, place_on_day};
 use super::model::{
     Change, FromPlace, Id, Model, Place, REVIEW_BEFORE, REVIEW_ON, Task, Write, diff,
 };
-use super::working_day;
 
 /// Creates the copies for every scheduled date since the last launch.
 ///
@@ -17,7 +16,7 @@ use super::working_day;
 /// each on its own past day, all on the pile. That is where the cost of
 /// being away is meant to be seen (DOMAIN.md section 10).
 pub fn generate_copies(model: &Model, now: &Zoned) -> Change {
-    let today = working_day(now);
+    let today = model.settings.working_day(now);
     let mut after = model.clone();
 
     let schedules: Vec<Id> = model

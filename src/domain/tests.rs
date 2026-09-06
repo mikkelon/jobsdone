@@ -3,6 +3,8 @@ use super::*;
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use jiff::civil::Date;
+
 /// An in-memory `Store`: a `Model` and `Model::apply`.
 ///
 /// A clone is another handle on the same data, which is how a test plays
@@ -91,13 +93,23 @@ impl World {
     }
 
     fn today(&self) -> Date {
-        working_day(&self.now)
+        self.model.settings.working_day(&self.now)
+    }
+
+    /// What the domain is told about the world outside it, which a test
+    /// holds still.
+    fn ctx(&self) -> Context {
+        Context {
+            now: self.now.clone(),
+            undo_cap: UNDO_CAP,
+            dates: DateOrder::DayFirst,
+        }
     }
 
     /// One command, committed and loaded back, the way the application
     /// does it.
     fn run(&mut self, command: Command) -> Result<(), Rejected> {
-        let change = apply(&self.model, command, &self.now, UNDO_CAP)?;
+        let change = apply(&self.model, command, &self.ctx())?;
         self.commit(&change);
         Ok(())
     }
@@ -116,7 +128,7 @@ impl World {
     }
 
     fn undo(&mut self) -> Undone {
-        let undone = undo(&self.model, &self.now).expect("something to undo");
+        let undone = undo(&self.model, &self.ctx()).expect("something to undo");
         self.commit(&undone.change);
         undone
     }
@@ -218,12 +230,25 @@ fn visible(model: &Model) -> Model {
 // ---- time ------------------------------------------------------------
 
 #[test]
-fn a_day_begins_at_five() {
+fn a_day_begins_at_the_hour_the_settings_say() {
+    let settings = Settings::default();
     let late = at("2026-09-05T01:30:00+02:00[Europe/Copenhagen]");
-    assert_eq!(working_day(&late).to_string(), "2026-09-04");
+    assert_eq!(settings.working_day(&late).to_string(), "2026-09-04");
 
     let early = at("2026-09-05T05:00:00+02:00[Europe/Copenhagen]");
-    assert_eq!(working_day(&early).to_string(), "2026-09-05");
+    assert_eq!(settings.working_day(&early).to_string(), "2026-09-05");
+}
+
+#[test]
+fn a_later_day_start_keeps_the_small_hours_on_the_day_before() {
+    let mut settings = Settings::default();
+    settings.set_day_starts_at(8);
+
+    let morning = at("2026-09-05T07:00:00+02:00[Europe/Copenhagen]");
+    assert_eq!(settings.working_day(&morning).to_string(), "2026-09-04");
+
+    let later = at("2026-09-05T08:00:00+02:00[Europe/Copenhagen]");
+    assert_eq!(settings.working_day(&later).to_string(), "2026-09-05");
 }
 
 #[test]
@@ -2017,7 +2042,7 @@ fn an_inverse_whose_precondition_no_longer_holds_is_dropped() {
 fn there_is_nothing_to_undo_on_an_empty_stack() {
     let world = World::at("2026-09-07T09:00:00");
     assert_eq!(
-        undo(&world.model, &world.now),
+        undo(&world.model, &world.ctx()),
         Err(Rejected("There is nothing to undo.".to_owned()))
     );
 }
@@ -2032,8 +2057,10 @@ fn the_undo_stack_is_capped_at_the_length_the_application_passes_in() {
                 title: format!("Task {index}"),
                 place: Place::Backlog,
             },
-            &world.now,
-            2,
+            &Context {
+                undo_cap: 2,
+                ..world.ctx()
+            },
         )
         .expect("an add");
         world.commit(&change);
@@ -2374,5 +2401,163 @@ fn creating_a_schedule_starts_nothing_on_today_by_itself() {
     assert_eq!(
         titles(&world.surfaced().also_starting_today),
         ["Clean out the garage"]
+    );
+}
+
+// ---- settings --------------------------------------------------------
+
+#[test]
+fn the_defaults_are_what_section_19_says() {
+    let settings = Settings::default();
+
+    assert_eq!(settings.day_starts_at(), 5);
+    assert_eq!(settings.week_starts_on(), WeekStart::Monday);
+    assert_eq!(
+        settings.work_days().iter().collect::<Vec<_>>(),
+        [
+            Weekday::Mon,
+            Weekday::Tue,
+            Weekday::Wed,
+            Weekday::Thu,
+            Weekday::Fri
+        ]
+    );
+    assert!(settings.review_opens_itself());
+    assert_eq!(settings.due_ahead_days(), 0);
+    assert_eq!(settings.backfill_days(), 0);
+    assert_eq!(settings.pile_horizon_days(), 0);
+    assert!(settings.floating_window());
+    assert_eq!(settings.window_size(), WindowSize::new(870, 650));
+    assert!(settings.mouse());
+    assert_eq!(settings.message_seconds(), 4);
+    assert_eq!(settings.date_style(), DateStyle::Locale);
+    assert!(!settings.confirm_delete());
+}
+
+#[test]
+fn every_setting_reads_back_as_what_was_written() {
+    let mut settings = Settings::default();
+    settings.set_day_starts_at(8);
+    settings.set_week_starts_on(WeekStart::Sunday);
+    settings.set_work_days(WorkDays::of([Weekday::Sun, Weekday::Mon]));
+    settings.set_review_opens_itself(false);
+    settings.set_due_ahead_days(3);
+    settings.set_backfill_days(7);
+    settings.set_pile_horizon_days(30);
+    settings.set_floating_window(false);
+    settings.set_window_size(WindowSize::new(1200, 800));
+    settings.set_mouse(false);
+    settings.set_message_seconds(0);
+    settings.set_date_style(DateStyle::MonthFirst);
+    settings.set_confirm_delete(true);
+
+    assert_eq!(Settings::from_pairs(settings.to_pairs()), settings);
+}
+
+#[test]
+fn a_key_the_codec_does_not_know_leaves_the_settings_alone() {
+    let settings = Settings::from_pairs([
+        ("day_starts_at", "8"),
+        ("what_a_later_version_added", "whatever it holds"),
+    ]);
+
+    assert_eq!(settings.day_starts_at(), 8);
+    assert_eq!(settings.week_starts_on(), WeekStart::Monday);
+}
+
+#[test]
+fn a_value_the_codec_cannot_read_is_the_default() {
+    let settings = Settings::from_pairs([
+        ("day_starts_at", "the small hours"),
+        ("work_days", "mon,funday"),
+        ("window_size", "wide"),
+        ("mouse", "yes"),
+        ("date_style", "american"),
+    ]);
+
+    assert_eq!(settings, Settings::default());
+}
+
+#[test]
+fn a_number_out_of_its_range_is_held_to_the_range() {
+    let settings = Settings::from_pairs([
+        ("day_starts_at", "48"),
+        ("due_ahead_days", "-4"),
+        ("pile_horizon_days", "9999"),
+        ("message_seconds", "600"),
+        ("window_size", "20x99999"),
+    ]);
+
+    assert_eq!(settings.day_starts_at(), 23);
+    assert_eq!(settings.due_ahead_days(), 0);
+    assert_eq!(settings.pile_horizon_days(), 3650);
+    assert_eq!(settings.message_seconds(), 60);
+    assert_eq!(settings.window_size(), WindowSize::new(200, 10_000));
+}
+
+#[test]
+fn a_work_day_goes_on_and_off_the_set() {
+    let mut days = WorkDays::default();
+    days.toggle(Weekday::Sat);
+    assert!(days.contains(Weekday::Sat));
+
+    days.toggle(Weekday::Sat);
+    assert!(!days.contains(Weekday::Sat));
+    assert_eq!(days, WorkDays::default());
+}
+
+#[test]
+fn changing_the_settings_is_one_write_and_nothing_on_the_undo_stack() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.add("Ship the release", Place::Backlog);
+    let mut settings = world.model.settings.clone();
+    settings.set_day_starts_at(8);
+
+    let change = change_settings(&world.model, settings.clone()).expect("the settings");
+    assert_eq!(change.writes, [Write::PutSettings(settings.clone())]);
+
+    world.commit(&change);
+    assert_eq!(world.model.settings, settings);
+    assert_eq!(world.model.undo.len(), 1, "the add, and nothing since");
+}
+
+#[test]
+fn settings_that_have_not_changed_are_no_write_at_all() {
+    let world = World::at("2026-09-07T09:00:00");
+    let change = change_settings(&world.model, Settings::default()).expect("the settings");
+
+    assert!(change.writes.is_empty());
+}
+
+#[test]
+fn a_week_with_no_work_day_in_it_is_refused() {
+    let world = World::at("2026-09-07T09:00:00");
+    let mut settings = Settings::default();
+    settings.set_work_days(WorkDays::of([]));
+
+    assert_eq!(
+        change_settings(&world.model, settings),
+        Err(Rejected(
+            "At least one day of the week must be a work day.".to_owned()
+        ))
+    );
+}
+
+// ---- dates as words --------------------------------------------------
+
+#[test]
+fn a_date_is_written_the_way_round_it_is_asked_for() {
+    let date = on("2025-09-05");
+
+    assert_eq!(day_label(date, DateOrder::DayFirst), "Fri 5 Sep");
+    assert_eq!(day_label(date, DateOrder::MonthFirst), "Fri Sep 5");
+    assert_eq!(short_label(date, DateOrder::DayFirst), "5 Sep");
+    assert_eq!(short_label(date, DateOrder::MonthFirst), "Sep 5");
+
+    let stamp = at("2025-09-05T08:12:00+02:00[Europe/Copenhagen]");
+    assert_eq!(stamp_label(&stamp, DateOrder::DayFirst), "Fri 5 Sep 08:12");
+    assert_eq!(
+        stamp_label(&stamp, DateOrder::MonthFirst),
+        "Fri Sep 5 08:12"
     );
 }
