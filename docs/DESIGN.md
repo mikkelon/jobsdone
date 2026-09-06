@@ -229,9 +229,10 @@ the words on the left, so no header ever reads as one run-together word.
 The status line says how far off the day is and offers the one key home.
 
 A past day shows every task that was planned for it, in three states: closed
-(dim, with the time, in the Done group), still open (marked "on the pile",
-in red, in Focus or Plan), and moved away. Moved tasks sit in their own
-group at the bottom, under Done, at normal weight: an arrow in the box
+(dim, with the time, in the Done group), still open (in Focus or Plan,
+marked "on the pile" in red, or "still open" in dim once the horizon has
+passed the day), and moved away. Moved tasks sit in their own group at
+the bottom, under Done, at normal weight: an arrow in the box
 (`[→]`) says the task is not here any more, and the right side says where it
 is now ("to today", "to Wed 3 Sep", "to backlog"). Dim is reserved for
 finished. A moved row is a pointer, not a copy; Enter on it jumps there.
@@ -350,13 +351,16 @@ the list has the window, the way the review's panel does. The page is
 never one of the narrow window's tabs: `,` is the whole of the way on and
 off it.
 
-`h` and `l` step a value and `space` and Enter change it. A row that
-holds a number or the window size has no next value worth stepping to, so
-Enter opens a field in place of the value: type it, Enter saves, Escape
-keeps what was there. A number outside its range is held to the range
-rather than refused; the one refusal is a week with no work day in it,
-which says so in the hint bar and leaves the row as it was. Nothing on
-the page is on the undo stack.
+`h` and `l` step a value: `l` turns a toggle on and `h` off, a row of two
+or three states moves to the one beside it and stops at the ends, a
+number goes up or down by one and the window size by ten pixels each way.
+`space` and Enter change it too, except on a row holding a number or a
+size, where there is nothing to cycle through: there they open a field in
+place of the value, which is typed, Enter saves and Escape keeps what was
+there. A number outside its range is held to the range rather than
+refused; the one refusal is a week with no work day in it, which says so
+in the hint bar and leaves the row as it was. Nothing on the page is on
+the undo stack.
 
 What is not on the page: colour and font, which come from the terminal
 that Omarchy themes. Whether the window floats and how big it is are on

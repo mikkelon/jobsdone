@@ -200,8 +200,8 @@ On Omarchy, recognised by `/usr/share/omarchy` and `omarchy-launch-tui`:
   reports them (or the bindings file, when Hyprland is not running), and
   the person says yes at the prompt or passes `--keybind`. The keys asked
   about are the keys given: the script reads them into the modmask and key
-  Hyprland answers with (SUPER 64, SHIFT 1, CTRL 4, ALT 8), so any keys
-  are checked as exactly as the default ones. A bind of our own is not
+  Hyprland answers with (SUPER 64, ALT 8, CTRL 4, CAPS 2, SHIFT 1), so any
+  keys are checked as exactly as the default ones. A bind of our own is not
   somebody else's, and neither is one the person already has in this
   block, whose keys a plain re-install keeps.
 - The window rule, in the program's own block, between

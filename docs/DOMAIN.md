@@ -215,11 +215,12 @@ is still on D, `moved` = placed − kept:
 | Day list row              | done / kept, and "· n open" when D is before today and open > 0 |
 | Days with nothing planned | placed = 0; skipped in the list, shown empty when stepped to |
 
-An open task on a day that has passed is on the pile, which is what the
-day list's open count warns about. The count is of the day, not of the
-pile, so a day beyond the horizon still says what it left open. Today's
-own open tasks are the working list and a future day's are a plan, so
-neither is counted there; the row says "today" instead.
+An open task on a day that has passed is on the pile while the horizon
+reaches it, which is what the day list's open count warns about. The
+count is of the day, not of the pile, so a day beyond the horizon still
+says what it left open. Today's own open tasks are the working list and a
+future day's are a plan, so neither is counted there; the row says
+"today" instead.
 
 The list is newest day first, broken into four stretches by the first
 day of the week today is in, which `week_starts_on` names: **later**
