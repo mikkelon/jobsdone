@@ -1,22 +1,25 @@
 //! The two operations the program does to itself rather than at
 //! somebody's request. Neither touches the undo stack.
 
-use jiff::Zoned;
 use jiff::civil::Date;
+use jiff::{Span, Zoned};
 
 use super::command::{end_of, next_id, place_on_day};
 use super::model::{
     Change, FromPlace, Id, Model, Place, REVIEW_BEFORE, REVIEW_ON, Task, Write, diff,
 };
 
-/// Creates the copies for every scheduled date since the last launch.
+/// Creates the copies for every scheduled date since the last launch
+/// that `backfill_days` still reaches.
 ///
-/// Recurring schedules are the one thing that creates tasks by itself,
-/// and there is no cap: three weeks away means fifteen standup copies,
-/// each on its own past day, all on the pile. That is where the cost of
-/// being away is meant to be seen (DOMAIN.md section 10).
+/// Recurring schedules are the one thing that creates tasks by itself.
+/// Without a backfill cap there is none on them either: three weeks away
+/// means fifteen standup copies, each on its own past day, all on the
+/// pile, which is where the cost of being away is meant to be seen
+/// (DOMAIN.md section 10).
 pub fn generate_copies(model: &Model, now: &Zoned) -> Change {
     let today = model.settings.working_day(now);
+    let backfill = backfill_floor(model, today);
     let mut after = model.clone();
 
     let schedules: Vec<Id> = model
@@ -45,10 +48,13 @@ pub fn generate_copies(model: &Model, now: &Zoned) -> Change {
                 break;
             }
             day = next;
-            if rule.falls_on(day) {
+            if rule.falls_on(day) && backfill.is_none_or(|earliest| day >= earliest) {
                 copy(&mut after, id, &title, day, now);
             }
         }
+        // The schedule is caught up to today whether or not every date
+        // in between was copied, so a date the cap skipped is skipped
+        // for good.
         if let Some(schedule) = after.schedules.get_mut(&id) {
             schedule.generated_through = today;
         }
@@ -57,6 +63,13 @@ pub fn generate_copies(model: &Model, now: &Zoned) -> Change {
     Change {
         writes: diff(model, &after),
     }
+}
+
+/// The oldest date a copy is still made for, or none while the cap is
+/// off (DOMAIN.md section 19).
+fn backfill_floor(model: &Model, today: Date) -> Option<Date> {
+    let days = model.settings.backfill_days();
+    (days > 0).then(|| today.saturating_sub(Span::new().days(i64::from(days))))
 }
 
 /// One copy of a schedule for one date, unless the copy is already

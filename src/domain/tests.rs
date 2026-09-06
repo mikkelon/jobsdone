@@ -138,6 +138,14 @@ impl World {
         self.commit(&change);
     }
 
+    /// One setting moved, committed the way the application does it.
+    fn set(&mut self, change: impl FnOnce(&mut Settings)) {
+        let mut settings = self.model.settings.clone();
+        change(&mut settings);
+        let change = change_settings(&self.model, settings).expect("the settings");
+        self.commit(&change);
+    }
+
     fn start_review(&mut self) -> bool {
         match start_review(&self.model, self.today()) {
             Some(change) => {
@@ -1056,6 +1064,47 @@ fn overdue_due_dates_surface_before_the_rest() {
     );
 }
 
+#[test]
+fn a_due_task_surfaces_as_early_as_the_setting_says() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let id = world.add("Renew the domain", Place::Backlog);
+    world.must(Command::SetDue {
+        task: id,
+        date: Some(on("2026-09-10")),
+    });
+    assert!(world.surfaced().due.is_empty(), "three days off");
+
+    world.set(|settings| settings.set_due_ahead_days(3));
+
+    assert_eq!(titles(&world.surfaced().due), ["Renew the domain"]);
+    assert!(
+        !world.surfaced().due[0].due.expect("a due chip").overdue,
+        "seen early is not late"
+    );
+}
+
+#[test]
+fn surfacing_early_leaves_the_overdue_ones_first() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let late = world.add("Renew the domain", Place::Backlog);
+    world.must(Command::SetDue {
+        task: late,
+        date: Some(on("2026-09-04")),
+    });
+    let soon = world.add("File the VAT return", Place::Backlog);
+    world.must(Command::SetDue {
+        task: soon,
+        date: Some(on("2026-09-09")),
+    });
+
+    world.set(|settings| settings.set_due_ahead_days(7));
+
+    assert_eq!(
+        titles(&world.surfaced().due),
+        ["Renew the domain", "File the VAT return"]
+    );
+}
+
 // ---- the pile --------------------------------------------------------
 
 #[test]
@@ -1113,6 +1162,43 @@ fn a_waiting_task_is_never_on_the_pile() {
     });
 
     world.clock("2026-09-07T09:00:00");
+    assert_eq!(world.pile().total, 0);
+}
+
+#[test]
+fn the_horizon_leaves_an_older_day_out_of_the_pile_and_marks_it_still_open() {
+    let mut world = World::at("2026-09-01T09:00:00");
+    world.add("Order new office chair", day("2026-09-01"));
+    world.add("Chase the invoice", day("2026-09-20"));
+
+    world.clock("2026-09-25T09:00:00");
+    assert_eq!(world.pile().total, 2, "no horizon reaches every day");
+
+    world.set(|settings| settings.set_pile_horizon_days(10));
+
+    assert_eq!(titles(&world.pile().days[0].rows), ["Chase the invoice"]);
+    assert_eq!(world.pile().total, 1);
+
+    // The old task is where it always was, and its row says so without
+    // asking for it back.
+    let old = &world.day("2026-09-01").plan[0];
+    assert!(!old.on_the_pile);
+    assert!(old.still_open);
+    let recent = &world.day("2026-09-20").plan[0];
+    assert!(recent.on_the_pile);
+    assert!(!recent.still_open);
+}
+
+#[test]
+fn a_day_exactly_as_old_as_the_horizon_is_still_on_the_pile() {
+    let mut world = World::at("2026-09-01T09:00:00");
+    world.add("Order new office chair", day("2026-09-01"));
+    world.clock("2026-09-11T09:00:00");
+
+    world.set(|settings| settings.set_pile_horizon_days(10));
+    assert_eq!(world.pile().total, 1, "ten days ago is not more than ten");
+
+    world.set(|settings| settings.set_pile_horizon_days(9));
     assert_eq!(world.pile().total, 0);
 }
 
@@ -1288,6 +1374,66 @@ fn an_unclosed_copy_lands_on_the_pile() {
 
     assert_eq!(world.pile().total, 2);
     assert!(world.pile().days[0].rows[0].repeat.is_some());
+}
+
+#[test]
+fn the_backfill_cap_makes_copies_for_the_last_days_only() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let id = world.add("Write standup notes", day("2026-09-07"));
+    world.must(Command::CreateSchedule {
+        task: id,
+        rule: Rule::Daily,
+    });
+    world.set(|settings| settings.set_backfill_days(3));
+
+    world.clock("2026-09-14T09:00:00");
+    world.generate();
+
+    let mut copies: Vec<String> = world
+        .model
+        .tasks
+        .values()
+        .filter_map(|task| task.scheduled_on)
+        .map(|date| date.to_string())
+        .collect();
+    copies.sort();
+    assert_eq!(
+        copies,
+        [
+            "2026-09-07",
+            "2026-09-11",
+            "2026-09-12",
+            "2026-09-13",
+            "2026-09-14"
+        ]
+    );
+}
+
+#[test]
+fn a_date_the_backfill_cap_skipped_is_never_copied_later() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let id = world.add("Write standup notes", day("2026-09-07"));
+    world.must(Command::CreateSchedule {
+        task: id,
+        rule: Rule::Daily,
+    });
+    world.set(|settings| settings.set_backfill_days(3));
+
+    world.clock("2026-09-14T09:00:00");
+    world.generate();
+    let schedule = world.model.schedules.values().next().expect("a schedule");
+    assert_eq!(
+        schedule.generated_through,
+        on("2026-09-14"),
+        "caught up to today whether or not every date was copied"
+    );
+
+    // The cap off again, and the days it skipped stay skipped.
+    world.set(|settings| settings.set_backfill_days(0));
+    world.generate();
+
+    assert_eq!(world.day("2026-09-08").counts.planned, 0);
+    assert_eq!(world.day("2026-09-14").counts.planned, 1);
 }
 
 #[test]

@@ -14,15 +14,16 @@ closed, many times a day. It can also be left running in a tile, full or
 half width. Both must feel right, and the floating case comes first.
 
 - Start is instant. There is no splash, no loading state, no sync.
-- The day changes at 05:00, not midnight, so a late night belongs to the
-  day it started in. Until then the app still says "Today" about the
-  date that was on the calendar when the evening began.
+- The day changes at 05:00 by default, not midnight, so a late night
+  belongs to the day it started in. Until then the app still says "Today"
+  about the date that was on the calendar when the evening began.
 - Every change is written the moment it is made. Quitting with `q` or
   closing the window never asks anything; reopening lands where you were.
 - The morning review runs once per day, on the first open of a work day
-  that has something to review. Later opens go straight to Today. Closing
-  the window mid-review leaves the pile intact; the home screen shows the
-  count until it is dealt with.
+  that has something to review, when it is set to open itself; otherwise
+  it waits for `M`. Later opens go straight to Today. Closing the window
+  mid-review leaves the pile intact; the home screen shows the count
+  until it is dealt with.
 - The layout targets 120×36. A full-width tile shows the same layout with
   more rows. Under 100 columns the two panes collapse to tabs.
 - Hyprland does the windowing: a window rule on the app's class floats and
@@ -73,7 +74,7 @@ with no code and no setting of its own.
 |------------------------|---------------------------------------------------------------------|
 | default fg / bg        | text, structure                                                     |
 | bold                   | focus items, pane titles                                            |
-| dim (or bright black)  | secondary text: metadata, hints, group labels, done and waiting rows|
+| dim (or bright black)  | secondary text: metadata, hints, group labels, done and waiting rows, "still open" |
 | selection background   | the cursor row, so chips on it keep their colour                    |
 | blue (bold)            | accent: focused pane title, popup border, selected item, primary action, and every key name in the hint bar, help overlay and popup footers, so a key never looks like its description |
 | red                    | the review count when non-zero; overdue due-by chips; "on the pile" |
@@ -167,7 +168,9 @@ is to stay where it is; a pile task leaves the pile only by being closed,
 moved or deleted (PRODUCT.md), so `k` does nothing on the pile and the
 panel there lists what it does. An empty step is skipped; when both are empty the app opens
 straight to Today. The review is never an empty ceremony, and it is never
-shown twice in a day.
+shown twice in a day. Whether it opens itself at all is a setting: off,
+the app opens on Today and `M` is the way in, for someone who would
+rather choose the moment.
 
 "step 1 of 2" counts the steps that have something in them, so a morning
 with nothing surfaced says "step 1 of 1" and Enter starts the day. A
@@ -247,12 +250,15 @@ The app never reorders, carries over, expires, or tidies.
   re-grouped behind the person's back, least of all overnight.
 - Unfinished tasks stay on their day, however old, until the person acts.
   The review shows their age relatively so the cost of ignoring them is
-  visible.
+  visible. A pile horizon changes what is asked about, not where anything
+  is: past it the review stops raising a day and the row says "still
+  open" in place of "on the pile".
 - Due and remind dates surface a task; they never move it. Pulling onto
   today is always an explicit `t`.
 - Recurring schedules are the one thing that creates tasks by themselves.
   On launch the app creates the copies for every scheduled date since the
-  last launch, and the surfaced step lists today's, once, for information.
+  last launch, or for as many of the last days as the backfill setting
+  allows, and the surfaced step lists today's, once, for information.
   A window left open past 05:00 has reached a new day without a launch, so
   it does the same then; a day is never short of its copies because a
   window happened to be open.

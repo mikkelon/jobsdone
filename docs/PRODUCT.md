@@ -9,11 +9,14 @@ machine.
 
 The product is shaped by one habit: the morning review.
 
-1. Open the app at the start of the work day.
+1. Open the app at the start of the work day. The review opens itself on
+   the first open of the day, unless it is set to wait for `M` instead.
 2. Deal with the review pile: every unfinished task that was planned for a
-   day that has now passed. Each one is either closed (it was actually done),
-   moved onto today, sent back to the backlog, or deleted.
-3. Look at what has become due or has a reminder today.
+   day that has now passed, back as far as the pile is set to reach. Each
+   one is either closed (it was actually done), moved onto today, sent back
+   to the backlog, or deleted.
+3. Look at what has become due or has a reminder today, and at what falls
+   due within however many days the settings look ahead.
 4. Plan today: pull tasks in from the backlog, add new ones, order them, and
    mark the few that must get done.
 5. Work through the day, closing tasks as they finish and jotting notes as
@@ -76,8 +79,12 @@ can be closed, reordered, marked as focus, or moved, without affecting the
 schedule or other copies.
 
 A copy that is not closed on its day lands in the review pile like any other
-task. Editing the schedule or the title changes future copies only. Removing
-the schedule stops new copies; existing ones stay where they are.
+task. Coming back from time away means a copy for every scheduled date since
+the last open, which is where the cost of being away is meant to be seen;
+the backfill setting cuts that to the last few days for someone who would
+rather start clean. Editing the schedule or the title changes future copies
+only. Removing the schedule stops new copies; existing ones stay where they
+are.
 
 ## History
 

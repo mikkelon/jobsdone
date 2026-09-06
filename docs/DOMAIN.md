@@ -195,7 +195,9 @@ groups in a fixed order, and a group with nothing in it is not drawn.
 Row annotations, all derived:
 
 - `was focus`: closed and focus.
-- `on the pile`: open, and D is before today.
+- `on the pile`: open, D before today, and D within the pile horizon.
+- `still open`: open, D before today, and D beyond the horizon, which is
+  the same task saying so without asking to be dealt with.
 - Done time: the time of `closed_at` when its working day is D;
   otherwise the date, "closed Tue 2 Sep", because a task closed from the
   review is closed on its old day at a later date.
@@ -213,9 +215,10 @@ is still on D, `moved` = placed − kept:
 | Days with nothing planned | placed = 0; skipped in the list, shown empty when stepped to |
 
 An open task on a day that has passed is on the pile, which is what the
-day list's open count warns about. Today's own open tasks are the
-working list and a future day's are a plan, so neither is counted there;
-the row says "today" instead.
+day list's open count warns about. The count is of the day, not of the
+pile, so a day beyond the horizon still says what it left open. Today's
+own open tasks are the working list and a future day's are a plan, so
+neither is counted there; the row says "today" instead.
 
 The list is newest day first, broken into four stretches by the Monday
 of the week today is in: **later** (after this week), **this week**,
@@ -248,8 +251,12 @@ is sent back to the backlog the date prompts again.
 
 | Kind   | Surfaces when                                                                     |
 |--------|-----------------------------------------------------------------------------------|
-| due    | `day` none, open, not waiting, `due_on` ≤ today. Every review until acted on.      |
+| due    | `day` none, open, not waiting, `due_on` ≤ today + `due_ahead_days`. Every review until acted on. |
 | remind | `day` none, open, `remind_on` in (previous review date, today]. Once.            |
+
+A due date seen before it arrives is not overdue, so surfacing early
+changes when the step shows a task and not the order it shows it in:
+overdue first, then by date.
 
 "Previous review date" is the date of the last review started on a day
 before today (section 13 keeps it). A reminder set for a Saturday is
@@ -327,16 +334,18 @@ simply the first copy. The repeat card previews `next_dates` after
 
 `generate_copies(today)` runs on every launch, before the review. For
 each live schedule with `stopped_on` none, for every scheduled date D in
-(`generated_through`, today]:
+(`generated_through`, today] that is not before today − `backfill_days`:
 
 - create a task with `title` = schedule title, `day` = D, position at
   the end of D, not focus, `schedule_id` and `scheduled_on` set, and a
   placement for D with `from_place = new`;
 - then set `generated_through` = today.
 
-There is no cap. Three weeks away means fifteen standup copies, each on
-its own past day, all on the pile. PRODUCT.md promises this and the pile
-is where the cost is meant to be seen.
+With `backfill_days` at 0 there is no cap: three weeks away means fifteen
+standup copies, each on its own past day, all on the pile. PRODUCT.md
+promises this and the pile is where the cost is meant to be seen. With a
+cap, only the dates inside it are copied and `generated_through` still
+moves to today, so a date the cap skipped is never copied later.
 
 Generation is not a user action and pushes nothing on the undo stack. It
 is idempotent across instances: the unique index on
@@ -454,11 +463,13 @@ stack (section 19).
 
 ### The pile
 
-    pile = live, open, day < today
+    pile = live, open, day < today, and day ≥ today − `pile_horizon_days`
 
 Grouped by day, newest day first; within a day, in position order. The
 age shown is `today − day` in days, rendered relatively by the screen.
-`was focus` on a pile row is the focus flag.
+`was focus` on a pile row is the focus flag. A horizon of 0 reaches every
+day; anything older than one that is set stays on its day, out of the
+pile and out of the count, marked `still open` (section 6).
 
 ### Surfaced
 
@@ -479,8 +490,10 @@ The meta table holds two dates:
 | review_on      | The working day a review was last started.               |
 | review_before  | The value `review_on` had before that.                   |
 
-On launch, after generation: if `review_on` ≠ today and the pile or the
-surfaced set is non-empty, the review opens and StartReview runs. An
+On launch, after generation: if `review_opens_itself`, `review_on` ≠
+today, and the pile or the surfaced set is non-empty, the review opens
+and StartReview runs. With the setting off a launch writes no gate at
+all, and `M` opens the review, which runs StartReview then. An
 empty step is skipped; if both are empty nothing opens and the gate is
 not written. Escape leaves the review with the pile intact. The review
 can be started again any time from the command palette; that also runs
