@@ -304,9 +304,6 @@ pub struct Message {
     pub said_at: Zoned,
 }
 
-/// How long a message stands when no key follows it, in seconds.
-const MESSAGE_STANDS: i64 = 4;
-
 /// A title being typed on a row. Uncommitted text lives here and nowhere
 /// else (ARCHITECTURE.md rule 8); Enter turns it into one command.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1234,12 +1231,17 @@ impl App {
         });
     }
 
-    /// The hint bar goes back to its keys a few seconds after a message
-    /// nobody has typed past, so that a pause to read them is never a
-    /// pause in front of the wrong line.
+    /// The hint bar goes back to its keys once a message nobody has typed
+    /// past has stood for `message_seconds`, so that a pause to read them
+    /// is never a pause in front of the wrong line. At 0 no tick ever
+    /// takes it away and only the next key does.
     fn forget_an_old_message(&mut self) {
+        let seconds = i64::from(self.model.settings.message_seconds());
+        if seconds == 0 {
+            return;
+        }
         let now = self.now();
-        let stands = Span::new().seconds(MESSAGE_STANDS);
+        let stands = Span::new().seconds(seconds);
         let old = self.message.as_ref().is_some_and(|message| {
             message
                 .said_at

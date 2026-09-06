@@ -2151,6 +2151,50 @@ fn a_message_nobody_types_past_goes_after_a_few_seconds() {
 }
 
 #[test]
+fn a_message_that_stands_for_no_seconds_waits_for_the_next_key() {
+    let mut app = started();
+    let mut settings = app.settings().clone();
+    settings.set_message_seconds(0);
+    app.change_settings(settings);
+    add(&mut app, "Book dentist");
+    app.update(Action::Delete);
+
+    app.clock = app
+        .clock
+        .checked_add(Span::new().minutes(5))
+        .expect("a time");
+    app.update(Action::Tick);
+    assert!(app.message().is_some(), "no tick ever takes it away");
+
+    app.update(Action::Down);
+    assert!(app.message().is_none(), "and the next key does");
+}
+
+#[test]
+fn a_longer_setting_holds_a_message_past_the_default() {
+    let mut app = started();
+    let mut settings = app.settings().clone();
+    settings.set_message_seconds(10);
+    app.change_settings(settings);
+    add(&mut app, "Book dentist");
+    app.update(Action::Delete);
+
+    app.clock = app
+        .clock
+        .checked_add(Span::new().seconds(6))
+        .expect("a time");
+    app.update(Action::Tick);
+    assert!(app.message().is_some(), "six of the ten seconds");
+
+    app.clock = app
+        .clock
+        .checked_add(Span::new().seconds(5))
+        .expect("a time");
+    app.update(Action::Tick);
+    assert!(app.message().is_none());
+}
+
+#[test]
 fn a_key_on_an_empty_pane_says_there_is_nothing_there() {
     let mut app = started();
     app.update(Action::Close);
