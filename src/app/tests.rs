@@ -3583,6 +3583,22 @@ fn a_changed_window_setting_says_what_the_window_manager_answered() {
 }
 
 #[test]
+fn a_window_owed_at_quitting_time_is_paid_before_the_program_goes() {
+    let desk = Desk::here();
+    let mut app = app_on(MemStore::holding(reviewed(Model::empty())), &desk, NOW);
+    app.update(Action::SettingsPage);
+    cursor_to(&mut app, SettingRow::WindowSize);
+    app.update(Action::Right);
+
+    assert_eq!(app.update(Action::Quit), Flow::Quit);
+    assert_eq!(desk.told(), [(true, WindowSize::PRESETS[2])]);
+    assert!(
+        desk.shown().is_empty(),
+        "there is nothing to show in a window that is closing"
+    );
+}
+
+#[test]
 fn a_tick_with_no_window_owed_says_nothing_to_the_window_manager() {
     let desk = Desk::here();
     let mut app = app_on(MemStore::holding(reviewed(Model::empty())), &desk, NOW);

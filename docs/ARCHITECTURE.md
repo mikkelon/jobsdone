@@ -162,7 +162,9 @@ settings page is seen rather than read. Both are owed rather than done:
 a window setting changed by a key marks the window owed, and the tick
 that follows 250 ms of quiet keys pays it once, so a key held down on
 the size row costs one rewrite of Hyprland's configuration rather than
-one per repeat.
+one per repeat. `Quit` pays what is still owed, without the preview, so
+that a size settled on and quit within the quarter second still reaches
+the rule.
 
 ### The path of one key press
 

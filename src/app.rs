@@ -809,6 +809,10 @@ impl App {
         match action {
             Action::Quit => {
                 self.save_the_note();
+                // A window settled on and quit within the quarter second
+                // would otherwise leave the rule saying the old size for
+                // good. Nothing is shown: the window is closing.
+                self.pay_the_window(false);
                 return Flow::Quit;
             }
             Action::Tick | Action::FocusGained => {
@@ -840,7 +844,7 @@ impl App {
                 // Focus coming back is not the keys going quiet, so the
                 // window manager waits for a tick.
                 if matches!(action, Action::Tick) {
-                    self.pay_the_window();
+                    self.pay_the_window(true);
                 }
             }
             Action::Resize => {}
@@ -1013,8 +1017,9 @@ impl App {
     /// key held down on the size row walks the presets and only the one
     /// it stops on reaches Hyprland, which rewrites its configuration and
     /// reloads for each one it is given. A floating window is then
-    /// resized to what was chosen, so the size is seen rather than read.
-    fn pay_the_window(&mut self) {
+    /// resized to what was chosen, so the size is seen rather than read,
+    /// which is what `showing` asks for.
+    fn pay_the_window(&mut self, showing: bool) {
         if !std::mem::take(&mut self.window_owed) {
             return;
         }
@@ -1022,7 +1027,10 @@ impl App {
         let size = self.model.settings.window_size();
         match self.desktop.apply_window(floating, size) {
             Ok(()) => {
-                if floating && let Err(why) = self.desktop.preview(size) {
+                if showing
+                    && floating
+                    && let Err(why) = self.desktop.preview(size)
+                {
                     self.say(why, false);
                     return;
                 }

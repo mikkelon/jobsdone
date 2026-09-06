@@ -372,7 +372,8 @@ window manager answers. Neither is handed over on the keystroke: a window
 setting is owed until the keys have been quiet for a moment, so a key
 held down on the size row walks the presets and Hyprland hears the one it
 stopped on. A floating window is then resized to it, so the size chosen
-is the size on screen. There is no preferences file: the settings are
+is the size on screen. Quitting inside that moment writes the rule on the
+way out, so what the page says and what Hyprland has never disagree. There is no preferences file: the settings are
 rows in the database, beside the tasks, so a second window picks a change
 up the way it picks up any other.
 
