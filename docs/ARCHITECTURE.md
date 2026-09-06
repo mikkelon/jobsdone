@@ -30,7 +30,7 @@ than one file, `src/<module>/*.rs`.
 | `ui`       | Drawing: application state in, a ratatui frame out, plus the layout of what was drawn.                          |
 | `terminal` | Raw mode, alternate screen, mouse capture, the panic hook, and the event loop with its 250 ms tick.              |
 | `desktop`  | The window rule the program keeps for itself: the block in Hyprland's configuration, and the reload.             |
-| `main.rs`  | XDG paths, the locale, logging to the state directory, opening storage, building the desktop, running the terminal. |
+| `main.rs`  | The command line, XDG paths, the locale, logging to the state directory, opening storage, building the desktop, running the terminal. |
 
 Anything not on this list is not a top-level module. Helpers live inside
 the module that needs them.
@@ -338,6 +338,13 @@ adds it here first, the way a new dependency is added to section 2 first.
   which commits, works the day out again in case the day now starts at
   another hour, refreshes the views and hands a changed window setting to
   the desktop, whose answer the hint bar carries.
+- `set_window(&mut dyn Store, &dyn Desktop, floating, size)`: the two
+  window settings and the rule, from the command line rather than from
+  the page, which is what `jobsdone desktop` runs. It loads, changes and
+  commits without an `App`, because the command is not a launch: it makes
+  no copies and opens no review, so running it never spends the day's
+  review. What comes back is the line the command prints, or what the
+  window manager said, the settings being saved either way.
 - `App::update(&mut self, Action) -> Flow`, `Flow` being `Continue` or
   `Quit`. The single entry point for every event, ticks included.
 - `App::key_context() -> KeyContext`, and `App::page_context()` for the
@@ -474,11 +481,14 @@ works from files, not from the compiler:
    roots must appear in its Crates column, except that a dev-dependency is
    allowed in a `tests.rs` file, since it cannot reach the binary.
 
-Test code therefore lives in `src/<module>/tests.rs` and nowhere else. An
-inline `#[cfg(test)] mod tests` would mean the scanner had to match braces
-to know what is test code, which is the point at which reading Rust with a
-scanner stops being reliable. The cost is that a unit test never sits beside
-the function it tests.
+Test code therefore lives in `src/<module>/tests.rs` and nowhere else,
+with `main.rs` the one exception: a `src/main/tests.rs` would put a second
+top-level module on disk, so what the command line means is tested by an
+inline `#[cfg(test)] mod tests` there, as the two tests here are. An
+inline module elsewhere would mean the scanner had to match braces to know
+what is test code, which is the point at which reading Rust with a scanner
+stops being reliable. The cost is that a unit test never sits beside the
+function it tests.
 
 Step 4 works on the source with comments, string and character literals
 removed, so a path named in a doc comment or in an error message is not read
