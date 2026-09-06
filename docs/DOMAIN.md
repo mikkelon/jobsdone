@@ -673,10 +673,12 @@ is drawn from.
 | 10 Scratchpad           | notes (15); CreateNote, EditNote, DeleteNote                                                    |
 | 11 Palette and help     | the command list (12) and the key map in DESIGN.md; no model state                              |
 | 12 Empty states         | every view above when its contents are empty; the empty search's AddTask                        |
+| 13 Settings             | the settings (19); `change_settings` and the sentence it refuses an empty week with             |
 
-Two things the wireframes show that are not model state: the "moving"
-marker during a reorder and the text of a title being edited. Both are
-application state that becomes a command on Enter.
+Three things the wireframes show that are not model state: the "moving"
+marker during a reorder, the text of a title being edited, and the number
+or size being typed on a settings row. All three are application state
+that becomes a command on Enter.
 
 ## 19. Settings
 
