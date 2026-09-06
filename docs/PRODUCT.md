@@ -55,7 +55,8 @@ must get done today, and they stand apart from the rest of the list.
 A backlog task can carry a date without being planned for a day:
 
 - **Due by.** A deadline. The task surfaces in the morning review once the
-  date is reached or passed.
+  date is reached or passed, or as many days before it as the settings
+  say.
 - **Remind on.** A nudge. The task surfaces in the morning review on that
   date.
 

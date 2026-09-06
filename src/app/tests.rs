@@ -3282,16 +3282,17 @@ fn the_desktop_command_without_flags_writes_the_rule_the_settings_already_say() 
 }
 
 #[test]
-fn the_desktop_command_keeps_the_settings_a_window_manager_would_not_take() {
+fn the_desktop_command_keeps_the_settings_where_there_is_no_window_manager() {
     let desk = Desk::absent();
     let mut store = MemStore::new();
 
-    let why = set_window(&mut store, &desk, Some(false), None).expect_err("no window manager");
+    let line = set_window(&mut store, &desk, Some(false), None).expect("kept for later");
 
     assert_eq!(
-        why,
-        "Hyprland is not here; the setting is kept for when it is."
+        line,
+        "Hyprland is not here; the settings are kept for when it is."
     );
+    assert!(desk.told().is_empty());
     assert!(!store.load().expect("the model").settings.floating_window());
 }
 

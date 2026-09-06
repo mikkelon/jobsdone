@@ -327,5 +327,7 @@ The commands that are not the app say what they did on stdout and exit:
 a size or that it tiles, and `--help` and `--version` print themselves. A
 command line nobody can read goes to stderr with the usage and exits 2; a
 window manager that would not take the rule exits 1 with what it said,
-the settings having been saved before it was asked. None of these enters
-raw mode, so none of them waits for Enter.
+the settings having been saved before it was asked. A machine with no
+Hyprland is not a failure: the settings are saved for when there is one,
+the line says so, and the exit is 0. None of these enters raw mode, so
+none of them waits for Enter.

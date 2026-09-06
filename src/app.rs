@@ -3605,8 +3605,10 @@ fn added_task(change: &Change) -> Option<Id> {
 /// spends the day's review. A flag that was not passed leaves its setting
 /// alone.
 ///
-/// What comes back is the one line the command prints; the error is what
-/// the window manager said, the settings being saved either way.
+/// What comes back is the one line the command prints. Where there is
+/// no window manager the settings are saved for when there is one and
+/// the line says so; the error is what a window manager that is there
+/// said, the settings being saved either way.
 pub fn set_window(
     store: &mut dyn Store,
     desktop: &dyn Desktop,
@@ -3630,6 +3632,9 @@ pub fn set_window(
 
     let floating = model.settings.floating_window();
     let size = model.settings.window_size();
+    if !desktop.available() {
+        return Ok("Hyprland is not here; the settings are kept for when it is.".to_owned());
+    }
     desktop.apply_window(floating, size)?;
     Ok(if floating {
         format!("the window floats at {}x{}", size.width, size.height)

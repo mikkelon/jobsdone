@@ -9,7 +9,7 @@ use std::panic;
 use std::time::Duration;
 
 use crossterm::event::{
-    self, DisableFocusChange, DisableMouseCapture, EnableFocusChange, EnableMouseCapture,
+    self, DisableFocusChange, DisableMouseCapture, EnableFocusChange, EnableMouseCapture, Event,
 };
 use crossterm::execute;
 use crossterm::terminal::{
@@ -60,7 +60,15 @@ fn go_round(
         }
 
         let action = if event::poll(TICK)? {
-            input::action_for(&event::read()?, app.key_context())
+            let event = event::read()?;
+            // A terminal the mouse has been handed back to sends no mouse
+            // events. One that sends them anyway, a test driver writing
+            // them straight into the pane, is answered the same way.
+            if !*mouse && matches!(event, Event::Mouse(_)) {
+                None
+            } else {
+                input::action_for(&event, app.key_context())
+            }
         } else {
             Some(Action::Tick)
         };
