@@ -33,7 +33,8 @@ const SIGNATURE: &str = "HYPRLAND_INSTANCE_SIGNATURE";
 /// that gets the window it was asked for.
 const ABSENT: &str = "Hyprland is not here; the setting is kept for when it is.";
 
-/// Hyprland as this program talks to it: one file and one reload.
+/// Hyprland as this program talks to it: one file, one reload, and
+/// the dispatches that show a size being chosen.
 pub struct Hyprland {
     /// `$XDG_CONFIG_HOME/hypr/bindings.lua`, or nothing when there is no
     /// home directory to find it under.
@@ -77,6 +78,24 @@ impl Desktop for Hyprland {
         fs::write(path, now)
             .map_err(|error| format!("{} could not be written: {error}", path.display()))?;
         reload()
+    }
+
+    /// The rule is what the window opens at; this is the window it is in
+    /// already. Nothing to dispatch to when Hyprland is not running,
+    /// which is the same case the reload sits out.
+    fn preview(&self, size: WindowSize) -> Result<(), String> {
+        if env::var_os(SIGNATURE).is_none() {
+            return Ok(());
+        }
+        hyprctl(&[
+            "dispatch",
+            "resizeactive",
+            "exact",
+            &size.width.to_string(),
+            &size.height.to_string(),
+        ])?;
+        hyprctl(&["dispatch", "centerwindow"])?;
+        Ok(())
     }
 }
 
@@ -134,8 +153,8 @@ fn reload() -> Result<(), String> {
     if env::var_os(SIGNATURE).is_none() {
         return Ok(());
     }
-    hyprctl("reload")?;
-    let errors = hyprctl("configerrors")?;
+    hyprctl(&["reload"])?;
+    let errors = hyprctl(&["configerrors"])?;
     let first = errors
         .lines()
         .map(str::trim)
@@ -146,10 +165,10 @@ fn reload() -> Result<(), String> {
     }
 }
 
-fn hyprctl(argument: &str) -> Result<String, String> {
+fn hyprctl(arguments: &[&str]) -> Result<String, String> {
     let output = Command::new("hyprctl")
-        .arg(argument)
+        .args(arguments)
         .output()
-        .map_err(|error| format!("hyprctl {argument} could not be run: {error}"))?;
+        .map_err(|error| format!("hyprctl {} could not be run: {error}", arguments.join(" ")))?;
     Ok(String::from_utf8_lossy(&output.stdout).into_owned())
 }

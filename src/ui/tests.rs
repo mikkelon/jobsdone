@@ -43,6 +43,10 @@ impl Desktop for Desk {
     fn apply_window(&self, _floating: bool, _size: WindowSize) -> Result<(), String> {
         Ok(())
     }
+
+    fn preview(&self, _size: WindowSize) -> Result<(), String> {
+        Ok(())
+    }
 }
 
 /// The app a drawing test draws, on the store it is given.

@@ -45,6 +45,12 @@ pub trait Desktop {
     /// Puts the window rule where the window manager reads it, or says
     /// in one sentence why it could not.
     fn apply_window(&self, floating: bool, size: WindowSize) -> Result<(), String>;
+
+    /// Gives the window the program is in this size now, so a size being
+    /// chosen is seen rather than read. Asked only of a floating window,
+    /// and only worth anything while the window manager is running: it
+    /// is otherwise a no-op rather than a failure.
+    fn preview(&self, size: WindowSize) -> Result<(), String>;
 }
 
 /// What the environment says about the person at the keyboard. The
@@ -696,6 +702,11 @@ pub struct App {
     moving: Option<Id>,
     /// The row the mouse took hold of, while it holds it.
     dragging: Option<(List, RowId)>,
+    /// Whether the window manager still has to be told what the window
+    /// settings say. Held over the keys and settled on the next tick, so
+    /// that a key held down on the size row costs one reload rather than
+    /// one per repeat.
+    window_owed: bool,
     layout: Layout,
     /// Where the clock comes from. The application is the only module
     /// that reads it (ARCHITECTURE.md section 3), which is also what
@@ -742,6 +753,7 @@ impl App {
             cursors: Cursors::default(),
             moving: None,
             dragging: None,
+            window_owed: false,
             layout: Layout::default(),
             #[cfg(test)]
             clock: now.clone(),
@@ -825,6 +837,11 @@ impl App {
                 // that a note another window has thrown away is not
                 // written back.
                 self.save_the_note();
+                // Focus coming back is not the keys going quiet, so the
+                // window manager waits for a tick.
+                if matches!(action, Action::Tick) {
+                    self.pay_the_window();
+                }
             }
             Action::Resize => {}
 
@@ -957,8 +974,8 @@ impl App {
     ///
     /// The day may now start at another hour, so the working day is
     /// worked out again and a pane that was on today follows it. A window
-    /// setting is the window manager's to keep, so it is handed over the
-    /// moment it changes rather than at the next launch.
+    /// setting is the window manager's to keep, so it is owed to it from
+    /// here and handed over on the next tick.
     pub fn change_settings(&mut self, settings: Settings) {
         self.reload_if_stale();
         let window = (settings.floating_window(), settings.window_size());
@@ -985,13 +1002,36 @@ impl App {
         self.refresh();
 
         if window != was {
-            match self.desktop.apply_window(window.0, window.1) {
-                Ok(()) => self.say(
+            self.window_owed = true;
+        }
+    }
+
+    /// The window settings the window manager has not been told about,
+    /// told to it now.
+    ///
+    /// A tick comes 250 ms after the last key (STACK.md section 2), so a
+    /// key held down on the size row walks the presets and only the one
+    /// it stops on reaches Hyprland, which rewrites its configuration and
+    /// reloads for each one it is given. A floating window is then
+    /// resized to what was chosen, so the size is seen rather than read.
+    fn pay_the_window(&mut self) {
+        if !std::mem::take(&mut self.window_owed) {
+            return;
+        }
+        let floating = self.model.settings.floating_window();
+        let size = self.model.settings.window_size();
+        match self.desktop.apply_window(floating, size) {
+            Ok(()) => {
+                if floating && let Err(why) = self.desktop.preview(size) {
+                    self.say(why, false);
+                    return;
+                }
+                self.say(
                     "The window rule is written. It applies the next time the app opens.",
                     false,
-                ),
-                Err(why) => self.say(why, false),
+                );
             }
+            Err(why) => self.say(why, false),
         }
     }
 

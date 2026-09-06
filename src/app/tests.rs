@@ -8,12 +8,13 @@ use jiff::civil::Date;
 use crate::domain::tests::MemStore;
 use crate::domain::{Change, Placement, Rule, Schedule, Task, WeekStart, Weekday, WorkDays, Write};
 
-/// A window manager a test can question: what it was told, and whether
-/// it was there to be told at all.
+/// A window manager a test can question: what it was told, what it was
+/// asked to show, and whether it was there to be told at all.
 #[derive(Clone)]
 struct Desk {
     here: bool,
     told: Rc<RefCell<Vec<(bool, WindowSize)>>>,
+    shown: Rc<RefCell<Vec<WindowSize>>>,
 }
 
 impl Desk {
@@ -21,6 +22,7 @@ impl Desk {
         Desk {
             here: true,
             told: Rc::new(RefCell::new(Vec::new())),
+            shown: Rc::new(RefCell::new(Vec::new())),
         }
     }
 
@@ -33,6 +35,10 @@ impl Desk {
 
     fn told(&self) -> Vec<(bool, WindowSize)> {
         self.told.borrow().clone()
+    }
+
+    fn shown(&self) -> Vec<WindowSize> {
+        self.shown.borrow().clone()
     }
 }
 
@@ -48,6 +54,11 @@ impl Desktop for Desk {
         } else {
             Err("Hyprland is not here; the setting is kept for when it is.".to_owned())
         }
+    }
+
+    fn preview(&self, size: WindowSize) -> Result<(), String> {
+        self.shown.borrow_mut().push(size);
+        Ok(())
     }
 }
 
@@ -3199,18 +3210,66 @@ fn a_week_with_no_work_day_in_it_is_refused_and_says_why() {
 }
 
 #[test]
-fn a_changed_window_setting_reaches_the_window_manager() {
+fn a_changed_window_setting_reaches_the_window_manager_on_the_next_tick() {
     let desk = Desk::here();
     let mut app = app_on(MemStore::holding(reviewed(Model::empty())), &desk, NOW);
 
     app.change_settings(changed(&app, |settings| {
         settings.set_window_size(WindowSize::new(1200, 800))
     }));
+    assert!(
+        desk.told().is_empty(),
+        "not while the keys are still coming"
+    );
+    app.update(Action::Tick);
     assert_eq!(desk.told(), [(true, WindowSize::new(1200, 800))]);
 
     // A setting that is nothing to do with the window leaves it alone.
     app.change_settings(changed(&app, |settings| settings.set_confirm_delete(true)));
+    app.update(Action::Tick);
     assert_eq!(desk.told().len(), 1);
+}
+
+#[test]
+fn a_size_held_down_reaches_the_window_manager_once_and_as_the_last_one() {
+    let desk = Desk::here();
+    let mut app = app_on(MemStore::holding(reviewed(Model::empty())), &desk, NOW);
+    app.update(Action::SettingsPage);
+    cursor_to(&mut app, SettingRow::WindowSize);
+
+    for _ in 0..20 {
+        app.update(Action::Right);
+    }
+    assert!(
+        desk.told().is_empty(),
+        "a key repeat is not a window manager's business"
+    );
+
+    app.update(Action::Tick);
+    assert_eq!(desk.told(), [(true, WindowSize::PRESETS[4])]);
+
+    // And nothing is owed once it has been paid.
+    app.update(Action::Tick);
+    assert_eq!(desk.told().len(), 1);
+}
+
+#[test]
+fn a_floating_window_is_shown_the_size_it_was_given() {
+    let desk = Desk::here();
+    let mut app = app_on(MemStore::holding(reviewed(Model::empty())), &desk, NOW);
+    app.update(Action::SettingsPage);
+    cursor_to(&mut app, SettingRow::WindowSize);
+
+    app.update(Action::Right);
+    app.update(Action::Tick);
+    assert_eq!(desk.shown(), [WindowSize::PRESETS[2]]);
+
+    // A window that tiles has asked to be the size the tiling gives it.
+    cursor_to(&mut app, SettingRow::FloatingWindow);
+    app.update(Action::Pick);
+    app.update(Action::Tick);
+    assert_eq!(desk.told().len(), 2);
+    assert_eq!(desk.shown().len(), 1);
 }
 
 #[test]
@@ -3221,6 +3280,7 @@ fn a_window_manager_that_is_not_there_says_so_in_the_hint_bar() {
     app.change_settings(changed(&app, |settings| {
         settings.set_floating_window(false)
     }));
+    app.update(Action::Tick);
 
     assert_eq!(
         hint(&app),
@@ -3514,9 +3574,22 @@ fn a_changed_window_setting_says_what_the_window_manager_answered() {
 
     app.update(Action::Pick);
     assert!(!app.settings().floating_window());
+    app.update(Action::Tick);
     assert_eq!(desk.told(), [(false, WindowSize::default())]);
     assert_eq!(
         hint(&app),
         "The window rule is written. It applies the next time the app opens."
     );
+}
+
+#[test]
+fn a_tick_with_no_window_owed_says_nothing_to_the_window_manager() {
+    let desk = Desk::here();
+    let mut app = app_on(MemStore::holding(reviewed(Model::empty())), &desk, NOW);
+
+    app.update(Action::Tick);
+    app.update(Action::Tick);
+
+    assert!(desk.told().is_empty());
+    assert!(desk.shown().is_empty());
 }
