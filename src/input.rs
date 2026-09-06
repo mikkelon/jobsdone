@@ -61,6 +61,9 @@ pub enum PopupKind {
     /// The one deliberate question: whether a recurring copy's new title
     /// is for this copy or for this and future copies.
     CopyQuestion,
+    /// The question `x` asks while `confirm_delete` is on, about a task
+    /// or a note.
+    DeleteQuestion,
 }
 
 /// The in-place text field on the home page, which is the only place a
@@ -1557,6 +1560,27 @@ const COPY_QUESTION: &[Binding] = &[
     },
 ];
 
+/// The question `x` asks while `confirm_delete` is on (DOMAIN.md section
+/// 19). Enter is safe to be an answer here, unlike the copy question's:
+/// the row is named in the card and keeping it is the key that backs out
+/// of everything else.
+const DELETE_QUESTION: &[Binding] = &[
+    Binding {
+        keys: &[("enter", Action::Confirm)],
+        shown: "⏎",
+        label: "delete",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("esc", Action::Cancel)],
+        shown: "esc",
+        label: "keep",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+];
+
 /// The palette and search share a shape: a text field, a filtered list,
 /// and the two keys that leave. Only what Enter does differs, and the
 /// one key search has that the palette does not.
@@ -1702,6 +1726,10 @@ pub fn bindings(context: KeyContext) -> &'static [Binding] {
             ..
         } => COPY_QUESTION,
         KeyContext::Popup {
+            kind: PopupKind::DeleteQuestion,
+            ..
+        } => DELETE_QUESTION,
+        KeyContext::Popup {
             kind: PopupKind::Date,
             text_field: true,
         } => DATE_FIELD,
@@ -1779,6 +1807,10 @@ pub fn name(context: KeyContext) -> &'static str {
             kind: PopupKind::CopyQuestion,
             ..
         } => "RENAME",
+        KeyContext::Popup {
+            kind: PopupKind::DeleteQuestion,
+            ..
+        } => "DELETE",
         KeyContext::Popup {
             kind: PopupKind::Date,
             ..

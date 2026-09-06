@@ -304,9 +304,6 @@ pub struct Message {
     pub said_at: Zoned,
 }
 
-/// How long a message stands when no key follows it, in seconds.
-const MESSAGE_STANDS: i64 = 4;
-
 /// A title being typed on a row. Uncommitted text lives here and nowhere
 /// else (ARCHITECTURE.md rule 8); Enter turns it into one command.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -1236,12 +1233,17 @@ impl App {
         });
     }
 
-    /// The hint bar goes back to its keys a few seconds after a message
-    /// nobody has typed past, so that a pause to read them is never a
-    /// pause in front of the wrong line.
+    /// The hint bar goes back to its keys once a message nobody has typed
+    /// past has stood for `message_seconds`, so that a pause to read them
+    /// is never a pause in front of the wrong line. At 0 no tick ever
+    /// takes it away and only the next key does.
     fn forget_an_old_message(&mut self) {
+        let seconds = i64::from(self.model.settings.message_seconds());
+        if seconds == 0 {
+            return;
+        }
         let now = self.now();
-        let stands = Span::new().seconds(MESSAGE_STANDS);
+        let stands = Span::new().seconds(seconds);
         let old = self.message.as_ref().is_some_and(|message| {
             message
                 .said_at
@@ -1447,20 +1449,68 @@ impl App {
         }
     }
 
-    /// `x`: no confirm, and `u` in the hint bar until the next key.
+    /// `x`: no confirm, and `u` in the hint bar until the next key —
+    /// unless `confirm_delete` is on, when the question comes first
+    /// (DESIGN.md section 8).
     fn delete(&mut self) {
+        // A note is left before it can be the row thrown away, so that
+        // what was typed into it is written first (ARCHITECTURE.md rule
+        // 8) and the keyboard is back on the list to answer.
         if self.page == Page::Notes {
-            self.throw_the_note_away();
-            return;
+            self.leave_the_note();
         }
-        let Some(id) = self.task_at_cursor() else {
+        let Some(row) = self.row_to_delete() else {
             return;
         };
-        let list = self.focused();
-        let next = self.neighbour_of(list, RowId::Task(id));
-        if self.run(Command::DeleteTask { task: id }).is_some() {
-            self.step_on(list, next, id, Decided::Deleted);
+        if self.model.settings.confirm_delete() {
+            self.open(PopupKind::DeleteQuestion, Some(row));
+            return;
         }
+        self.throw_the_row_away(row);
+    }
+
+    /// The row `x` is about: a note on the notes page, a task everywhere
+    /// else, each with the reason when there is none.
+    fn row_to_delete(&mut self) -> Option<RowId> {
+        match self.page {
+            Page::Notes => self.note_at_cursor().map(RowId::Note),
+            Page::Home => self.task_at_cursor().map(RowId::Task),
+        }
+    }
+
+    /// The delete itself, once there is nothing left to ask. A note goes
+    /// the way a task does, and the cursor lands on the row that follows.
+    fn throw_the_row_away(&mut self, row: RowId) {
+        match row {
+            RowId::Task(id) => {
+                let list = self.focused();
+                let next = self.neighbour_of(list, RowId::Task(id));
+                if self.run(Command::DeleteTask { task: id }).is_some() {
+                    self.step_on(list, next, id, Decided::Deleted);
+                }
+            }
+            RowId::Note(id) => {
+                let next = self.neighbour_of(List::Notes, RowId::Note(id));
+                if self.run(Command::DeleteNote { note: id }).is_some()
+                    && let Some(next) = next
+                {
+                    self.set_cursor(List::Notes, next);
+                }
+            }
+            RowId::Schedule(_) | RowId::Day(_) => {}
+        }
+    }
+
+    /// Enter on the delete question: the row it captured when it opened,
+    /// by its id, so that a reload cannot turn it into another one.
+    fn take_the_delete(&mut self) {
+        let Some(popup) = self.popup.take() else {
+            return;
+        };
+        let Some(row) = popup.target else {
+            return;
+        };
+        self.throw_the_row_away(row);
     }
 
     /// `J` and `K`: swap with the neighbour in the same group, because
@@ -2207,21 +2257,6 @@ impl App {
         self.run(Command::EditNote { note, body });
     }
 
-    /// `x` on the notes page. A note is thrown away the way a task is: no
-    /// confirm, and `u` in the hint bar until the next key.
-    fn throw_the_note_away(&mut self) {
-        self.leave_the_note();
-        let Some(id) = self.note_at_cursor() else {
-            return;
-        };
-        let next = self.neighbour_of(List::Notes, RowId::Note(id));
-        if self.run(Command::DeleteNote { note: id }).is_some()
-            && let Some(next) = next
-        {
-            self.set_cursor(List::Notes, next);
-        }
-    }
-
     // ---- the title being typed ---------------------------------------
 
     /// `a`: a new note on the notes page, and a field at the end of the
@@ -2804,7 +2839,8 @@ impl App {
             PopupKind::Move => self.take_the_chosen_day(),
             PopupKind::Date => self.take_the_typed_date(),
             PopupKind::Repeat => self.take_the_rule(),
-            // The question has no answer safe enough to be Enter's.
+            PopupKind::DeleteQuestion => self.take_the_delete(),
+            // The copy question has no answer safe enough to be Enter's.
             PopupKind::Help | PopupKind::CopyQuestion => {}
         }
         Flow::Continue

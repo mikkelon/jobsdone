@@ -1737,6 +1737,94 @@ fn x_deletes_without_asking_and_u_puts_it_back() {
     assert!(!app.message().is_some_and(|message| message.undo));
 }
 
+/// The setting turned on, which is the whole of what `confirm_delete`
+/// changes about `x`.
+fn asks_first(app: &mut App) {
+    let mut settings = app.settings().clone();
+    settings.set_confirm_delete(true);
+    app.change_settings(settings);
+}
+
+#[test]
+fn x_asks_first_when_the_setting_is_on_and_esc_keeps_the_row() {
+    let mut app = started();
+    add(&mut app, "Book dentist");
+    asks_first(&mut app);
+
+    app.update(Action::Delete);
+    assert_eq!(
+        app.key_context(),
+        KeyContext::Popup {
+            kind: PopupKind::DeleteQuestion,
+            text_field: false
+        }
+    );
+    assert_eq!(
+        titles(&app, List::Day),
+        ["Book dentist"],
+        "the question is asked before anything is done"
+    );
+
+    app.update(Action::Cancel);
+    assert!(app.popup().is_none());
+    assert_eq!(titles(&app, List::Day), ["Book dentist"]);
+    assert_eq!(hint(&app), "", "keeping a row is not news");
+}
+
+#[test]
+fn enter_on_the_question_deletes_the_row_it_was_asked_about() {
+    let mut app = started();
+    add(&mut app, "Book dentist");
+    let kept = add(&mut app, "Review Anna's PR");
+    app.update(Action::Up);
+    asks_first(&mut app);
+
+    app.update(Action::Delete);
+    app.update(Action::Confirm);
+
+    assert!(app.popup().is_none());
+    assert_eq!(titles(&app, List::Day), ["Review Anna's PR"]);
+    assert_eq!(hint(&app), "Deleted \"Book dentist\"");
+    assert!(app.message().is_some_and(|message| message.undo));
+    assert_eq!(cursor(&app, List::Day), Some(kept), "the cursor steps on");
+}
+
+#[test]
+fn a_note_is_asked_about_the_same_way() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "remember to mention X");
+    asks_first(&mut app);
+
+    app.update(Action::Delete);
+    app.update(Action::Cancel);
+    assert_eq!(app.notes().count, 1, "the note is still there");
+
+    app.update(Action::Delete);
+    app.update(Action::Confirm);
+    assert_eq!(app.notes().count, 0);
+    assert_eq!(hint(&app), "Deleted a note");
+}
+
+#[test]
+fn a_pile_row_is_asked_about_before_the_review_lets_it_go() {
+    let mut app = app_at(left_behind(&[("One", "2025-09-04")]), NOW);
+    asks_first(&mut app);
+
+    app.update(Action::Delete);
+    assert_eq!(
+        app.review().expect("the review").decision(1),
+        None,
+        "nothing is decided while the question is up"
+    );
+
+    app.update(Action::Confirm);
+    assert_eq!(
+        app.review().expect("the review").decision(1),
+        Some(Decided::Deleted)
+    );
+}
+
 #[test]
 fn undo_walks_back_through_the_day() {
     let mut app = started();
@@ -2190,6 +2278,50 @@ fn a_message_nobody_types_past_goes_after_a_few_seconds() {
         app.message().is_none(),
         "five seconds is a pause in front of the wrong line"
     );
+}
+
+#[test]
+fn a_message_that_stands_for_no_seconds_waits_for_the_next_key() {
+    let mut app = started();
+    let mut settings = app.settings().clone();
+    settings.set_message_seconds(0);
+    app.change_settings(settings);
+    add(&mut app, "Book dentist");
+    app.update(Action::Delete);
+
+    app.clock = app
+        .clock
+        .checked_add(Span::new().minutes(5))
+        .expect("a time");
+    app.update(Action::Tick);
+    assert!(app.message().is_some(), "no tick ever takes it away");
+
+    app.update(Action::Down);
+    assert!(app.message().is_none(), "and the next key does");
+}
+
+#[test]
+fn a_longer_setting_holds_a_message_past_the_default() {
+    let mut app = started();
+    let mut settings = app.settings().clone();
+    settings.set_message_seconds(10);
+    app.change_settings(settings);
+    add(&mut app, "Book dentist");
+    app.update(Action::Delete);
+
+    app.clock = app
+        .clock
+        .checked_add(Span::new().seconds(6))
+        .expect("a time");
+    app.update(Action::Tick);
+    assert!(app.message().is_some(), "six of the ten seconds");
+
+    app.clock = app
+        .clock
+        .checked_add(Span::new().seconds(5))
+        .expect("a time");
+    app.update(Action::Tick);
+    assert!(app.message().is_none());
 }
 
 #[test]

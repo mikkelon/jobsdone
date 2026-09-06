@@ -32,6 +32,7 @@ pub(super) fn draw(canvas: &mut Canvas, app: &App, rows: &Rows) {
         PopupKind::Date => date_card(canvas, app, popup, rows),
         PopupKind::Repeat => repeat_card(canvas, app, popup, rows),
         PopupKind::CopyQuestion => copy_question(canvas, app, popup, rows),
+        PopupKind::DeleteQuestion => delete_question(canvas, app, popup, rows),
     }
 }
 
@@ -376,6 +377,10 @@ fn about(app: &App, popup: &Popup) -> String {
             .model()
             .schedule(id)
             .map_or_else(|| "a task".to_owned(), |schedule| schedule.title.clone()),
+        Some(RowId::Note(note)) => app.model().note(note).map_or_else(
+            || "a note".to_owned(),
+            |note| note.body.lines().next().unwrap_or_default().to_owned(),
+        ),
         // The card that goes to a day is about no row at all.
         _ => String::new(),
     }
@@ -805,6 +810,34 @@ fn copy_question(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     card(canvas, x, y, width, height, "Rename", &about(app, popup));
 
     canvas.put(x + 2, y + 2, "This task repeats. Rename:", dim());
+    for (at, answer) in answers.iter().enumerate() {
+        let row = y + 4 + at as u16;
+        canvas.put(x + 2, row, answer.shown, accent());
+        canvas.put(x + 8, row, &sentence(answer.label), plain());
+    }
+}
+
+/// The question `x` asks while `confirm_delete` is on: the row named in
+/// quotes, so that the answer is about the row on screen and not about
+/// whichever one the cursor is nearest (DESIGN.md section 8).
+fn delete_question(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
+    let answers = input::bindings(KeyContext::Popup {
+        kind: PopupKind::DeleteQuestion,
+        text_field: false,
+    });
+
+    let width = CARD_WIDTH.min(canvas.width().saturating_sub(4));
+    let height = answers.len() as u16 + 6;
+    let (x, y) = place(canvas, rows, width, height);
+    card(canvas, x, y, width, height, "Delete", "");
+
+    let asked = format!("Delete \"{}\"?", about(app, popup));
+    canvas.put(
+        x + 2,
+        y + 2,
+        super::clip(&asked, width.saturating_sub(4)),
+        dim(),
+    );
     for (at, answer) in answers.iter().enumerate() {
         let row = y + 4 + at as u16;
         canvas.put(x + 2, row, answer.shown, accent());

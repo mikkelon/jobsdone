@@ -10,7 +10,8 @@ use ratatui::{Terminal, TerminalOptions, Viewport};
 use crate::app::{App, Desktop, Locale, WindowSize};
 use crate::domain::tests::MemStore;
 use crate::domain::{
-    DueChip, FromPlace, Model, Note, Placement, Schedule, Task, WeekStart, Weekday, WorkDays,
+    DateStyle, DueChip, FromPlace, Model, Note, Placement, Schedule, Task, WeekStart, Weekday,
+    WorkDays,
 };
 use crate::input::Action;
 
@@ -51,6 +52,12 @@ fn app_on(store: MemStore) -> App {
 
 fn app_when(store: MemStore, now: &Zoned) -> App {
     App::new(Box::new(store), Box::new(Desk), Locale::default(), now).expect("an app")
+}
+
+/// An app in a place that writes its dates the way the locale given
+/// does, which is what `date_style` follows until it says otherwise.
+fn app_reading(store: MemStore, locale: Locale) -> App {
+    App::new(Box::new(store), Box::new(Desk), locale, &at(NOW)).expect("an app")
 }
 
 /// An app on an empty database, which is what a first launch looks like.
@@ -1468,6 +1475,53 @@ fn the_copy_question_spells_both_answers_out() {
     assert!(text.contains("This task repeats. Rename:"));
     assert!(text.contains("This copy"));
     assert!(text.contains("This and future copies"));
+}
+
+#[test]
+fn a_month_first_locale_writes_the_month_first() {
+    let app = app_reading(
+        MemStore::holding(wireframe_model()),
+        Locale {
+            dates: DateOrder::MonthFirst,
+        },
+    );
+    let drawn = look(&app, 120, 36);
+
+    assert!(drawn[1].contains("Today · Fri Sep 5"));
+    assert!(
+        !drawn.join("\n").contains("Fri 5 Sep"),
+        "no date is written the other way round"
+    );
+}
+
+#[test]
+fn the_date_order_setting_overrules_the_locale() {
+    let mut app = app_reading(
+        MemStore::holding(wireframe_model()),
+        Locale {
+            dates: DateOrder::MonthFirst,
+        },
+    );
+    let mut settings = app.settings().clone();
+    settings.set_date_style(DateStyle::DayFirst);
+    app.change_settings(settings);
+
+    assert!(look(&app, 120, 36)[1].contains("Today · Fri 5 Sep"));
+}
+
+#[test]
+fn the_delete_question_names_the_row_it_is_about() {
+    let mut app = app();
+    let mut settings = app.settings().clone();
+    settings.set_confirm_delete(true);
+    app.change_settings(settings);
+    app.update(Action::Delete);
+    let text = look(&app, 120, 36).join("\n");
+
+    assert!(text.contains("─ Delete ─"), "the card says what it is");
+    assert!(text.contains("Delete \"Ship invoice export\"?"));
+    assert!(text.contains("⏎     Delete"));
+    assert!(text.contains("esc   Keep"));
 }
 
 #[test]
