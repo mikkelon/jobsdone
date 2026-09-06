@@ -479,6 +479,27 @@ fn the_review_is_not_shown_twice_in_one_day() {
 }
 
 #[test]
+fn the_review_waits_for_m_when_it_is_set_not_to_open_itself() {
+    let mut model = left_behind(&[("Order new office chair", "2025-09-01")])
+        .load()
+        .expect("the store");
+    model.settings.set_review_opens_itself(false);
+    let mut app = app_at(MemStore::holding(model), NOW);
+
+    assert!(app.review().is_none());
+    assert_eq!(app.review_count(), 1, "the pile is counted all the same");
+    assert_eq!(
+        app.model().meta.get("review_on"),
+        None,
+        "the gate is left for the day the review is asked for"
+    );
+
+    app.update(Action::OpenReview);
+
+    assert!(app.review().is_some());
+}
+
+#[test]
 fn the_pile_horizon_takes_an_older_day_out_of_the_review_count() {
     let mut model = left_behind(&[
         ("Order new office chair", "2025-08-01"),

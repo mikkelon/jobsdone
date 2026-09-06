@@ -591,7 +591,7 @@ pub struct App {
 impl App {
     /// Loads the model and runs the launch sequence: the recurring copies
     /// for every scheduled date since the last launch, and then the
-    /// review gate.
+    /// review gate, unless the review is set to be opened by hand.
     pub fn new(
         store: Box<dyn Store>,
         desktop: Box<dyn Desktop>,
@@ -629,7 +629,9 @@ impl App {
         app.generate(now);
         app.refresh();
         app.rest_the_cursors();
-        app.open_the_review(true);
+        if app.model.settings.review_opens_itself() {
+            app.open_the_review(true);
+        }
         Ok(app)
     }
 
