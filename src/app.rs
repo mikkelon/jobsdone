@@ -7,8 +7,9 @@ use tracing::warn;
 use unicode_segmentation::UnicodeSegmentation;
 
 use crate::domain::{
-    self, BacklogView, Change, Command, Context, DayList, DayView, Id, Model, MonthDay, NotesView,
-    Pile, Place, Rule, SearchResults, Settings, Store, StoreError, Surfaced, Weekday, Write,
+    self, BacklogView, Change, Command, Context, DateStyle, DayList, DayView, Id, Model, MonthDay,
+    NotesView, Pile, Place, Rule, SearchResults, Settings, Store, StoreError, Surfaced, WeekStart,
+    Weekday, Write,
 };
 
 /// The two domain types the desktop is spoken to in. They cross that
@@ -61,11 +62,15 @@ pub enum Flow {
     Quit,
 }
 
-/// Which of the two pages the window is showing (DESIGN.md section 6).
+/// Which of the three pages the window is showing (DESIGN.md section 6).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Page {
     Home,
     Notes,
+    /// The settings, which is a page rather than a popup because it is
+    /// read down and worked through rather than answered (DESIGN.md
+    /// section 11).
+    Settings,
 }
 
 /// A list of rows, on either page. The cursor is one per list, so
@@ -81,6 +86,10 @@ pub enum List {
     /// The rows of whichever step of the review is on screen. The review
     /// takes the whole window, so it is never a list beside another one.
     Review,
+    /// The settings, which are one list whatever the window's width: the
+    /// pane beside them describes the cursor row rather than listing
+    /// anything of its own.
+    Settings,
 }
 
 /// Which row of a list the cursor is on.
@@ -96,6 +105,9 @@ pub enum RowId {
     /// A row of the day list, which is a date rather than a row of the
     /// model: a day exists because something was planned for it.
     Day(Date),
+    /// A row of the settings page, which is a setting rather than
+    /// anything the model holds a row for.
+    Setting(SettingRow),
 }
 
 impl RowId {
@@ -130,6 +142,14 @@ impl RowId {
             _ => None,
         }
     }
+
+    /// The setting the row is, if it is one.
+    pub fn setting(self) -> Option<SettingRow> {
+        match self {
+            RowId::Setting(row) => Some(row),
+            _ => None,
+        }
+    }
 }
 
 /// Which group of a pane a row is in.
@@ -157,6 +177,10 @@ pub enum Group {
     /// surfaced the task, and neither changes what a key on the row
     /// means, so one group is the whole of it.
     Review,
+    /// A row of the settings page. The page draws its rows under five
+    /// labels, but every key on one means the same thing, so the keys
+    /// know one group.
+    Settings,
 }
 
 impl Group {
@@ -169,6 +193,97 @@ impl Group {
             Group::Focus | Group::Plan | Group::Ordinary | Group::Waiting
         )
     }
+}
+
+/// One row of the settings page: one of the settings of DOMAIN.md
+/// section 19, except the work days, which are a row each because each
+/// day is a toggle of its own.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SettingRow {
+    DayStartsAt,
+    WeekStartsOn,
+    WorkDay(Weekday),
+    ReviewOpensItself,
+    DueAheadDays,
+    BackfillDays,
+    PileHorizonDays,
+    FloatingWindow,
+    WindowSize,
+    Mouse,
+    DateOrder,
+    MessageSeconds,
+    ConfirmDelete,
+}
+
+impl SettingRow {
+    /// Whether the value is typed rather than stepped: a number, or a
+    /// size, which has no neighbour worth calling the next one.
+    pub fn is_typed(self) -> bool {
+        matches!(
+            self,
+            SettingRow::DayStartsAt
+                | SettingRow::DueAheadDays
+                | SettingRow::BackfillDays
+                | SettingRow::PileHorizonDays
+                | SettingRow::WindowSize
+                | SettingRow::MessageSeconds
+        )
+    }
+}
+
+/// The label a run of settings rows is drawn under. What a setting does
+/// decides which of the five it is in, so the grouping belongs with the
+/// page rather than with the drawing.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum SettingGroup {
+    Day,
+    WorkDays,
+    Review,
+    Window,
+    Looks,
+}
+
+/// The rows of the settings page, in the order they are drawn, each
+/// under its group. One list, so the cursor walks it the way it walks
+/// any other.
+const SETTINGS: [(SettingGroup, SettingRow); 19] = [
+    (SettingGroup::Day, SettingRow::DayStartsAt),
+    (SettingGroup::Day, SettingRow::WeekStartsOn),
+    (SettingGroup::WorkDays, SettingRow::WorkDay(Weekday::Mon)),
+    (SettingGroup::WorkDays, SettingRow::WorkDay(Weekday::Tue)),
+    (SettingGroup::WorkDays, SettingRow::WorkDay(Weekday::Wed)),
+    (SettingGroup::WorkDays, SettingRow::WorkDay(Weekday::Thu)),
+    (SettingGroup::WorkDays, SettingRow::WorkDay(Weekday::Fri)),
+    (SettingGroup::WorkDays, SettingRow::WorkDay(Weekday::Sat)),
+    (SettingGroup::WorkDays, SettingRow::WorkDay(Weekday::Sun)),
+    (SettingGroup::Review, SettingRow::ReviewOpensItself),
+    (SettingGroup::Review, SettingRow::DueAheadDays),
+    (SettingGroup::Review, SettingRow::BackfillDays),
+    (SettingGroup::Review, SettingRow::PileHorizonDays),
+    (SettingGroup::Window, SettingRow::FloatingWindow),
+    (SettingGroup::Window, SettingRow::WindowSize),
+    (SettingGroup::Window, SettingRow::Mouse),
+    (SettingGroup::Looks, SettingRow::DateOrder),
+    (SettingGroup::Looks, SettingRow::MessageSeconds),
+    (SettingGroup::Looks, SettingRow::ConfirmDelete),
+];
+
+/// The settings page as a list of rows. `ui` draws them in this order
+/// and under these labels, and the cursor moves down the same list.
+pub fn setting_rows() -> &'static [(SettingGroup, SettingRow)] {
+    &SETTINGS
+}
+
+/// A number or a window size being typed on a settings row.
+///
+/// Uncommitted text lives only in the application (ARCHITECTURE.md rule
+/// 8); Enter turns it into one `change_settings` and Escape drops it.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SettingDraft {
+    pub row: SettingRow,
+    pub text: String,
+    /// Where the caret is, in grapheme clusters, as in every other field.
+    pub caret: usize,
 }
 
 /// What the review did to a row, which is what the row says it did.
@@ -530,6 +645,7 @@ struct Cursors {
     days: Option<RowId>,
     notes: Option<RowId>,
     review: Option<RowId>,
+    settings: Option<RowId>,
 }
 
 /// The views the screen is drawn from, recomputed whenever the model or
@@ -561,6 +677,9 @@ pub struct App {
     showing: Date,
     views: Views,
     page: Page,
+    /// The page `,` was pressed on, which is the page every way off the
+    /// settings leads back to.
+    came_from: Page,
     pane: Pane,
     notes_pane: NotesPane,
     popup: Option<Popup>,
@@ -570,6 +689,8 @@ pub struct App {
     review: Option<Review>,
     /// The open note, while the keyboard is in it.
     draft: Option<Draft>,
+    /// The value being typed on a settings row, while one is.
+    setting_draft: Option<SettingDraft>,
     message: Option<Message>,
     cursors: Cursors,
     /// The row a reorder is happening to, marked "moving" until the next
@@ -612,12 +733,14 @@ impl App {
             showing: today,
             views: Views::default(),
             page: Page::Home,
+            came_from: Page::Home,
             pane: Pane::Day,
             notes_pane: NotesPane::List,
             popup: None,
             editor: None,
             review: None,
             draft: None,
+            setting_draft: None,
             message: None,
             cursors: Cursors::default(),
             moving: None,
@@ -720,6 +843,7 @@ impl App {
             Action::PaneRight => self.shift_pane(true, false),
             Action::NextPane => self.next_control(),
             Action::NotesPage => self.turn_the_page(),
+            Action::SettingsPage => self.turn_to_the_settings(),
             Action::OpenReview => self.reopen_the_review(),
 
             Action::Commands => self.open(PopupKind::Palette, None),
@@ -768,19 +892,25 @@ impl App {
             | Action::EveryMonth
             | Action::EveryFewWeeks
             | Action::StopRepeat => self.choose_the_shape(action),
-            Action::Pick => self.pick_a_weekday(),
+            Action::Pick => self.pick(),
             Action::Keep => self.keep(),
 
             Action::Insert(typed) => self.type_in(typed),
             Action::Backspace => self.rub_out(),
             Action::DeleteForward => self.rub_forward(),
             Action::Left => {
-                if !self.walk_the_calendar(Span::new().days(-1)) && !self.adjust(false) {
+                if !self.walk_the_calendar(Span::new().days(-1))
+                    && !self.adjust(false)
+                    && !self.adjust_a_setting(false)
+                {
                     self.move_caret(false);
                 }
             }
             Action::Right => {
-                if !self.walk_the_calendar(Span::new().days(1)) && !self.adjust(true) {
+                if !self.walk_the_calendar(Span::new().days(1))
+                    && !self.adjust(true)
+                    && !self.adjust_a_setting(true)
+                {
                     self.move_caret(true);
                 }
             }
@@ -853,10 +983,14 @@ impl App {
         self.today = today;
         self.refresh();
 
-        if window != was
-            && let Err(why) = self.desktop.apply_window(window.0, window.1)
-        {
-            self.say(why, false);
+        if window != was {
+            match self.desktop.apply_window(window.0, window.1) {
+                Ok(()) => self.say(
+                    "The window rule is written. It applies the next time the app opens.",
+                    false,
+                ),
+                Err(why) => self.say(why, false),
+            }
         }
     }
 
@@ -1220,9 +1354,10 @@ impl App {
                 List::Day => true,
                 List::Backlog => !self.browsing(),
                 List::Days => self.browsing(),
-                List::Notes | List::Review => false,
+                List::Notes | List::Review | List::Settings => false,
             },
             Page::Notes => list == List::Notes,
+            Page::Settings => list == List::Settings,
         }
     }
 
@@ -1307,6 +1442,10 @@ impl App {
                 .iter()
                 .flat_map(|review| review.rows())
                 .map(|task| (RowId::Task(task), Group::Review))
+                .collect(),
+            List::Settings => setting_rows()
+                .iter()
+                .map(|(_, row)| (RowId::Setting(*row), Group::Settings))
                 .collect(),
         }
     }
@@ -1968,7 +2107,7 @@ impl App {
         match row {
             RowId::Schedule(id) => Some(id),
             RowId::Task(id) => self.model.live_task(id).and_then(|task| task.schedule_id),
-            RowId::Note(_) | RowId::Day(_) => None,
+            RowId::Note(_) | RowId::Day(_) | RowId::Setting(_) => None,
         }
     }
 
@@ -2022,6 +2161,16 @@ impl App {
             _ => {}
         }
         true
+    }
+
+    /// `space`: the setting under the cursor on the settings page, and
+    /// the weekday under it on the repeat card.
+    fn pick(&mut self) {
+        if self.page == Page::Settings && self.popup.is_none() {
+            self.change_the_setting();
+            return;
+        }
+        self.pick_a_weekday();
     }
 
     /// `space` on the weekly shape: the highlighted weekday joins the
@@ -2113,6 +2262,98 @@ impl App {
                 self.set_cursor(list, next);
             }
         }
+    }
+
+    // ---- the settings page -------------------------------------------
+
+    /// `,`: the settings, and `,` again the page they were opened from.
+    /// The page is not a popup over another one, so what was on screen
+    /// is put away first (DESIGN.md section 11).
+    fn turn_to_the_settings(&mut self) {
+        if self.page == Page::Settings {
+            self.leave_the_settings();
+            return;
+        }
+        self.leave_the_note();
+        self.editor = None;
+        self.came_from = self.page;
+        self.page = Page::Settings;
+    }
+
+    /// `,` or `esc` on the page: back where it was opened from, with
+    /// anything half typed on a row dropped.
+    fn leave_the_settings(&mut self) {
+        self.setting_draft = None;
+        self.page = self.came_from;
+    }
+
+    /// The setting a key acts on, which is the cursor row settled where
+    /// it is, for the reason a task is (ARCHITECTURE.md rule 6).
+    fn setting_at_cursor(&mut self) -> Option<SettingRow> {
+        let id = self.cursor(List::Settings)?;
+        self.set_cursor(List::Settings, id);
+        id.setting()
+    }
+
+    /// `h` and `l`: the row's value one step down or up. Says whether
+    /// the page took the key, because the same two actions move a caret
+    /// everywhere else.
+    fn adjust_a_setting(&mut self, forward: bool) -> bool {
+        if self.page != Page::Settings || self.popup.is_some() || self.setting_draft.is_some() {
+            return false;
+        }
+        let Some(row) = self.setting_at_cursor() else {
+            return true;
+        };
+        let settings = stepped(self.settings(), row, forward);
+        self.change_settings(settings);
+        true
+    }
+
+    /// `space` and Enter: the row's next value, or, on a row that holds
+    /// a number or a size, the field it is typed into.
+    fn change_the_setting(&mut self) {
+        let Some(row) = self.setting_at_cursor() else {
+            return;
+        };
+        if row.is_typed() {
+            let text = typed_value(self.settings(), row);
+            self.setting_draft = Some(SettingDraft {
+                row,
+                caret: glyphs(&text),
+                text,
+            });
+            return;
+        }
+        let settings = cycled(self.settings(), row);
+        self.change_settings(settings);
+    }
+
+    /// Enter in the field: the number or the size that was typed, or the
+    /// field left open with the reason in the hint bar, the way the date
+    /// card leaves a line it cannot read.
+    fn take_the_typed_setting(&mut self) {
+        let Some(draft) = &self.setting_draft else {
+            return;
+        };
+        let (row, typed) = (draft.row, draft.text.trim().to_owned());
+        let Some(settings) = typed_into(self.settings(), row, &typed) else {
+            self.say(
+                match row {
+                    SettingRow::WindowSize => "That is not a size I can read; write it as 870x650.",
+                    _ => "That is not a number I can read.",
+                },
+                false,
+            );
+            return;
+        };
+        self.setting_draft = None;
+        self.change_settings(settings);
+    }
+
+    /// The value being typed on a settings row, while one is.
+    pub fn setting_draft(&self) -> Option<&SettingDraft> {
+        self.setting_draft.as_ref()
     }
 
     // ---- the notes page ----------------------------------------------
@@ -2214,6 +2455,9 @@ impl App {
         match self.page {
             Page::Notes => self.new_note(),
             Page::Home => self.start_adding(),
+            // The settings page binds no key that adds anything: its
+            // rows are the settings there are.
+            Page::Settings => {}
         }
     }
 
@@ -2329,7 +2573,7 @@ impl App {
             // A task added while a past day is shown belongs to that
             // day, which is what its add line says (wireframe 08).
             List::Day => Place::Day(self.showing),
-            List::Days | List::Notes | List::Review => Place::Day(self.today),
+            List::Days | List::Notes | List::Review | List::Settings => Place::Day(self.today),
         }
     }
 
@@ -2379,6 +2623,9 @@ impl App {
                 // open in it.
                 text_field: self.draft.is_some(),
             },
+            Page::Settings => KeyContext::Settings {
+                field: self.setting_draft.is_some(),
+            },
         }
     }
 
@@ -2392,6 +2639,7 @@ impl App {
             (Page::Home, Pane::Backlog) if self.browsing() => List::Days,
             (Page::Home, Pane::Backlog) => List::Backlog,
             (Page::Notes, _) => List::Notes,
+            (Page::Settings, _) => List::Settings,
         }
     }
 
@@ -2505,6 +2753,7 @@ impl App {
             List::Days => self.cursors.days,
             List::Notes => self.cursors.notes,
             List::Review => self.cursors.review,
+            List::Settings => self.cursors.settings,
         };
         match wanted {
             Some(id) if rows.iter().any(|(row, _)| *row == id) => Some(id),
@@ -2559,6 +2808,7 @@ impl App {
             days: self.rows_of(List::Days).first().map(|(id, _)| *id),
             notes: self.rows_of(List::Notes).first().map(|(id, _)| *id),
             review: None,
+            settings: self.rows_of(List::Settings).first().map(|(id, _)| *id),
         };
     }
 
@@ -2574,6 +2824,7 @@ impl App {
             List::Days => &mut self.cursors.days,
             List::Notes => &mut self.cursors.notes,
             List::Review => &mut self.cursors.review,
+            List::Settings => &mut self.cursors.settings,
         };
         *slot = Some(id);
     }
@@ -2661,6 +2912,9 @@ impl App {
         self.page = match self.page {
             Page::Home => Page::Notes,
             Page::Notes => Page::Home,
+            // `n` is not a key of the settings page; the page it was
+            // opened from is where every way off it leads.
+            Page::Settings => self.came_from,
         };
     }
 
@@ -2724,6 +2978,7 @@ impl App {
                 self.page = Page::Notes;
                 self.notes_pane = NotesPane::List;
             }
+            List::Settings => self.page = Page::Settings,
             // The review is the whole window, so there is no other pane
             // for a click to move the keyboard to.
             List::Review => {}
@@ -2753,6 +3008,13 @@ impl App {
         if self.editor.take().is_some() {
             return;
         }
+        if self.setting_draft.take().is_some() {
+            return;
+        }
+        if self.page == Page::Settings {
+            self.leave_the_settings();
+            return;
+        }
         // Escape leaves the review with the pile intact; the home screen
         // counts what is left of it in red (DESIGN.md section 5).
         if self.review.take().is_some() {
@@ -2773,6 +3035,10 @@ impl App {
         let Some(kind) = self.popup.as_ref().map(|popup| popup.kind) else {
             if self.editor.is_some() {
                 self.commit_the_title();
+            } else if self.setting_draft.is_some() {
+                self.take_the_typed_setting();
+            } else if self.page == Page::Settings {
+                self.change_the_setting();
             } else if self.review.is_some() {
                 self.next_step();
             } else if self.page == Page::Notes {
@@ -2902,6 +3168,9 @@ impl App {
         }
         if let Some(editor) = &mut self.editor {
             return Some((&mut editor.text, &mut editor.caret));
+        }
+        if let Some(draft) = &mut self.setting_draft {
+            return Some((&mut draft.text, &mut draft.caret));
         }
         let draft = self.draft.as_mut()?;
         Some((&mut draft.text, &mut draft.caret))
@@ -3094,6 +3363,155 @@ fn byte_at(text: &str, caret: usize) -> usize {
     text.grapheme_indices(true)
         .nth(caret)
         .map_or(text.len(), |(at, _)| at)
+}
+
+/// The three date orders in the order the row steps through them, which
+/// is what a step and a cycle both count in.
+const DATE_STYLES: [DateStyle; 3] = [
+    DateStyle::Locale,
+    DateStyle::DayFirst,
+    DateStyle::MonthFirst,
+];
+
+/// How much of the window `h` and `l` are worth, in logical pixels on
+/// each side. A size is typed when it has to be exact.
+const WINDOW_STEP: i64 = 10;
+
+/// The value a settings row is stepped to by `h` and `l`: the state on
+/// that side of the one it holds, and the state it holds when there is
+/// none, so the ends of a row stop rather than wrap. Every setter holds
+/// what it is given to the setting's range, so a step off the end is the
+/// end (DOMAIN.md section 19).
+fn stepped(settings: &Settings, row: SettingRow, forward: bool) -> Settings {
+    let step = |n: u16| i64::from(n) + if forward { 1 } else { -1 };
+    let mut next = settings.clone();
+    match row {
+        SettingRow::DayStartsAt => {
+            next.set_day_starts_at(step(u16::from(settings.day_starts_at())));
+        }
+        SettingRow::WeekStartsOn => next.set_week_starts_on(if forward {
+            WeekStart::Sunday
+        } else {
+            WeekStart::Monday
+        }),
+        SettingRow::WorkDay(day) => {
+            let mut days = settings.work_days();
+            if days.contains(day) != forward {
+                days.toggle(day);
+            }
+            next.set_work_days(days);
+        }
+        SettingRow::ReviewOpensItself => next.set_review_opens_itself(forward),
+        SettingRow::DueAheadDays => next.set_due_ahead_days(step(settings.due_ahead_days())),
+        SettingRow::BackfillDays => next.set_backfill_days(step(settings.backfill_days())),
+        SettingRow::PileHorizonDays => {
+            next.set_pile_horizon_days(step(settings.pile_horizon_days()));
+        }
+        SettingRow::FloatingWindow => next.set_floating_window(forward),
+        SettingRow::WindowSize => {
+            let size = settings.window_size();
+            let by = if forward { WINDOW_STEP } else { -WINDOW_STEP };
+            next.set_window_size(WindowSize::new(
+                i64::from(size.width) + by,
+                i64::from(size.height) + by,
+            ));
+        }
+        SettingRow::Mouse => next.set_mouse(forward),
+        SettingRow::DateOrder => {
+            let at = date_style_at(settings);
+            let to = if forward {
+                (at + 1).min(DATE_STYLES.len() - 1)
+            } else {
+                at.saturating_sub(1)
+            };
+            next.set_date_style(DATE_STYLES[to]);
+        }
+        SettingRow::MessageSeconds => {
+            next.set_message_seconds(step(u16::from(settings.message_seconds())));
+        }
+        SettingRow::ConfirmDelete => next.set_confirm_delete(forward),
+    }
+    next
+}
+
+/// The value `space` and Enter change a row to: the other state of a
+/// toggle, and the next of a row with more than two, round to the first.
+/// A row whose value is typed has no next one; Enter opens its field.
+fn cycled(settings: &Settings, row: SettingRow) -> Settings {
+    let mut next = settings.clone();
+    match row {
+        SettingRow::WeekStartsOn => next.set_week_starts_on(match settings.week_starts_on() {
+            WeekStart::Monday => WeekStart::Sunday,
+            WeekStart::Sunday => WeekStart::Monday,
+        }),
+        SettingRow::WorkDay(day) => next.toggle_work_day(day),
+        SettingRow::ReviewOpensItself => {
+            next.set_review_opens_itself(!settings.review_opens_itself());
+        }
+        SettingRow::FloatingWindow => next.set_floating_window(!settings.floating_window()),
+        SettingRow::Mouse => next.set_mouse(!settings.mouse()),
+        SettingRow::DateOrder => {
+            let at = (date_style_at(settings) + 1) % DATE_STYLES.len();
+            next.set_date_style(DATE_STYLES[at]);
+        }
+        SettingRow::ConfirmDelete => next.set_confirm_delete(!settings.confirm_delete()),
+        SettingRow::DayStartsAt
+        | SettingRow::DueAheadDays
+        | SettingRow::BackfillDays
+        | SettingRow::PileHorizonDays
+        | SettingRow::WindowSize
+        | SettingRow::MessageSeconds => {}
+    }
+    next
+}
+
+fn date_style_at(settings: &Settings) -> usize {
+    DATE_STYLES
+        .iter()
+        .position(|style| *style == settings.date_style())
+        .unwrap_or_default()
+}
+
+/// What the field opens on, which is the value the row already holds,
+/// written the way it is typed.
+fn typed_value(settings: &Settings, row: SettingRow) -> String {
+    match row {
+        SettingRow::DayStartsAt => settings.day_starts_at().to_string(),
+        SettingRow::DueAheadDays => settings.due_ahead_days().to_string(),
+        SettingRow::BackfillDays => settings.backfill_days().to_string(),
+        SettingRow::PileHorizonDays => settings.pile_horizon_days().to_string(),
+        SettingRow::MessageSeconds => settings.message_seconds().to_string(),
+        SettingRow::WindowSize => {
+            let size = settings.window_size();
+            format!("{}x{}", size.width, size.height)
+        }
+        _ => String::new(),
+    }
+}
+
+/// The settings a typed line means, or nothing when it is not a number
+/// or a size. A number outside its range is held to the range rather
+/// than refused, so only nonsense comes back empty-handed.
+fn typed_into(settings: &Settings, row: SettingRow, typed: &str) -> Option<Settings> {
+    let mut next = settings.clone();
+    if row == SettingRow::WindowSize {
+        let (width, height) = typed.split_once(['x', 'X'])?;
+        next.set_window_size(WindowSize::new(
+            width.trim().parse().ok()?,
+            height.trim().parse().ok()?,
+        ));
+        return Some(next);
+    }
+    let number: i64 = typed.parse().ok()?;
+    match row {
+        SettingRow::DayStartsAt => next.set_day_starts_at(number),
+        SettingRow::DueAheadDays => next.set_due_ahead_days(number),
+        SettingRow::BackfillDays => next.set_backfill_days(number),
+        SettingRow::PileHorizonDays => next.set_pile_horizon_days(number),
+        SettingRow::MessageSeconds => next.set_message_seconds(number),
+        _ => return None,
+    }
+    Some(next)
 }
 
 /// What the hint bar calls a change, which is the label the domain put on

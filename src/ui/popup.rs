@@ -195,7 +195,9 @@ fn about_the_row(app: &App) -> String {
             .note(id)
             .map(|note| note.body.lines().next().unwrap_or_default().to_owned()),
         Some(RowId::Day(day)) => Some(day_label(day, app.dates())),
-        None => None,
+        // No key of the settings page acts on its row, so its palette is
+        // the app's section alone and this heading is never drawn.
+        Some(RowId::Setting(_)) | None => None,
     };
     match title {
         Some(title) => format!("FOR \"{}\"", title.to_uppercase()),
@@ -865,6 +867,10 @@ fn columns() -> Vec<(&'static str, Vec<Help>)> {
         &shared,
     ));
 
+    // The settings page shares nothing but the keys that are everywhere,
+    // so its column is the whole of its own table.
+    let fourth = only(KeyContext::Settings { field: false }, &shared);
+
     let mut everywhere: Vec<Help> = shared.into_iter().map(Help::Key).collect();
     everywhere.push(Help::Key(&input::CTRL_C));
 
@@ -872,6 +878,7 @@ fn columns() -> Vec<(&'static str, Vec<Help>)> {
         ("EVERYWHERE", everywhere),
         ("DAY", second),
         ("BACKLOG", third),
+        ("SETTINGS", fourth),
     ]
 }
 
