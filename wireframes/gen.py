@@ -841,8 +841,8 @@ def p13():
             ('', ),
             ('g', 'Review'),
             ('r', 'Open the review on launch', 'on'),
-            ('r', 'Surface due tasks early', '0 days'),
-            ('r', 'Backfill copies', 'no cap'),
+            ('r', 'Surface due tasks early', 'on its day'),
+            ('r', 'Catch up recurring tasks', 'every missed day'),
             ('r', 'Hide pile tasks older than', 'never'),
             ('', ),
             ('g', 'Window'),
@@ -881,7 +881,7 @@ def p13():
 <ol>
 <li>The status line names the page and the two keys that leave it. There is no review count and no notes count here: the settings are about the program, not about a day.</li>
 <li>What the app does not hold, said where somebody looking for it would look: colour, font and size come from the terminal, which Omarchy themes.</li>
-<li>Every row is a label dotted across to its value, in five groups. A toggle reads <em>on</em> or <em>off</em>; a number carries its unit, and the number that means "none of it" is written as what none of it does: <em>no cap</em>, <em>never</em>, <em>until the next key</em>. The cursor row's value is in the accent colour, because it is the one value a key would change.</li>
+<li>Every row is a label dotted across to its value, in five groups. A toggle reads <em>on</em> or <em>off</em>; a number carries its unit, and the number that means "none of it" is written as what none of it does: <em>on its day</em>, <em>every missed day</em>, <em>never</em>, <em>until the next key</em>. The cursor row's value is in the accent colour, because it is the one value a key would change.</li>
 <li>Beside the list, what the cursor row does, in the words DOMAIN.md gives it. Under 100 columns this pane goes and the list has the window, the way the review's panel does.</li>
 <li>What the setting holds when nobody has changed it, so a page that has been fiddled with can be read back to its defaults without a document.</li>
 </ol>

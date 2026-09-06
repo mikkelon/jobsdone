@@ -7,7 +7,7 @@ use ratatui::backend::{CrosstermBackend, TestBackend};
 use ratatui::style::Color;
 use ratatui::{Terminal, TerminalOptions, Viewport};
 
-use crate::app::{App, Desktop, Locale, WindowSize};
+use crate::app::{App, Desktop, List, Locale, RowId, SettingRow, WindowSize, setting_rows};
 use crate::domain::tests::MemStore;
 use crate::domain::{
     DateStyle, DueChip, FromPlace, Model, Note, Placement, Schedule, Task, WeekStart, Weekday,
@@ -2649,6 +2649,32 @@ fn the_settings_page_matches_the_wireframe() {
         &look(&app, 120, 36),
         &wireframe("13-settings", 0, 36),
         "the settings page",
+    );
+}
+
+#[test]
+fn the_longest_description_fits_beside_the_list() {
+    let mut app = app();
+    app.update(Action::SettingsPage);
+    for _ in 0..setting_rows().len() {
+        if app.cursor(List::Settings) == Some(RowId::Setting(SettingRow::BackfillDays)) {
+            break;
+        }
+        app.update(Action::Down);
+    }
+    let drawn = look(&app, 120, 36).join("\n");
+
+    assert!(
+        drawn.contains("Catch up recurring tasks"),
+        "the row and the pane beside it are both named:\n{drawn}"
+    );
+    assert!(
+        drawn.contains("them all."),
+        "the description reaches its last words:\n{drawn}"
+    );
+    assert!(
+        drawn.contains("Default: every missed day"),
+        "and the default line still has a row under the description:\n{drawn}"
     );
 }
 

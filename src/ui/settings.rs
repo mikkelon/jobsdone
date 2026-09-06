@@ -115,7 +115,7 @@ fn label(row: SettingRow) -> &'static str {
         SettingRow::WorkDay(day) => weekday(day),
         SettingRow::ReviewOpensItself => "Open the review on launch",
         SettingRow::DueAheadDays => "Surface due tasks early",
-        SettingRow::BackfillDays => "Backfill copies",
+        SettingRow::BackfillDays => "Catch up recurring tasks",
         SettingRow::PileHorizonDays => "Hide pile tasks older than",
         SettingRow::FloatingWindow => "Floating window",
         SettingRow::WindowSize => "Window size",
@@ -161,10 +161,13 @@ fn value(settings: &Settings, row: SettingRow) -> String {
         .to_owned(),
         SettingRow::WorkDay(day) => on_off(settings.work_days().contains(day)),
         SettingRow::ReviewOpensItself => on_off(settings.review_opens_itself()),
-        SettingRow::DueAheadDays => days(settings.due_ahead_days()),
+        SettingRow::DueAheadDays => match settings.due_ahead_days() {
+            0 => "on its day".to_owned(),
+            n => format!("{} before", days(n)),
+        },
         SettingRow::BackfillDays => match settings.backfill_days() {
-            0 => "no cap".to_owned(),
-            n => days(n),
+            0 => "every missed day".to_owned(),
+            n => format!("the last {}", days(n)),
         },
         SettingRow::PileHorizonDays => match settings.pile_horizon_days() {
             0 => "never".to_owned(),
@@ -218,12 +221,16 @@ fn about(row: SettingRow) -> &'static str {
              only opened with M."
         }
         SettingRow::DueAheadDays => {
-            "A due task surfaces in the review this many days before its date, as well as on \
-             and after it."
+            "How many days before its due date a backlog task is put in front of you in the \
+             morning review. At 0 it surfaces on the due date and on every day after until it \
+             is dealt with; at 3 it also surfaces on the three days before."
         }
         SettingRow::BackfillDays => {
-            "After time away, copies of a schedule are made only for the last N days. Older \
-             scheduled dates are skipped for good. No cap makes every copy."
+            "A recurring task gets a fresh copy on every day its schedule names. After days \
+             away from the app, the copies for the days you missed are made on the next launch, \
+             each landing on the review pile. This caps how far back that goes: at 7, only the \
+             last week's missed copies are made and older ones are skipped for good. Every \
+             missed day makes them all."
         }
         SettingRow::PileHorizonDays => {
             "An unfinished task from a day more than N days ago stays on its day but is left \
@@ -234,8 +241,9 @@ fn about(row: SettingRow) -> &'static str {
              to the Hyprland rule the moment it changes."
         }
         SettingRow::WindowSize => {
-            "The floating window's size in logical pixels. 870 by 650 is 120 by 36 cells in \
-             foot with Omarchy's default font."
+            "The floating window's size in logical pixels. h and l step through five sizes, \
+             named by the cells they give in foot with Omarchy's default font; Enter types any \
+             other. 870 by 650 is 120 by 36 cells, the size the screens are designed at."
         }
         SettingRow::Mouse => {
             "Whether the app takes the mouse. Off, the terminal's own text selection works \
