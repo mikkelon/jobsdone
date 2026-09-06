@@ -28,8 +28,9 @@ half width. Both must feel right, and the floating case comes first.
   more rows. Under 100 columns the two panes collapse to tabs.
 - Hyprland does the windowing: a window rule on the app's class floats and
   sizes it. The rule is the app's own to write, from the `floating_window`
-  and `window_size` settings; the app never positions or resizes its
-  window itself.
+  and `window_size` settings. The app never positions or resizes its
+  window itself, except to show a size being chosen on the settings page,
+  which it does by asking Hyprland the moment the keys go quiet.
 - Several windows may be open at once, a tile left running and a floating
   one opened elsewhere. All of them show the same data within a moment.
 
@@ -274,7 +275,7 @@ The app never reorders, carries over, expires, or tidies.
   today is always an explicit `t`.
 - Recurring schedules are the one thing that creates tasks by themselves.
   On launch the app creates the copies for every scheduled date since the
-  last launch, or for as many of the last days as the backfill setting
+  last launch, or for as many of the last days as the catch-up setting
   allows, and the surfaced step lists today's, once, for information.
   A window left open past the hour the day starts has reached a new day
   without a launch, so it does the same then; a day is never short of its
@@ -341,9 +342,9 @@ five groups: the day, the work days, the review, the window and the
 looks. Every row is a label dotted across to its value, because a page of
 settings is read down the labels and across to the values. A toggle reads
 `on` or `off`; a number carries its unit, and the number that means none
-of it is written as what none of it does: `no cap`, `never`, `until the
-next key`. The value on the cursor row is in the accent colour, because
-it is the one value a key would change.
+of it is written as what none of it does: `on its day`, `every missed
+day`, `never`, `until the next key`. The value on the cursor row is in
+the accent colour, because it is the one value a key would change.
 
 Beside the list, in a column of 40, what the cursor row does and what it
 holds when nobody has changed it. Under 100 columns that column goes and
@@ -353,20 +354,25 @@ off it.
 
 `h` and `l` step a value: `l` turns a toggle on and `h` off, a row of two
 or three states moves to the one beside it and stops at the ends, a
-number goes up or down by one and the window size by ten pixels each way.
-`space` and Enter change it too, except on a row holding a number or a
-size, where there is nothing to cycle through: there they open a field in
-place of the value, which is typed, Enter saves and Escape keeps what was
-there. A number outside its range is held to the range rather than
-refused; the one refusal is a week with no work day in it, which says so
-in the hint bar and leaves the row as it was. Nothing on the page is on
+number goes up or down by one, and the window size moves to the preset
+beside it, one of five sizes named by the grid each gives. `space` and
+Enter change it too, except on a row holding a number or a size, where
+there is nothing to cycle through: there they open a field in place of
+the value, which is typed, Enter saves and Escape keeps what was there.
+A number outside its range is held to the range rather than refused; the
+one refusal is a week with no work day in it, which says so in the hint
+bar and leaves the row as it was. Nothing on the page is on
 the undo stack.
 
 What is not on the page: colour and font, which come from the terminal
 that Omarchy themes. Whether the window floats and how big it is are on
 it, because those are a rule the app writes for Hyprland rather than
 something Hyprland is asked about; the hint bar carries whatever the
-window manager answers. There is no preferences file: the settings are
+window manager answers. Neither is handed over on the keystroke: a window
+setting is owed until the keys have been quiet for a moment, so a key
+held down on the size row walks the presets and Hyprland hears the one it
+stopped on. A floating window is then resized to it, so the size chosen
+is the size on screen. There is no preferences file: the settings are
 rows in the database, beside the tasks, so a second window picks a change
 up the way it picks up any other.
 

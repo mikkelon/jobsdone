@@ -83,7 +83,7 @@ schedule or other copies.
 A copy that is not closed on its day lands in the review pile like any other
 task. Coming back from time away means a copy for every scheduled date since
 the last open, which is where the cost of being away is meant to be seen;
-the backfill setting cuts that to the last few days for someone who would
+the catch-up setting cuts that to the last few days for someone who would
 rather start clean. Editing the schedule or the title changes future copies
 only. Removing the schedule stops new copies; existing ones stay where they
 are.
@@ -123,11 +123,11 @@ are kept with the tasks, so every open window picks a change up at once.
 | Week starts on              | Monday                 | Where the history's weeks are broken, and the first column of a calendar. |
 | Work days                   | Monday to Friday       | What "every work day" repeats on, and what "next work day" means. |
 | Open the review on launch   | on                     | Off, the morning review waits for `M` instead of opening itself. |
-| Surface due tasks early     | 0 days                 | How many days before its date a due task starts surfacing in the review. |
-| Backfill copies             | no cap                 | After time away, how far back copies of a recurring task are made. |
+| Surface due tasks early     | on its day             | How many days before its due date a backlog task is put in front of you in the morning review. At 0 it surfaces on the due date and on every day after until it is dealt with; at 3 it also surfaces on the three days before. |
+| Catch up recurring tasks    | every missed day       | A recurring task gets a fresh copy on every day its schedule names. After days away from the app, the copies for the days you missed are made on the next launch, each landing on the review pile. This caps how far back that goes: at 7, only the last week's missed copies are made and older ones are skipped for good. Every missed day makes them all. |
 | Hide pile tasks older than  | never                  | How far back the review pile reaches. Older tasks stay on their day. |
 | Floating window             | on                     | On Omarchy, whether the app floats or tiles. |
-| Window size                 | 870x650                | The floating window's size, which is 120 by 36 cells in the default font. |
+| Window size                 | 870x650 · 120 by 36 cells | The floating window's size in logical pixels. `h` and `l` step through five sizes, named by the cells they give in foot with Omarchy's default font; Enter types any other. 870 by 650 is 120 by 36 cells, the size the screens are designed at. |
 | Mouse                       | on                     | Off, the terminal's own selection and scrollback come back and the keyboard does everything. |
 | Hint bar messages stand for | 4 seconds              | How long "closed X · u undo" stays when no key follows. |
 | Date order                  | as the locale writes it | `Fri 5 Sep` or `Fri Sep 5`, everywhere a date is written. |

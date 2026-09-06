@@ -715,15 +715,35 @@ page only draws them.
 | `week_starts_on`     | `monday` or `sunday`                   | `monday`   | Week starts on        | Where the history's "this week"/"last week" rules fall, and the first column of the calendar and the weekday row of the repeat card. |
 | `work_days`          | comma list of `mon`..`sun`, at least 1 | `mon,tue,wed,thu,fri` | Work days (seven toggle rows) | What "every work day" repeats on and what "next work day" on the move card means. |
 | `review_opens_itself`| `true`/`false`                         | `true`     | Open the review on launch | Whether the morning review opens itself on the first launch of a day. Off, it is only opened with `M`. |
-| `due_ahead_days`     | days, 0..=365                          | `0`        | Surface due tasks early | A due task surfaces in the review this many days before its date, as well as on and after it. |
-| `backfill_days`      | days, 0..=365; 0 means no cap          | `0`        | Backfill copies       | After time away, copies of a schedule are made only for the last N days. Older scheduled dates are skipped for good. 0 makes every copy. |
+| `due_ahead_days`     | days, 0..=365                          | `0`        | Surface due tasks early | How many days before its due date a backlog task is put in front of you in the morning review. At 0 it surfaces on the due date and on every day after until it is dealt with; at 3 it also surfaces on the three days before. The row reads `on its day` at 0 and `N days before` otherwise. |
+| `backfill_days`      | days, 0..=365; 0 means no cap          | `0`        | Catch up recurring tasks | A recurring task gets a fresh copy on every day its schedule names. After days away from the app, the copies for the days you missed are made on the next launch, each landing on the review pile. This caps how far back that goes: at 7, only the last week's missed copies are made and older ones are skipped for good. Every missed day makes them all. The row reads `every missed day` at 0 and `the last N days` otherwise. |
 | `pile_horizon_days`  | days, 0..=3650; 0 means never          | `0`        | Hide pile tasks older than | An unfinished task from a day more than N days ago stays on its day but is left out of the pile and its count. 0 hides nothing. |
-| `floating_window`    | `true`/`false`                         | `true`     | Floating window       | On Hyprland, whether the app opens in a centred floating window or tiles. Written to the Hyprland rule the moment it changes. |
-| `window_size`        | `WxH` in logical pixels, 200..=10000 each | `870x650` | Window size         | The floating window's size. 870 by 650 is 120 by 36 cells in foot with Omarchy's default font. |
+| `floating_window`    | `true`/`false`                         | `true`     | Floating window       | On Hyprland, whether the app opens in a centred floating window or tiles. Written to the Hyprland rule once the keys have gone quiet. |
+| `window_size`        | `WxH` in logical pixels, 200..=10000 each | `870x650` | Window size         | The floating window's size in logical pixels. `h` and `l` step through five presets, named by the cells they give in foot with Omarchy's default font; Enter types any other. 870 by 650 is 120 by 36 cells, the size the screens are designed at. |
 | `mouse`              | `true`/`false`                         | `true`     | Mouse                 | Whether the app takes the mouse. Off, the terminal's own text selection works again and the keyboard does everything. Takes effect at once. |
 | `message_seconds`    | seconds, 0..=60; 0 means until the next key | `4`   | Hint bar messages stand for | How long "closed X · u undo" stays when no key follows. 0 keeps it until the next key. |
 | `date_style`         | `locale`, `day_first`, `month_first`   | `locale`   | Date order            | `Fri 5 Sep` or `Fri Sep 5`, everywhere a date is written. `locale` follows the environment's locale (STACK.md section 8). |
 | `confirm_delete`     | `true`/`false`                         | `false`    | Confirm before delete | `x` asks first instead of deleting and offering `u`. Applies to tasks, notes and the review pile. |
+
+### The window sizes
+
+`window_size` may hold any pair in its range, but the page offers five,
+which are the ones `h` and `l` walk. Each is a whole number of cells in
+foot with Omarchy's default font, where a cell is about 7.02 by 17.28
+pixels and 14 pixels of padding sit on each side (STACK.md section 7):
+
+| Pixels    | Cells      |
+|-----------|------------|
+| 730x550   | 100 by 30  |
+| 870x650   | 120 by 36, the default |
+| 1010x755  | 140 by 42  |
+| 1150x860  | 160 by 48  |
+| 1290x960  | 180 by 54  |
+
+A size that is one of the five is written with its grid; any other is
+written `900x700 · custom`, because what a cell measures depends on the
+font and the padding the terminal was started with, and only these five
+were measured.
 
 ### The codec
 

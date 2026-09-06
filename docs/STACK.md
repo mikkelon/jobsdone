@@ -211,15 +211,23 @@ On Omarchy, recognised by `/usr/share/omarchy` and `omarchy-launch-tui`:
 
   870 by 650 pixels is 120 by 36 cells in foot with Omarchy's default
   font (JetBrainsMono Nerd Font 9) and 14-pixel padding, measured on a
-  clean install. Hyprland sizes in logical pixels, so the count holds on
-  a scaled monitor too. The rule is the `floating_window` and
-  `window_size` settings written out (section 8), so the settings page
-  changes it with no install at all; a tiled window is the two markers
-  with nothing between them. `jobsdone desktop [--floating | --tiled]
+  clean install. Take the padding off each side and a cell is about 7.02
+  by 17.28 pixels, which is where the settings page's other four sizes
+  come from: 730x550 is 100 by 30 cells, 1010x755 is 140 by 42, 1150x860
+  is 160 by 48 and 1290x960 is 180 by 54 (DOMAIN.md section 19).
+  Hyprland sizes in logical pixels, so the counts hold on a scaled
+  monitor too. The rule is the `floating_window` and `window_size`
+  settings written out (section 8), so the settings page changes it with
+  no install at all; a tiled window is the two markers with nothing
+  between them. `jobsdone desktop [--floating | --tiled]
   [--size WxH]` is what writes it, and the install script runs it once the
   binary is in place, passing on the window flags it was given. Writing
   reloads Hyprland and fails loudly if `hyprctl configerrors` has anything
-  to say.
+  to say. From the settings page the rule is written when the keys have
+  been quiet for a tick rather than on the keystroke, so a held key costs
+  one reload; a floating window is then given the size on the spot, with
+  `hyprctl dispatch resizeactive exact W H` and `centerwindow`, so the
+  size being chosen is the size on screen.
 
 Some machines have one block instead, `-- jobsdone: begin` to
 `-- jobsdone: end`, holding both. An install that finds it takes it out,

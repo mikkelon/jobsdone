@@ -29,7 +29,7 @@ than one file, `src/<module>/*.rs`.
 | `app`      | Application state, the launch sequence, reloading, turning actions into commands, and the screen layout.        |
 | `ui`       | Drawing: application state in, a ratatui frame out, plus the layout of what was drawn.                          |
 | `terminal` | Raw mode, alternate screen, mouse capture while the setting asks for it, the panic hook, and the event loop with its 250 ms tick. |
-| `desktop`  | The window rule the program keeps for itself: the block in Hyprland's configuration, and the reload.             |
+| `desktop`  | The window rule the program keeps for itself: the block in Hyprland's configuration, the reload, and the resize that shows a size being chosen. |
 | `main.rs`  | The command line, XDG paths, the locale, logging to the state directory, opening storage, building the desktop, running the terminal. |
 
 Anything not on this list is not a top-level module. Helpers live inside
@@ -148,12 +148,21 @@ is a `Model` and `Model::apply`, and it lives in `domain/tests.rs` as
     trait Desktop {
         fn available(&self) -> bool;
         fn apply_window(&self, floating: bool, size: WindowSize) -> Result<(), String>;
+        fn preview(&self, size: WindowSize) -> Result<(), String>;
     }
 
 `main.rs` hands the application whichever window manager is out there, so
 `app` never names Hyprland and a test hands it a fake. The error is a
 sentence for the hint bar rather than a type, because there is nothing
 the application can do about it but say so.
+
+`apply_window` is the rule the window opens by; `preview` is the window
+it is in already, resized and centred so that a size being chosen on the
+settings page is seen rather than read. Both are owed rather than done:
+a window setting changed by a key marks the window owed, and the tick
+that follows 250 ms of quiet keys pays it once, so a key held down on
+the size row costs one rewrite of Hyprland's configuration rather than
+one per repeat.
 
 ### The path of one key press
 
@@ -341,16 +350,18 @@ adds it here first, the way a new dependency is added to section 2 first.
   `generate_copies`, then the review gate and `start_review` if the
   review opens.
 - `Desktop`: what the window manager can be asked to do about the window
-  the program is in, `available()` and `apply_window(floating, size)`,
-  implemented by `desktop` and by a fake in the tests. `Locale` is what
-  the environment says dates look like here, which `main.rs` resolves
-  once. `WindowSize` and `DateOrder` are re-exported here so that both
-  seams are spoken in one vocabulary.
+  the program is in, `available()`, `apply_window(floating, size)` and
+  `preview(size)`, implemented by `desktop` and by a fake in the tests.
+  `Locale` is what the environment says dates look like here, which
+  `main.rs` resolves once. `WindowSize` and `DateOrder` are re-exported
+  here so that both seams are spoken in one vocabulary.
 - `App::settings() -> &Settings`, `App::dates() -> DateOrder`, the
   setting resolved against the locale, and `App::change_settings(Settings)`,
   which commits, works the day out again in case the day now starts at
-  another hour, refreshes the views and hands a changed window setting to
-  the desktop, whose answer the hint bar carries.
+  another hour, refreshes the views and, when a window setting moved,
+  marks the window owed. The tick pays it: the rule is written, a
+  floating window is shown the size, and the hint bar carries whatever
+  came back.
 - The settings page as rows: `SettingRow`, one per row of the page and so
   one per work day, `SettingGroup`, the label a run of them is drawn
   under, and `setting_rows() -> &[(SettingGroup, SettingRow)]`, the whole
@@ -426,6 +437,9 @@ adds it here first, the way a new dependency is added to section 2 first.
   block between `-- jobsdone: window (begin)` and `(end)` in
   `$XDG_CONFIG_HOME/hypr/bindings.lua` and reloading a running Hyprland.
   Off Hyprland `apply_window` says so in a sentence and writes nothing.
+  `preview` is `hyprctl dispatch resizeactive exact W H` and then
+  `centerwindow`, and where no Hyprland is running there is no window to
+  dispatch to, which is nothing done rather than a failure.
 
 ### `terminal`
 
