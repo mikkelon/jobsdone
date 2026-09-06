@@ -2695,6 +2695,27 @@ fn a_number_out_of_its_range_is_held_to_the_range() {
 }
 
 #[test]
+fn only_a_preset_size_names_a_grid() {
+    assert_eq!(WindowSize::default().cells(), Some((120, 36)));
+    assert_eq!(WindowSize::PRESETS[0].cells(), Some((100, 30)));
+    assert_eq!(WindowSize::PRESETS[4].cells(), Some((180, 54)));
+    assert_eq!(WindowSize::new(900, 700).cells(), None);
+}
+
+#[test]
+fn the_presets_climb() {
+    let mut sizes = WindowSize::PRESETS.iter();
+    let mut last = *sizes.next().expect("a first preset");
+    for size in sizes {
+        assert!(
+            size.width > last.width && size.height > last.height,
+            "{size:?} is not larger than {last:?}"
+        );
+        last = *size;
+    }
+}
+
+#[test]
 fn a_work_day_goes_on_and_off_the_set() {
     let mut days = WorkDays::default();
     days.toggle(Weekday::Sat);

@@ -135,6 +135,35 @@ impl WindowSize {
     pub const LEAST: i64 = 200;
     pub const MOST: i64 = 10_000;
 
+    /// The five sizes the page steps through, smallest first, each a
+    /// whole number of cells in foot with Omarchy's default font
+    /// (STACK.md section 7). A size is a pair of pixel counts and a
+    /// person picks a window by how much of the program fits in it, so
+    /// the row offers the grids and types the pixels only when it has
+    /// to.
+    pub const PRESETS: [WindowSize; 5] = [
+        WindowSize {
+            width: 730,
+            height: 550,
+        },
+        WindowSize {
+            width: 870,
+            height: 650,
+        },
+        WindowSize {
+            width: 1010,
+            height: 755,
+        },
+        WindowSize {
+            width: 1150,
+            height: 860,
+        },
+        WindowSize {
+            width: 1290,
+            height: 960,
+        },
+    ];
+
     /// A size, held to the range whatever it is given.
     pub fn new(width: i64, height: i64) -> WindowSize {
         WindowSize {
@@ -142,16 +171,27 @@ impl WindowSize {
             height: clamp(height, WindowSize::LEAST, WindowSize::MOST) as u16,
         }
     }
+
+    /// The grid this size gives, for the sizes that were chosen to give
+    /// a whole one. Any other size is a number of pixels and nothing
+    /// more, because what a cell measures depends on the font and the
+    /// padding the terminal was started with.
+    pub fn cells(self) -> Option<(u16, u16)> {
+        WindowSize::PRESETS
+            .iter()
+            .position(|preset| *preset == self)
+            .map(|at| PRESET_CELLS[at])
+    }
 }
 
+/// The grid each preset gives, in the order the presets are in.
+const PRESET_CELLS: [(u16, u16); 5] = [(100, 30), (120, 36), (140, 42), (160, 48), (180, 54)];
+
 impl Default for WindowSize {
-    /// 120 by 36 cells in foot with Omarchy's default font, which is the
-    /// size the wireframes are drawn at.
+    /// The middle preset, 120 by 36 cells in foot with Omarchy's default
+    /// font, which is the size the wireframes are drawn at.
     fn default() -> Self {
-        WindowSize {
-            width: 870,
-            height: 650,
-        }
+        WindowSize::PRESETS[1]
     }
 }
 
