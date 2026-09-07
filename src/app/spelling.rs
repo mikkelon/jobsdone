@@ -22,6 +22,18 @@
 //! a check. Both are values Harper holds for the life of the program, and
 //! the second is built from the first.
 //!
+//! **Words of one's own.** The writer's own words are an ignore list
+//! held beside Harper's dictionaries rather than merged into them: a
+//! check passes over a word in it, and a request for replacements
+//! answers nothing for one. Nothing is offered *those* words as a
+//! correction for a typo beside them, and setting the list builds no
+//! dictionary and rebuilds no index, which is what lets a word be added
+//! between two keystrokes. Words are matched by the domain's key, which
+//! is composed and lowercase, so a word is matched whatever case it is
+//! written in and shown in the case it was stored in. The lexer ends a
+//! word at a hyphen, so a hyphenated name is matched against the whole
+//! run of words its hyphens join.
+//!
 //! **Offsets.** Every range this module returns is in Unicode grapheme
 //! clusters counted from the start of the text, end exclusive, which is
 //! the unit a note's caret counts in. Harper counts in `char`s, so a
@@ -56,10 +68,12 @@
 //! search found nothing, took 1.4 ms. A word there is nothing to correct
 //! searches for nothing and was under a microsecond.
 
+use crate::domain::dictionary_key;
 use harper_core::parsers::{Parser, PlainEnglish};
 use harper_core::spell::{Dictionary, FstDictionary, MutableDictionary, suggest_correct_spelling};
 use harper_core::{CharStringExt, Dialect, Punctuation, Token, TokenKind};
 use std::borrow::Cow;
+use std::collections::BTreeMap;
 use std::ops::Range;
 use std::sync::Arc;
 use unicode_normalization::{UnicodeNormalization, is_nfc};
@@ -80,7 +94,13 @@ pub struct SpellChecker {
     /// Built on the first word a caller asks replacements for, which is
     /// a question a session may never ask.
     fuzzy: Option<Arc<FstDictionary>>,
-    /// The text the answer below was given for.
+    /// The words the writer has said are words, keyed the way
+    /// [`dictionary_key`] writes them and holding the spelling to show
+    /// them by. Only the keys are read here: a check asks whether a
+    /// word is in this list, never what it looks like.
+    personal: BTreeMap<String, String>,
+    /// The text the answer below was given for, and empty when there is
+    /// no answer to give.
     checked: String,
     found: Vec<Range<usize>>,
 }
@@ -111,6 +131,15 @@ const DISTANCES: Range<u8> = 2..4;
 /// this can be within [`DISTANCES`] of an entry. A search would read the
 /// whole dictionary to answer nothing.
 const LONGEST: usize = 28;
+
+/// The longest a word of the writer's own may be, in chars, which is the
+/// cap the domain holds them to.
+///
+/// It bounds the walk along a run of hyphens in both directions: a run
+/// longer than this cannot be one word in the list, so reading further
+/// finds nothing, and each word of a chain costs a fixed walk rather
+/// than the length of the chain.
+const NAME: usize = 128;
 
 impl SpellChecker {
     /// The words in `text` that the American English dictionary does not
@@ -157,6 +186,18 @@ impl SpellChecker {
             if known(dictionary.as_ref(), word) {
                 continue;
             }
+            // After the dictionary, so that the words a note is mostly
+            // made of never have a key built for them, and only where
+            // there is a list to match against, so that a writer who
+            // keeps none never walks the hyphens around a typo.
+            if !self.personal.is_empty()
+                && (self.accepted(word)
+                    || prose
+                        .hyphenated(at)
+                        .is_some_and(|name| self.accepted(&source[name])))
+            {
+                continue;
+            }
             self.found
                 .push(clusters.at(token.span.start)..clusters.after(token.span.end));
         }
@@ -197,6 +238,12 @@ impl SpellChecker {
         {
             return Vec::new();
         }
+        // A word of the writer's own is not a misspelling, so there is
+        // nothing to put in its place and no dictionary to build to say
+        // so.
+        if self.accepted(&composed) {
+            return Vec::new();
+        }
         // Before the fuzzy dictionary, so that a word there is nothing
         // to correct never builds it.
         let dictionary = self.warm().clone();
@@ -209,6 +256,45 @@ impl SpellChecker {
             .map(|distance| ranked(&composed, distance, fuzzy.as_ref()))
             .find(|offered| !offered.is_empty())
             .unwrap_or_default()
+    }
+
+    /// Takes the words the writer has added to their own dictionary,
+    /// keyed by [`dictionary_key`] against the spelling to show, and
+    /// says whether they differ from the ones already held.
+    ///
+    /// These words are an ignore list rather than entries in a
+    /// dictionary: a check passes over them and nothing is offered in
+    /// their place, but neither are they offered as corrections for a
+    /// word near them, which is what keeps this off the fuzzy search
+    /// and its 200 ms rebuild.
+    ///
+    /// Nothing is built here, so a session that sets a dictionary of a
+    /// hundred words and never opens a note still pays for no Harper
+    /// dictionary at all.
+    pub fn set_personal_dictionary(&mut self, words: &BTreeMap<String, String>) -> bool {
+        if self.personal == *words {
+            return false;
+        }
+        self.personal.clone_from(words);
+        // A word added or taken away changes what the last check would
+        // answer, and the text it was asked about need not change with
+        // it.
+        self.checked.clear();
+        self.found.clear();
+        true
+    }
+
+    /// Whether this word is one the writer has said is a word.
+    ///
+    /// The key is the domain's, so that the word typed into a personal
+    /// dictionary and the word written in a note are compared by one
+    /// rule that this module does not hold a second copy of.
+    fn accepted(&self, word: &[char]) -> bool {
+        if self.personal.is_empty() {
+            return false;
+        }
+        let written: String = word.iter().collect();
+        self.personal.contains_key(&dictionary_key(&written))
     }
 
     /// Builds the dictionary if it is not built yet, and answers with
@@ -445,6 +531,62 @@ impl<'a> Prose<'a> {
             (other, one)
         };
         self.tokens[left].span.end == self.tokens[right].span.start
+    }
+
+    /// The whole of the hyphenated name the word at `at` stands in, in
+    /// chars, and none when no hyphen joins it to another word.
+    ///
+    /// A hyphen is deliberately not one of [`joins`]: `well-knwon` is
+    /// two ordinary words and the typo in it is a typo. A name of the
+    /// writer's own is the one thing that reads the run whole, so that
+    /// `Anne-Marie` in a personal dictionary is matched by the two
+    /// words the lexer splits it into.
+    fn hyphenated(&self, at: usize) -> Option<Range<usize>> {
+        let (first, last) = (self.run(at, -1), self.run(at, 1));
+        let name = self.tokens[first].span.start..self.tokens[last].span.end;
+        (first != at || last != at)
+            .then_some(name)
+            .filter(|name| name.end - name.start <= NAME)
+    }
+
+    /// The furthest word reached from `at` in one direction by stepping
+    /// over single hyphens with a word tight against each side, and
+    /// stopping at [`NAME`] chars from where it started.
+    fn run(&self, at: usize, step: isize) -> usize {
+        let from = self.tokens[at].span;
+        let mut here = at;
+        loop {
+            let hyphen = match here.checked_add_signed(step) {
+                Some(next) if self.hyphen(here, next) => next,
+                _ => return here,
+            };
+            let next = match hyphen.checked_add_signed(step) {
+                Some(next) if self.word(hyphen, next) => next,
+                _ => return here,
+            };
+            let reached = self.tokens[next].span;
+            if reached.end.max(from.end) - reached.start.min(from.start) > NAME {
+                return here;
+            }
+            here = next;
+        }
+    }
+
+    /// Whether the token at `next` is a hyphen with nothing between it
+    /// and the token at `here`.
+    fn hyphen(&self, here: usize, next: usize) -> bool {
+        self.tokens.get(next).is_some_and(|token| {
+            matches!(token.kind, TokenKind::Punctuation(Punctuation::Hyphen))
+                && self.touching(here, next)
+        })
+    }
+
+    /// Whether the token at `next` is a word with nothing between it and
+    /// the token at `here`.
+    fn word(&self, here: usize, next: usize) -> bool {
+        self.tokens
+            .get(next)
+            .is_some_and(|token| token.kind.is_word() && self.touching(here, next))
     }
 
     /// Whether the word at `at` is preceded, with no space, by a mark

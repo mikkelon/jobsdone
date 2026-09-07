@@ -532,3 +532,145 @@ fn a_replacement_takes_the_case_of_the_first_letter_of_the_word() {
     assert_eq!(capitalised(&chars("Teh"), &chars("TeX")), "TeX");
     assert_eq!(capitalised(&chars("berlin"), &chars("Berlin")), "Berlin");
 }
+
+// ---- a dictionary of one's own ------------------------------------
+
+/// A personal dictionary of these words, keyed the way the domain keys
+/// them and shown the way they are written here.
+fn own(words: &[&str]) -> BTreeMap<String, String> {
+    words
+        .iter()
+        .map(|word| (dictionary_key(word), (*word).to_owned()))
+        .collect()
+}
+
+/// A checker holding those words.
+fn holding(words: &[&str]) -> SpellChecker {
+    let mut checker = SpellChecker::default();
+    checker.set_personal_dictionary(&own(words));
+    checker
+}
+
+/// The words a check finds when the writer has added `words` to their
+/// own dictionary.
+fn beside(words: &[&str], text: &str) -> Vec<String> {
+    let clusters: Vec<&str> = text.graphemes(true).collect();
+    holding(words)
+        .check(text)
+        .into_iter()
+        .map(|found| clusters[found].concat())
+        .collect()
+}
+
+#[test]
+fn a_word_of_ones_own_is_not_a_misspelling() {
+    assert_eq!(words("Qwertz called back"), ["Qwertz"]);
+    assert!(beside(&["Qwertz"], "Qwertz called back").is_empty());
+}
+
+#[test]
+fn a_word_of_ones_own_is_matched_whatever_case_it_is_written_in() {
+    assert!(beside(&["Qwertz"], "qwertz and Qwertz").is_empty());
+    assert!(beside(&["qwertz"], "qwertz and Qwertz").is_empty());
+}
+
+#[test]
+fn a_word_of_ones_own_is_matched_composed_or_not() {
+    // The same name written with one precomposed letter and with a
+    // letter and a combining mark, either way round: the note in one
+    // and the dictionary in the other.
+    let composed = "Qw\u{eb}rtz";
+    let decomposed = "Qwe\u{308}rtz";
+    assert_eq!(words(&format!("ask {composed} first")), [composed]);
+    assert!(beside(&[composed], &format!("ask {decomposed} first")).is_empty());
+    assert!(beside(&[decomposed], &format!("ask {composed} first")).is_empty());
+}
+
+#[test]
+fn a_hyphenated_name_of_ones_own_is_not_a_misspelling() {
+    assert_eq!(words("met Qwertz-Asdfgh today"), ["Qwertz", "Asdfgh"]);
+    assert!(beside(&["Qwertz-Asdfgh"], "met Qwertz-Asdfgh today").is_empty());
+}
+
+#[test]
+fn a_hyphenated_name_does_not_accept_its_halves_on_their_own() {
+    assert_eq!(beside(&["Qwertz-Asdfgh"], "met Qwertz today"), ["Qwertz"]);
+}
+
+#[test]
+fn a_name_with_an_apostrophe_is_matched_whole() {
+    assert_eq!(words("rang O'qwertz about it"), ["O'qwertz"]);
+    assert!(beside(&["O'qwertz"], "rang O'qwertz about it").is_empty());
+}
+
+#[test]
+fn a_word_of_ones_own_is_the_word_and_not_its_shapes() {
+    // An ignore list, not a dictionary entry: nothing is inflected.
+    assert_eq!(beside(&["Qwertz"], "the Qwertzs arrived"), ["Qwertzs"]);
+}
+
+#[test]
+fn the_dictionary_still_rules_on_everything_else() {
+    assert_eq!(
+        beside(&["Qwertz"], "I recieved it from Qwertz"),
+        ["recieved"]
+    );
+    assert_eq!(beside(&["Qwertz"], "the colour of it"), ["colour"]);
+}
+
+#[test]
+fn a_word_of_ones_own_is_offered_nothing() {
+    assert!(holding(&["Qwertz"]).suggestions("Qwertz").is_empty());
+    assert!(holding(&["Qwertz"]).suggestions("qwertz").is_empty());
+    // And a word that is not in the list is still corrected.
+    assert_eq!(holding(&["Qwertz"]).suggestions("recieved")[0], "received");
+}
+
+#[test]
+fn a_word_of_ones_own_builds_no_dictionary_to_be_left_alone() {
+    let mut checker = holding(&["Qwertz"]);
+    assert!(checker.dictionary.is_none());
+    assert!(checker.suggestions("Qwertz").is_empty());
+    assert!(checker.dictionary.is_none());
+    assert!(checker.fuzzy.is_none());
+}
+
+#[test]
+fn setting_the_same_words_again_changes_nothing() {
+    let mut checker = SpellChecker::default();
+    assert!(checker.set_personal_dictionary(&own(&["Qwertz"])));
+    assert!(!checker.set_personal_dictionary(&own(&["Qwertz"])));
+    assert!(!checker.set_personal_dictionary(&own(&["Qwertz"])));
+}
+
+#[test]
+fn a_new_spelling_of_a_word_already_held_is_a_change() {
+    let mut checker = holding(&["qwertz"]);
+    assert!(checker.set_personal_dictionary(&own(&["Qwertz"])));
+    assert!(checker.check("Qwertz called back").is_empty());
+}
+
+#[test]
+fn a_text_that_did_not_change_is_checked_again_when_a_word_is_added() {
+    let mut checker = SpellChecker::default();
+    assert_eq!(pairs(&mut checker, "Qwertz called back"), [(0, 6)]);
+    assert!(checker.set_personal_dictionary(&own(&["Qwertz"])));
+    assert!(checker.check("Qwertz called back").is_empty());
+}
+
+#[test]
+fn a_text_that_did_not_change_is_checked_again_when_a_word_is_taken_away() {
+    let mut checker = holding(&["Qwertz"]);
+    assert!(checker.check("Qwertz called back").is_empty());
+    assert!(checker.set_personal_dictionary(&BTreeMap::new()));
+    assert_eq!(pairs(&mut checker, "Qwertz called back"), [(0, 6)]);
+}
+
+#[test]
+fn a_long_run_of_hyphens_is_read_no_further_than_a_name_can_be() {
+    // Every word of the chain is still a misspelling, and each of them
+    // walks a bounded stretch of it rather than the whole chain.
+    let text = ["qwertz"; 60].join("-");
+    assert_eq!(beside(&["Qwertz-Asdfgh"], &text).len(), 60);
+    assert_eq!(words(&text).len(), 60);
+}
