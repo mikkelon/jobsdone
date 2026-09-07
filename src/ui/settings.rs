@@ -90,7 +90,12 @@ pub(super) fn row(
         return;
     }
 
-    let value = value(app.settings(), row);
+    let value = match row {
+        // The one row whose value is not a setting: how many words the
+        // person has told the checker to know.
+        SettingRow::PersonalDictionary => words(app.dictionary_rows().len()),
+        other => value(app.settings(), other),
+    };
     let at = edge.saturating_sub(count(&value));
     canvas.put(at, y, &value, if on { accent() } else { dim() });
     let leader = at.saturating_sub(left + 2 * GAP);
@@ -125,6 +130,17 @@ fn label(row: SettingRow) -> &'static str {
         SettingRow::MessageSeconds => "Hint bar messages stand for",
         SettingRow::ConfirmDelete => "Confirm before delete",
         SettingRow::SpellCheckNotes => "Spell-check notes in US English",
+        SettingRow::PersonalDictionary => "Personal dictionary",
+    }
+}
+
+/// How many words the dictionary holds, as the row writes it. An empty
+/// dictionary says so in words rather than in a nought, because the row
+/// is read across from its label.
+fn words(held: usize) -> String {
+    match held {
+        0 => "no words yet".to_owned(),
+        other => counted(other, "word", "words"),
     }
 }
 
@@ -197,6 +213,9 @@ fn value(settings: &Settings, row: SettingRow) -> String {
         },
         SettingRow::ConfirmDelete => on_off(settings.confirm_delete()),
         SettingRow::SpellCheckNotes => on_off(settings.spell_check_notes()),
+        // The dictionary is not held in the settings; the row reads its
+        // count off the model instead.
+        SettingRow::PersonalDictionary => String::new(),
     }
 }
 
@@ -267,6 +286,12 @@ fn about(row: SettingRow) -> &'static str {
             "Whether a note being written is checked against a US English dictionary and the \
              words it does not know are marked. Off, nothing in a note is marked."
         }
+        SettingRow::PersonalDictionary => {
+            "The words the checker is told to accept: names, jargon, anything a US English \
+             dictionary was never going to know. Enter opens the list, where a adds a word, e \
+             changes one and x removes one. A word is matched whatever its capitalisation and \
+             kept the way it was typed. Alt+s in a note offers to add the word at the caret."
+        }
     }
 }
 
@@ -297,7 +322,9 @@ pub(super) fn about_the_setting(canvas: &mut Canvas, app: &App, column: Column, 
         canvas.put(x + 2, y, &line, plain());
         y += 1;
     }
-    if y + 1 > column.bottom {
+    // The dictionary row has no value nobody has changed: it is a list
+    // that starts empty, which the row itself says.
+    if y + 1 > column.bottom || row == SettingRow::PersonalDictionary {
         return;
     }
     let default = value(&Settings::default(), row);

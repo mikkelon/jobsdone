@@ -88,6 +88,8 @@ fn every_context() -> Vec<KeyContext> {
         popup(PopupKind::Date),
         popup(PopupKind::Repeat),
         popup(PopupKind::Spelling),
+        popup(PopupKind::Dictionary),
+        field(PopupKind::Dictionary),
         KeyContext::Settings { field: false },
         KeyContext::Settings { field: true },
     ]
@@ -717,6 +719,48 @@ fn the_open_note_names_alt_s_in_its_hint_bar_at_both_widths() {
         assert_eq!(side, Side::Left, "beside the note's own keys");
         assert!(!name.is_empty());
     }
+}
+
+#[test]
+fn the_dictionary_is_a_list_with_the_three_keys_a_list_has() {
+    let manager = popup(PopupKind::Dictionary);
+    for (key, action) in [
+        ("a", Action::Add),
+        ("e", Action::Edit),
+        ("x", Action::Delete),
+        ("enter", Action::Confirm),
+        ("esc", Action::Cancel),
+        ("j", Action::Down),
+        ("k", Action::Up),
+        ("up", Action::Up),
+        ("down", Action::Down),
+    ] {
+        assert_eq!(
+            action_for(&event_for(key), manager),
+            Some(action),
+            "{key:?}"
+        );
+    }
+}
+
+#[test]
+fn a_word_being_written_types_its_own_x_and_removes_nothing() {
+    let writing = field(PopupKind::Dictionary);
+    // The one key that would take a word away is a letter of the word
+    // being typed, so nothing goes while one is being written.
+    assert_eq!(action_for(&typing('x'), writing), Some(Action::Insert('x')));
+    for typed in ['a', 'e', 'q', ' '] {
+        assert_eq!(
+            action_for(&typing(typed), writing),
+            Some(Action::Insert(typed)),
+            "{typed:?}"
+        );
+    }
+    assert_eq!(
+        action_for(&event_for("enter"), writing),
+        Some(Action::Confirm)
+    );
+    assert_eq!(action_for(&event_for("esc"), writing), Some(Action::Cancel));
 }
 
 #[test]

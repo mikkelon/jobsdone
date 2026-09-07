@@ -4017,7 +4017,7 @@ fn alt_s_offers_the_dictionary_words_for_the_one_at_the_caret() {
     );
     assert!(
         !card.suggestions.is_empty(),
-        "a word with nothing to offer opens no card"
+        "a word the dictionary can better is offered what it can"
     );
     assert!(
         !card.suggestions.contains(&"teh".to_owned()),
@@ -4073,26 +4073,410 @@ fn up_and_down_choose_which_word_goes_in() {
     let mut app = note_with_the_caret_in_teh();
     app.update(Action::FixSpelling);
     let offered = spelling_card(&app).suggestions.clone();
+    let add = spelling_card(&app).add_row();
 
     app.update(Action::Down);
-    let at = app.popup().expect("the card").selected;
     assert_eq!(
-        at,
-        1.min(offered.len() - 1),
-        "one row down, and the last row stops rather than wrapping"
-    );
-    app.update(Action::Up);
-    app.update(Action::Up);
-    assert_eq!(
-        app.popup().expect("the card").selected,
-        0,
-        "and the first row stops too"
+        selected(&app),
+        1,
+        "one row down, which the card opened on the first of"
     );
 
+    // The card goes round: the row that adds the word is under the
+    // suggestions, and a step up from the first of them.
+    app.update(Action::Up);
+    app.update(Action::Up);
+    assert_eq!(selected(&app), add, "up from the first row is the offer");
     app.update(Action::Down);
-    let chosen = offered[app.popup().expect("the card").selected].clone();
+    assert_eq!(selected(&app), 0, "and down from the offer is the first");
+
+    app.update(Action::Down);
+    let chosen = offered[selected(&app)].clone();
     app.update(Action::Confirm);
     assert_eq!(note_body(&app), format!("remember {chosen} meeting"));
+}
+
+/// Which row of the open card is selected.
+fn selected(app: &App) -> usize {
+    app.popup().expect("the card").selected
+}
+
+/// A note with a word no dictionary was ever going to know, with the
+/// caret left at the end of it.
+fn note_with_a_name() -> App {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "Zqxjkv rang about Zqxjkv");
+    app
+}
+
+#[test]
+fn the_card_opens_on_the_offer_where_the_dictionary_has_nothing_to_say() {
+    let mut app = note_with_a_name();
+    app.update(Action::FixSpelling);
+
+    let card = spelling_card(&app);
+    assert_eq!(card.word, "Zqxjkv");
+    assert!(
+        card.suggestions.is_empty(),
+        "the dictionary has nothing to put in its place: {:?}",
+        card.suggestions
+    );
+    assert_eq!(
+        selected(&app),
+        card.add_row(),
+        "so the card opens on the one row it has, which adds the word"
+    );
+}
+
+#[test]
+fn enter_on_the_offer_keeps_the_word_and_takes_its_marks_off_the_note() {
+    let mut app = note_with_a_name();
+    // The one the caret is at the end of is held back while it is being
+    // typed; the one before it is marked.
+    assert_eq!(misspelt(&app), ["Zqxjkv"]);
+    let before = note_body(&app);
+    let caret = app.draft().expect("the note").caret;
+
+    app.update(Action::FixSpelling);
+    app.update(Action::Confirm);
+
+    assert!(app.popup().is_none(), "the card is answered and gone");
+    assert_eq!(
+        app.model().personal_dictionary.get("zqxjkv"),
+        Some(&"Zqxjkv".to_owned()),
+        "the word is held under its key, written the way it was typed"
+    );
+    assert!(
+        app.misspellings().is_empty(),
+        "and the mark goes from the far end of the note as well as from \
+         the word the card was about: {:?}",
+        misspelt(&app)
+    );
+    assert_eq!(note_body(&app), before, "the note says what it said");
+    assert_eq!(
+        app.draft().expect("the note is still open").caret,
+        caret,
+        "and the caret did not move"
+    );
+    assert_eq!(hint(&app), "Zqxjkv is in your dictionary from now on.");
+}
+
+#[test]
+fn a_word_the_card_adds_twice_over_is_refused_and_nothing_is_written() {
+    let mut app = note_with_a_name();
+    app.update(Action::FixSpelling);
+    app.update(Action::Confirm);
+    // The word is known now, so `alt-s` has nothing to say about it. It
+    // is added again through the manager, which is where a duplicate can
+    // be asked for at all.
+    let held = app.model().personal_dictionary.clone();
+
+    app.update(Action::SettingsPage);
+    cursor_to(&mut app, SettingRow::PersonalDictionary);
+    app.update(Action::Confirm);
+    app.update(Action::Add);
+    type_in(&mut app, "zqxjkv");
+    app.update(Action::Confirm);
+
+    assert_eq!(hint(&app), "That word is already in your dictionary.");
+    assert_eq!(
+        app.model().personal_dictionary,
+        held,
+        "the same word in another case is the same word"
+    );
+}
+
+#[test]
+fn a_word_another_window_adds_stops_being_marked_here() {
+    let store = MemStore::new();
+    let mut app = app_at(store.clone(), NOW);
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "Zqxjkv rang");
+    app.update(Action::Tick);
+    assert_eq!(misspelt(&app), ["Zqxjkv"]);
+
+    let mut other = app_at(store, NOW);
+    other.update(Action::SettingsPage);
+    cursor_to(&mut other, SettingRow::PersonalDictionary);
+    other.update(Action::Confirm);
+    other.update(Action::Add);
+    type_in(&mut other, "Zqxjkv");
+    other.update(Action::Confirm);
+
+    // The tick reloads the model, which is where the word arrives; the
+    // note itself has not changed, so nothing but the dictionary would
+    // ask for it to be checked again.
+    app.update(Action::Tick);
+    assert!(
+        app.misspellings().is_empty(),
+        "the mark goes with the reload: {:?}",
+        misspelt(&app)
+    );
+}
+
+// ---- the personal dictionary ----------------------------------------
+
+/// The manager, opened the way somebody opens it: the settings page, the
+/// notes group's last row, Enter.
+fn dictionary_manager() -> App {
+    let mut app = started();
+    app.update(Action::SettingsPage);
+    cursor_to(&mut app, SettingRow::PersonalDictionary);
+    app.update(Action::Confirm);
+    assert!(app.popup().is_some(), "the manager did not open");
+    app
+}
+
+/// `a`, the word, Enter: one word in the dictionary, the way somebody
+/// puts one there.
+fn add_a_word(app: &mut App, word: &str) {
+    app.update(Action::Add);
+    type_in(app, word);
+    app.update(Action::Confirm);
+}
+
+/// The words the manager lists, in the order it lists them.
+fn listed(app: &App) -> Vec<String> {
+    app.dictionary_rows()
+        .iter()
+        .map(|(_, word)| (*word).to_owned())
+        .collect()
+}
+
+#[test]
+fn the_notes_settings_open_the_dictionary_and_escape_gives_the_page_back() {
+    let mut app = dictionary_manager();
+    assert_eq!(
+        app.key_context(),
+        KeyContext::Popup {
+            kind: PopupKind::Dictionary,
+            text_field: false
+        },
+        "the manager is a list until a word is being written"
+    );
+
+    app.update(Action::Cancel);
+    assert!(app.popup().is_none());
+    assert_eq!(app.page(), Page::Settings);
+    assert_eq!(
+        app.cursor(List::Settings),
+        Some(RowId::Setting(SettingRow::PersonalDictionary)),
+        "on the row it was opened from"
+    );
+}
+
+#[test]
+fn a_word_is_added_kept_as_it_was_typed_and_listed_where_it_sorts() {
+    let mut app = dictionary_manager();
+    add_a_word(&mut app, "Overgaard");
+    assert_eq!(listed(&app), ["Overgaard"]);
+    assert_eq!(hint(&app), "Overgaard is in your dictionary from now on.");
+    assert_eq!(
+        app.key_context(),
+        KeyContext::Popup {
+            kind: PopupKind::Dictionary,
+            text_field: false
+        },
+        "the field is put away once the word is saved"
+    );
+
+    add_a_word(&mut app, "jira");
+    assert_eq!(
+        listed(&app),
+        ["jira", "Overgaard"],
+        "sorted by the key, which is the word folded to one case"
+    );
+    assert_eq!(
+        app.popup().expect("the manager").selected,
+        0,
+        "and the cursor is on the word just written"
+    );
+}
+
+#[test]
+fn a_word_that_is_not_one_word_is_refused_and_the_field_keeps_it() {
+    let mut app = dictionary_manager();
+    app.update(Action::Add);
+    type_in(&mut app, "two words");
+    app.update(Action::Confirm);
+
+    assert_eq!(hint(&app), "A dictionary word is one word.");
+    assert!(listed(&app).is_empty(), "nothing was written");
+    assert_eq!(
+        app.key_context(),
+        KeyContext::Popup {
+            kind: PopupKind::Dictionary,
+            text_field: true
+        },
+        "the field is still open"
+    );
+    assert_eq!(
+        app.popup().expect("the manager").text,
+        "two words",
+        "with what was typed still in it, to be corrected"
+    );
+
+    // Corrected in the field, saved from the field.
+    for _ in 0..6 {
+        app.update(Action::Backspace);
+    }
+    app.update(Action::Confirm);
+    assert_eq!(listed(&app), ["two"]);
+}
+
+#[test]
+fn e_opens_the_word_for_changing_and_escape_leaves_it_as_it_was() {
+    let mut app = dictionary_manager();
+    add_a_word(&mut app, "Jria");
+
+    app.update(Action::Edit);
+    assert_eq!(
+        app.popup().expect("the manager").text,
+        "Jria",
+        "the field opens on the word it is about"
+    );
+    assert_eq!(
+        app.popup().expect("the manager").caret,
+        4,
+        "with the caret at the end of it"
+    );
+
+    app.update(Action::Cancel);
+    assert_eq!(listed(&app), ["Jria"], "Escape wrote nothing");
+    assert!(
+        app.popup().is_some(),
+        "and the first Escape leaves the field, not the manager"
+    );
+    app.update(Action::Cancel);
+    assert!(app.popup().is_none(), "the second leaves the manager");
+}
+
+#[test]
+fn a_word_written_again_replaces_the_one_it_was() {
+    let mut app = dictionary_manager();
+    add_a_word(&mut app, "Jria");
+    app.update(Action::Edit);
+    for _ in 0..4 {
+        app.update(Action::Backspace);
+    }
+    type_in(&mut app, "Jira");
+    app.update(Action::Confirm);
+
+    assert_eq!(listed(&app), ["Jira"], "one entry, written the new way");
+    assert_eq!(
+        app.model().personal_dictionary.keys().collect::<Vec<_>>(),
+        ["jira"],
+        "and under the key the new word makes"
+    );
+    assert_eq!(hint(&app), "The word is written Jira now.");
+}
+
+#[test]
+fn x_removes_the_word_the_cursor_is_on_and_not_one_being_written() {
+    let mut app = dictionary_manager();
+    add_a_word(&mut app, "Jira");
+    add_a_word(&mut app, "Overgaard");
+    assert_eq!(listed(&app), ["Jira", "Overgaard"]);
+
+    // A field open over the list is where every key types, so `x` there
+    // is a letter and no word goes by accident.
+    app.update(Action::Add);
+    app.update(Action::Delete);
+    assert_eq!(listed(&app), ["Jira", "Overgaard"], "nothing was removed");
+    app.update(Action::Cancel);
+
+    app.update(Action::Down);
+    app.update(Action::Delete);
+    assert_eq!(listed(&app), ["Jira"]);
+    assert_eq!(hint(&app), "Overgaard is out of your dictionary.");
+    assert_eq!(
+        app.popup().expect("the manager").selected,
+        0,
+        "the cursor comes back onto the row that is left"
+    );
+
+    app.update(Action::Delete);
+    assert!(listed(&app).is_empty());
+    assert_eq!(
+        app.popup().expect("the manager").selected,
+        0,
+        "and an empty list leaves it at the top"
+    );
+}
+
+#[test]
+fn the_dictionary_is_kept_and_read_back_by_the_next_window() {
+    let store = MemStore::new();
+    let mut app = app_at(store.clone(), NOW);
+    app.update(Action::SettingsPage);
+    cursor_to(&mut app, SettingRow::PersonalDictionary);
+    app.update(Action::Confirm);
+    add_a_word(&mut app, "Overgaard");
+
+    let next = app_at(store, NOW);
+    assert_eq!(
+        next.model().personal_dictionary.get("overgaard"),
+        Some(&"Overgaard".to_owned()),
+        "the words are rows of the database like everything else"
+    );
+}
+
+#[test]
+fn the_manager_works_while_the_spell_check_is_off() {
+    let mut app = started();
+    app.update(Action::SettingsPage);
+    cursor_to(&mut app, SettingRow::SpellCheckNotes);
+    app.update(Action::Pick);
+    assert!(!app.settings().spell_check_notes());
+
+    cursor_to(&mut app, SettingRow::PersonalDictionary);
+    app.update(Action::Confirm);
+    add_a_word(&mut app, "Overgaard");
+
+    assert_eq!(
+        listed(&app),
+        ["Overgaard"],
+        "the list of words is kept whether or not anything is checked against it"
+    );
+}
+
+#[test]
+fn the_dictionary_row_holds_no_value_for_h_and_l_to_step() {
+    let mut app = started();
+    app.update(Action::SettingsPage);
+    cursor_to(&mut app, SettingRow::PersonalDictionary);
+    let settings = app.settings().clone();
+
+    app.update(Action::Right);
+    app.update(Action::Left);
+    assert_eq!(app.settings(), &settings, "nothing was changed");
+    assert!(app.popup().is_none(), "and nothing was opened");
+}
+
+#[test]
+fn a_failed_write_leaves_the_dictionary_and_the_field_as_they_were() {
+    let mut app = App::new(
+        Box::new(Broken(MemStore::new())),
+        Box::new(Desk::here()),
+        Locale::default(),
+        &at(NOW),
+    )
+    .expect("an app");
+    app.update(Action::SettingsPage);
+    cursor_to(&mut app, SettingRow::PersonalDictionary);
+    app.update(Action::Confirm);
+    app.update(Action::Add);
+    type_in(&mut app, "Overgaard");
+    app.update(Action::Confirm);
+
+    assert_eq!(hint(&app), "The change could not be saved.");
+    assert!(app.model().personal_dictionary.is_empty());
+    assert_eq!(
+        app.popup().expect("the manager").text,
+        "Overgaard",
+        "and what was typed is still there to try again"
+    );
 }
 
 #[test]

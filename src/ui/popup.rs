@@ -35,6 +35,7 @@ pub(super) fn draw(canvas: &mut Canvas, app: &App, rows: &Rows) {
         PopupKind::CopyQuestion => copy_question(canvas, app, popup, rows),
         PopupKind::DeleteQuestion => delete_question(canvas, app, popup, rows),
         PopupKind::Spelling => spelling_card(canvas, popup, rows),
+        PopupKind::Dictionary => dictionary_card(canvas, app, popup, rows),
     }
 }
 
@@ -392,13 +393,17 @@ fn about(app: &App, popup: &Popup) -> String {
 
 /// A card's footer, drawn from the rows of its own key table so that it
 /// cannot offer a key the dispatcher does not have.
-fn keys_of(context: KeyContext) -> Vec<(&'static str, &'static str)> {
+///
+/// `tight` takes the shorter of the two names each row has, which is the
+/// one the hint bar uses in a narrow window: a card with more keys than
+/// a footer has room for says all of them in fewer words rather than
+/// losing the last of them off the edge.
+fn keys_of(context: KeyContext, tight: bool) -> Vec<(&'static str, &'static str)> {
     input::bindings(context)
         .iter()
         .filter_map(|binding| {
-            binding
-                .bar
-                .slot(binding.label)
+            let bar = if tight { binding.narrow } else { binding.bar };
+            bar.slot(binding.label)
                 .map(|(_, name)| (binding.shown, name))
         })
         .collect()
@@ -431,13 +436,15 @@ fn move_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
 }
 
 /// What the dictionary offers in place of one misspelt word, as a list
-/// to walk. The card is about a word rather than a row, so the word
-/// itself stands where a card usually names the task it is about.
+/// to walk, with the offer to keep the word under it. The card is about
+/// a word rather than a row, so the word itself stands where a card
+/// usually names the task it is about.
 ///
 /// A window with no room for every suggestion shows the ones around the
 /// one selected rather than losing the card: the list is short, but the
 /// card is centred in the panes and a short window has few rows to give
-/// it.
+/// it. The row that keeps the word is never scrolled away, because a
+/// card with nothing to offer is that row and nothing else.
 fn spelling_card(canvas: &mut Canvas, popup: &Popup, rows: &Rows) {
     let Some(spelling) = popup.spelling() else {
         return;
@@ -445,33 +452,159 @@ fn spelling_card(canvas: &mut Canvas, popup: &Popup, rows: &Rows) {
     let width = CARD_WIDTH.min(canvas.width().saturating_sub(4));
     let body = rows.bottom - rows.top + 1;
 
-    // Two borders and a blank row above the words and below them.
-    let around = 4;
+    // Two borders and a blank row above the words, and under them the
+    // rule, the row that keeps the word, and a blank.
+    let around = 6;
     let room = body.saturating_sub(around) as usize;
-    let shown = spelling.suggestions.len().min(room).max(1);
+    // With nothing offered, the one line says so, which is the same one
+    // row to leave room for.
+    let offered = spelling.suggestions.len().max(1);
+    let shown = offered.min(room).max(1);
     let height = shown as u16 + around;
     let (x, y) = place(canvas, rows, width, height);
     card(canvas, x, y, width, height, "Spelling", &spelling.word);
 
-    let first = super::scroll_to(spelling.suggestions.len(), Some(popup.selected), shown);
-    for (at, word) in spelling
-        .suggestions
-        .iter()
-        .skip(first)
-        .take(shown)
-        .enumerate()
-    {
-        let row = y + 2 + at as u16;
+    if spelling.suggestions.is_empty() {
         canvas.put(
             x + 2,
-            row,
-            super::clip(word, width.saturating_sub(4)),
-            plain(),
+            y + 2,
+            super::clip(
+                "The dictionary has nothing to put in its place.",
+                width.saturating_sub(4),
+            ),
+            dim(),
         );
-        if first + at == popup.selected {
-            canvas.restyle(x + 1, row, width - 2, cursor());
+    } else {
+        // The row that keeps the word is under the list rather than in
+        // it, so the list scrolls to the last suggestion at most.
+        let last = spelling.suggestions.len() - 1;
+        let first = super::scroll_to(
+            spelling.suggestions.len(),
+            Some(popup.selected.min(last)),
+            shown,
+        );
+        for (at, word) in spelling
+            .suggestions
+            .iter()
+            .skip(first)
+            .take(shown)
+            .enumerate()
+        {
+            let row = y + 2 + at as u16;
+            canvas.put(
+                x + 2,
+                row,
+                super::clip(word, width.saturating_sub(4)),
+                plain(),
+            );
+            if first + at == popup.selected {
+                canvas.restyle(x + 1, row, width - 2, cursor());
+            }
         }
     }
+
+    // The offer that answers a word the dictionary was never going to
+    // know, which is a different kind of answer from the words above it
+    // and is drawn under a rule for that reason.
+    let rule = y + 2 + shown as u16;
+    divide(canvas, x, rule, width);
+    let keep = rule + 1;
+    // The word is in the card's border already, so the row says what it
+    // does and nothing else: a long name would otherwise push the action
+    // off the edge of a narrow card.
+    canvas.put(
+        x + 2,
+        keep,
+        super::clip("Add to dictionary", width.saturating_sub(4)),
+        plain(),
+    );
+    if popup.selected == spelling.add_row() {
+        canvas.restyle(x + 1, keep, width - 2, cursor());
+    }
+}
+
+// ---- the personal dictionary -----------------------------------------
+
+/// Wide enough for a word and the five keys of the footer.
+const DICTIONARY_WIDTH: u16 = 60;
+
+/// The words the checker is told to know, as a list to walk, with the
+/// field open over it while one is being written.
+///
+/// The list is the model's, in the order its keys sort, so the words
+/// read alphabetically whatever case they were typed in. An empty
+/// dictionary says what the list is for and names the key that fills it
+/// (DESIGN.md section 10).
+fn dictionary_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
+    let words = app.dictionary_rows();
+    let writing = popup
+        .dictionary()
+        .and_then(|draft| draft.field.as_ref())
+        .is_some();
+    let width = DICTIONARY_WIDTH.min(canvas.width().saturating_sub(4));
+    let body = rows.bottom - rows.top + 1;
+
+    // Two borders, a blank row above the words, the rule and the footer,
+    // and the field between them while there is one.
+    let around = 5 + u16::from(writing);
+    let room = body.saturating_sub(around) as usize;
+    let lines = words.len().max(1);
+    let shown = lines.min(room).max(1);
+    let height = shown as u16 + around;
+    let (x, y) = place(canvas, rows, width, height);
+    card(canvas, x, y, width, height, "Personal dictionary", "");
+
+    if words.is_empty() {
+        canvas.put(
+            x + 2,
+            y + 2,
+            super::clip("No words yet. Press a to add one.", width.saturating_sub(4)),
+            dim(),
+        );
+    } else {
+        let first = super::scroll_to(words.len(), Some(popup.selected), shown);
+        for (at, (_, word)) in words.iter().skip(first).take(shown).enumerate() {
+            let row = y + 2 + at as u16;
+            canvas.put(
+                x + 2,
+                row,
+                super::clip(word, width.saturating_sub(4)),
+                plain(),
+            );
+            // The row keeps its mark while a word is being written over
+            // it, because that is the row being written.
+            if first + at == popup.selected {
+                canvas.restyle(x + 1, row, width - 2, cursor());
+            }
+        }
+    }
+
+    let rule = y + 2 + shown as u16;
+    divide(canvas, x, rule, width);
+    if writing {
+        canvas.put(x + 2, rule + 1, "word", bold());
+        super::caret_line(
+            canvas,
+            x + 7,
+            rule + 1,
+            width.saturating_sub(9),
+            &popup.text,
+            popup.caret,
+        );
+    }
+    footer(
+        canvas,
+        x,
+        y + height - 2,
+        width,
+        &keys_of(
+            KeyContext::Popup {
+                kind: PopupKind::Dictionary,
+                text_field: writing,
+            },
+            true,
+        ),
+    );
 }
 
 // ---- the date card ---------------------------------------------------
@@ -567,10 +700,13 @@ fn date_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
         x,
         last + 1,
         width,
-        &keys_of(KeyContext::Popup {
-            kind: PopupKind::Date,
-            text_field: !draft.in_calendar,
-        }),
+        &keys_of(
+            KeyContext::Popup {
+                kind: PopupKind::Date,
+                text_field: !draft.in_calendar,
+            },
+            false,
+        ),
     );
 }
 
@@ -751,10 +887,13 @@ fn repeat_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
         x,
         last + 1,
         width,
-        &keys_of(KeyContext::Popup {
-            kind: PopupKind::Repeat,
-            text_field: false,
-        }),
+        &keys_of(
+            KeyContext::Popup {
+                kind: PopupKind::Repeat,
+                text_field: false,
+            },
+            false,
+        ),
     );
 }
 

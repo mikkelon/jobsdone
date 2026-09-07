@@ -1,6 +1,7 @@
 //! Application state, the launch sequence, reloading, turning actions
 //! into commands, and the screen layout.
 
+use std::collections::BTreeMap;
 use std::ops::Range;
 
 use jiff::civil::Date;
@@ -226,6 +227,10 @@ pub enum SettingRow {
     MessageSeconds,
     ConfirmDelete,
     SpellCheckNotes,
+    /// Not a value of its own: the way into the personal dictionary,
+    /// which is a list of words rather than a setting with states to
+    /// step through. Enter opens the manager over the page.
+    PersonalDictionary,
 }
 
 impl SettingRow {
@@ -260,7 +265,7 @@ pub enum SettingGroup {
 /// The rows of the settings page, in the order they are drawn, each
 /// under its group. One list, so the cursor walks it the way it walks
 /// any other.
-const SETTINGS: [(SettingGroup, SettingRow); 20] = [
+const SETTINGS: [(SettingGroup, SettingRow); 21] = [
     (SettingGroup::Day, SettingRow::DayStartsAt),
     (SettingGroup::Day, SettingRow::WeekStartsOn),
     (SettingGroup::WorkDays, SettingRow::WorkDay(Weekday::Mon)),
@@ -281,6 +286,7 @@ const SETTINGS: [(SettingGroup, SettingRow); 20] = [
     (SettingGroup::Looks, SettingRow::MessageSeconds),
     (SettingGroup::Looks, SettingRow::ConfirmDelete),
     (SettingGroup::Notes, SettingRow::SpellCheckNotes),
+    (SettingGroup::Notes, SettingRow::PersonalDictionary),
 ];
 
 /// The settings page as a list of rows. `ui` draws them in this order
@@ -478,6 +484,12 @@ pub struct Draft {
 #[derive(Default)]
 struct Spelling {
     checker: Option<spelling::SpellChecker>,
+    /// The personal dictionary as the checker was last given it, which
+    /// is what says whether it has to be given it again. It is kept
+    /// here rather than read off the model, because the model is
+    /// reloaded whole and a word another window added has to reach the
+    /// checker as surely as one added here.
+    dictionary: BTreeMap<String, String>,
     /// The note the words are of, and the body they were read from,
     /// which together are what a second run is spared by.
     note: Option<Id>,
@@ -511,10 +523,7 @@ impl Spelling {
             self.found = if text.trim().is_empty() {
                 Vec::new()
             } else {
-                let mut found = self
-                    .checker
-                    .get_or_insert_with(spelling::SpellChecker::default)
-                    .check(text);
+                let mut found = self.checker().check(text);
                 #[cfg(test)]
                 {
                     self.runs += 1;
@@ -550,9 +559,43 @@ impl Spelling {
     /// first request also builds Harper's fuzzy-search index; later
     /// requests reuse it and pay only for the search.
     fn suggestions(&mut self, word: &str) -> Vec<String> {
-        self.checker
-            .get_or_insert_with(spelling::SpellChecker::default)
-            .suggestions(word)
+        self.checker().suggestions(word)
+    }
+
+    /// The checker, built with the personal dictionary already in it the
+    /// first time it is asked for.
+    ///
+    /// Building it reads the whole US English dictionary, so it waits
+    /// for the first word anybody wants an answer about. The personal
+    /// words are handed over with it rather than after it, so that no
+    /// check ever runs against a dictionary this cache has moved on
+    /// from.
+    fn checker(&mut self) -> &mut spelling::SpellChecker {
+        let words = &self.dictionary;
+        self.checker.get_or_insert_with(|| {
+            let mut checker = spelling::SpellChecker::default();
+            checker.set_personal_dictionary(words);
+            checker
+        })
+    }
+
+    /// The words the person has told the checker to know, as the model
+    /// holds them.
+    ///
+    /// Both caches go when they have moved: the checker's own, through
+    /// `set_personal_dictionary`, and the ranges found here, which were
+    /// worked out against the dictionary as it was. A word added is a
+    /// word that stops being marked in the note on screen, and the note
+    /// itself has not changed, so nothing else would ask for it again.
+    fn learn(&mut self, dictionary: &BTreeMap<String, String>) {
+        if self.dictionary == *dictionary {
+            return;
+        }
+        self.dictionary.clone_from(dictionary);
+        if let Some(checker) = &mut self.checker {
+            checker.set_personal_dictionary(&self.dictionary);
+        }
+        self.forget();
     }
 
     /// Nothing to check: another page, the setting off, or no note open.
@@ -629,6 +672,14 @@ impl Popup {
         }
     }
 
+    /// The dictionary manager's draft, if that is what this popup is.
+    pub fn dictionary(&self) -> Option<&DictionaryDraft> {
+        match &self.card {
+            Card::Dictionary(draft) => Some(draft),
+            _ => None,
+        }
+    }
+
     /// The spelling card's word, if that is what this popup is.
     pub fn spelling(&self) -> Option<&SpellingDraft> {
         match &self.card {
@@ -653,6 +704,7 @@ pub enum Card {
     Date(DateDraft),
     Repeat(RepeatDraft),
     Spelling(SpellingDraft),
+    Dictionary(DictionaryDraft),
 }
 
 /// Which date the card is setting. One card, three things to set, and the
@@ -726,9 +778,48 @@ pub struct SpellingDraft {
     /// The word as it is written there, which is what the card is about
     /// and what the hint bar names once it has been replaced.
     pub word: String,
-    /// What the dictionary offers instead, best first. Never empty: a
-    /// word with nothing to offer opens no card.
+    /// What the dictionary offers instead, best first, and empty where
+    /// it has nothing to offer. The card opens either way: the row
+    /// under the suggestions keeps the word rather than replacing it,
+    /// and a word the dictionary cannot better is exactly the kind of
+    /// word that belongs in the personal one.
     pub suggestions: Vec<String>,
+}
+
+impl SpellingDraft {
+    /// Which row of the card adds the word to the personal dictionary:
+    /// the one under the suggestions, and the only row of a card that
+    /// has none.
+    pub fn add_row(&self) -> usize {
+        self.suggestions.len()
+    }
+}
+
+/// The personal dictionary manager, which stands over the settings
+/// page: the words as its rows, and the one being typed when a field is
+/// open over them.
+///
+/// The words themselves are the model's, sorted by the key they are
+/// held under. What is uncommitted here is the word being written,
+/// which is application state like every other field (ARCHITECTURE.md
+/// rule 8): the popup's own text and caret are that field, so a word is
+/// typed with the keys every field has and Enter is what saves it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct DictionaryDraft {
+    /// The field open over the list, and none while the list itself has
+    /// the keyboard.
+    pub field: Option<DictionaryField>,
+}
+
+/// What an open field is doing to the dictionary.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum DictionaryField {
+    /// A word being added.
+    Adding,
+    /// The word held under this key, being written again. It is held by
+    /// its key rather than by the row it is on, so that a reload cannot
+    /// turn it into another word (ARCHITECTURE.md rule 6).
+    Changing(String),
 }
 
 /// Where the move card sends a task.
@@ -1852,6 +1943,10 @@ impl App {
     /// unless `confirm_delete` is on, when the question comes first
     /// (DESIGN.md section 8).
     fn delete(&mut self) {
+        if self.dictionary_draft().is_some() {
+            self.remove_a_word();
+            return;
+        }
         // A note is left before it can be the row thrown away, so that
         // what was typed into it is written first (ARCHITECTURE.md rule
         // 8) and the keyboard is back on the list to answer.
@@ -2633,6 +2728,11 @@ impl App {
         let Some(row) = self.setting_at_cursor() else {
             return true;
         };
+        // The dictionary row holds no value to step. The key is the
+        // page's either way, so the caret under it does not move.
+        if row == SettingRow::PersonalDictionary {
+            return true;
+        }
         let settings = stepped(self.settings(), row, forward);
         self.change_settings(settings);
         true
@@ -2644,6 +2744,12 @@ impl App {
         let Some(row) = self.setting_at_cursor() else {
             return;
         };
+        // The one row that is a way somewhere rather than a value: the
+        // words the checker is told to know are a list to manage.
+        if row == SettingRow::PersonalDictionary {
+            self.open_the_dictionary();
+            return;
+        }
         if row.is_typed() {
             let text = typed_value(self.settings(), row);
             self.setting_draft = Some(SettingDraft {
@@ -2787,12 +2893,21 @@ impl App {
     /// The words the open note is drawn with underlined, worked out
     /// after every action so that drawing has only to read them.
     ///
+    /// Every action passes through here, which is also where the checker
+    /// is handed the personal dictionary: a word added by another window
+    /// arrives with a reload, and one added here with the card that
+    /// added it, and either way the marks on screen are the words the
+    /// dictionary does not know now.
+    ///
     /// The body a note is checked from is the one it is drawn from: what
     /// is being typed while the keyboard is in it, and the note as it
     /// was last saved otherwise. A note only being looked at shows every
     /// word found in it; one being typed into keeps the word the caret
     /// is in to itself until the caret has left it.
     fn check_the_spelling(&mut self) {
+        // The personal dictionary first, because a word added to it, here
+        // or in another window, changes what the same body checks as.
+        self.spelling.learn(&self.model.personal_dictionary);
         if self.page != Page::Notes || !self.model.settings.spell_check_notes() {
             self.spelling.forget();
             return;
@@ -2863,14 +2978,12 @@ impl App {
         };
 
         let word = body[byte_at(&body, at.start)..byte_at(&body, at.end)].to_owned();
+        // A word with nothing offered against it still opens the card:
+        // its last row adds the word to the personal dictionary, which
+        // is the answer to a name the dictionary was never going to
+        // know. The card opens on the first suggestion, or on that row
+        // where there is none, which `selected` at nought is both.
         let suggestions = self.spelling.suggestions(&word);
-        if suggestions.is_empty() {
-            self.say(
-                format!("The dictionary has nothing to put in place of {word}."),
-                false,
-            );
-            return;
-        }
 
         self.open(PopupKind::Spelling, Some(RowId::Note(note)));
         if let Some(popup) = &mut self.popup {
@@ -2906,6 +3019,15 @@ impl App {
         let Some(card) = popup.spelling() else {
             return;
         };
+        // The row under the suggestions replaces nothing: it teaches the
+        // checker the word instead, and the note is left exactly as it
+        // is.
+        if popup.selected == card.add_row() {
+            let word = card.word.clone();
+            self.popup = None;
+            self.learn_the_word(word);
+            return;
+        }
         let Some(chosen) = card.suggestions.get(popup.selected).cloned() else {
             return;
         };
@@ -2935,11 +3057,219 @@ impl App {
         self.say(format!("{} became {chosen}.", card.word), false);
     }
 
+    // ---- the personal dictionary -------------------------------------
+
+    /// The last row of the spelling card: the word the card is about
+    /// goes into the personal dictionary, and the note keeps every
+    /// character it had.
+    ///
+    /// Nothing here is written into the body, so nothing has to hold the
+    /// card's text against what is open now the way a replacement does:
+    /// what changes is which words the checker knows. The marks go the
+    /// moment the word is saved, and everywhere in the note rather than
+    /// only where the caret was, because the note is checked again
+    /// against a dictionary that now has it.
+    fn learn_the_word(&mut self, word: String) {
+        self.reload_if_stale();
+        let change = match domain::add_dictionary_word(&self.model, &word) {
+            Ok(change) => change,
+            Err(rejected) => {
+                self.say(rejected.to_string(), false);
+                return;
+            }
+        };
+        if self.commit(&change).is_none() {
+            return;
+        }
+        self.say(format!("{word} is in your dictionary from now on."), false);
+    }
+
+    /// The dictionary as the manager lists it: each word as it was
+    /// entered, with the key it is held under, in the order the keys
+    /// sort. The keys are the words folded to one case, so the list
+    /// reads as a sorted list of words.
+    pub fn dictionary_rows(&self) -> Vec<(&str, &str)> {
+        self.model
+            .personal_dictionary
+            .iter()
+            .map(|(key, word)| (key.as_str(), word.as_str()))
+            .collect()
+    }
+
+    /// The manager's draft while it is the popup on screen.
+    fn dictionary_draft(&self) -> Option<&DictionaryDraft> {
+        self.popup.as_ref().and_then(Popup::dictionary)
+    }
+
+    /// Whether a word is being written over the list, which is what
+    /// holds `x` back: in a field it is a letter like any other.
+    fn writing_a_word(&self) -> bool {
+        self.dictionary_draft()
+            .is_some_and(|draft| draft.field.is_some())
+    }
+
+    /// Enter on the notes group's dictionary row: the manager, over the
+    /// settings page. It is a popup rather than a page of its own, so
+    /// Escape gives the settings back the way it does from any card.
+    fn open_the_dictionary(&mut self) {
+        self.open(PopupKind::Dictionary, None);
+        if let Some(popup) = &mut self.popup {
+            popup.card = Card::Dictionary(DictionaryDraft::default());
+        }
+    }
+
+    /// The word the manager's cursor is on, as its key and as it is
+    /// written, both owned because what is done with them changes the
+    /// model they were read from.
+    fn word_at_cursor(&self) -> Option<(String, String)> {
+        let popup = self.popup.as_ref()?;
+        let (key, word) = self.dictionary_rows().get(popup.selected).copied()?;
+        Some((key.to_owned(), word.to_owned()))
+    }
+
+    /// `a` in the manager: an empty field for a word to be typed into.
+    fn add_a_word(&mut self) {
+        self.write_a_word(DictionaryField::Adding, String::new());
+    }
+
+    /// `e` or Enter on a row: the same field with the word already in
+    /// it, so that a word is corrected rather than typed again.
+    fn change_a_word(&mut self) {
+        let Some((key, word)) = self.word_at_cursor() else {
+            self.say("There is no word to change yet. Press a to add one.", false);
+            return;
+        };
+        self.write_a_word(DictionaryField::Changing(key), word);
+    }
+
+    /// The field itself, open over the list with the caret at the end of
+    /// whatever it opened on.
+    fn write_a_word(&mut self, field: DictionaryField, text: String) {
+        let Some(popup) = &mut self.popup else {
+            return;
+        };
+        popup.caret = glyphs(&text);
+        popup.text = text;
+        popup.card = Card::Dictionary(DictionaryDraft { field: Some(field) });
+    }
+
+    /// The field put away, with what was typed into it dropped. The list
+    /// keeps the row it was on.
+    fn close_the_word_field(&mut self) {
+        let Some(popup) = &mut self.popup else {
+            return;
+        };
+        popup.text.clear();
+        popup.caret = 0;
+        popup.card = Card::Dictionary(DictionaryDraft::default());
+    }
+
+    /// Enter in the manager: the word that was typed, saved, or the row
+    /// the list is on opened for changing where no field is open.
+    ///
+    /// A word the domain refuses — one already there, or one that is not
+    /// a word — leaves the field open with what was typed still in it
+    /// and the reason in the hint bar, the way the settings field leaves
+    /// a number it cannot read.
+    fn take_the_typed_word(&mut self) {
+        let Some(popup) = &self.popup else {
+            return;
+        };
+        let Some(draft) = popup.dictionary() else {
+            return;
+        };
+        let Some(field) = draft.field.clone() else {
+            self.change_a_word();
+            return;
+        };
+        let word = popup.text.trim().to_owned();
+        self.reload_if_stale();
+        let change = match &field {
+            DictionaryField::Adding => domain::add_dictionary_word(&self.model, &word),
+            DictionaryField::Changing(key) => domain::edit_dictionary_word(&self.model, key, &word),
+        };
+        let change = match change {
+            Ok(change) => change,
+            Err(rejected) => {
+                self.say(rejected.to_string(), false);
+                return;
+            }
+        };
+        if self.commit(&change).is_none() {
+            return;
+        }
+        self.close_the_word_field();
+        self.point_at_the_word(&word);
+        self.say(
+            match field {
+                DictionaryField::Adding => format!("{word} is in your dictionary from now on."),
+                DictionaryField::Changing(_) => format!("The word is written {word} now."),
+            },
+            false,
+        );
+    }
+
+    /// The cursor on the word just written, found by its key, which is
+    /// where the sorted list has put it.
+    fn point_at_the_word(&mut self, word: &str) {
+        let key = domain::dictionary_key(word);
+        let Some(at) = self
+            .dictionary_rows()
+            .iter()
+            .position(|(other, _)| *other == key)
+        else {
+            return;
+        };
+        if let Some(popup) = &mut self.popup {
+            popup.selected = at;
+        }
+    }
+
+    /// `x` in the manager: the word under the cursor goes.
+    ///
+    /// It is not asked about the way a task is: a word is one line, and
+    /// `a` puts it back. What keeps it from happening by accident is
+    /// that a field open over the list takes every letter, `x` included,
+    /// so nothing is removed while a word is being written.
+    fn remove_a_word(&mut self) {
+        if self.writing_a_word() {
+            return;
+        }
+        let Some((key, word)) = self.word_at_cursor() else {
+            return;
+        };
+        self.reload_if_stale();
+        let change = match domain::remove_dictionary_word(&self.model, &key) {
+            Ok(change) => change,
+            Err(rejected) => {
+                self.say(rejected.to_string(), false);
+                return;
+            }
+        };
+        if self.commit(&change).is_none() {
+            return;
+        }
+        // The cursor keeps its place, which is now the word that
+        // followed, and comes back to the last row where the one that
+        // went was the last.
+        let last = self.dictionary_rows().len().saturating_sub(1);
+        if let Some(popup) = &mut self.popup {
+            popup.selected = popup.selected.min(last);
+        }
+        self.say(format!("{word} is out of your dictionary."), false);
+    }
+
     // ---- the title being typed ---------------------------------------
 
     /// `a`: a new note on the notes page, and a field at the end of the
     /// list on the home page.
     fn add(&mut self) {
+        // The dictionary manager stands over the settings page with an
+        // `a` of its own, which is a word rather than a task or a note.
+        if self.dictionary_draft().is_some() {
+            self.add_a_word();
+            return;
+        }
         match self.page {
             Page::Notes => self.new_note(),
             Page::Home => self.start_adding(),
@@ -2964,6 +3294,10 @@ impl App {
     /// `e`: the row itself becomes the field. Editing is always in place
     /// (DESIGN.md section 8).
     fn start_renaming(&mut self) {
+        if self.dictionary_draft().is_some() {
+            self.change_a_word();
+            return;
+        }
         let Some(id) = self.task_at_cursor() else {
             return;
         };
@@ -3077,6 +3411,11 @@ impl App {
                 text_field: match popup.kind {
                     PopupKind::Palette | PopupKind::Search => true,
                     PopupKind::Date => popup.date().is_none_or(|draft| !draft.in_calendar),
+                    // The manager is a list until a word is being
+                    // written over it.
+                    PopupKind::Dictionary => popup
+                        .dictionary()
+                        .is_some_and(|draft| draft.field.is_some()),
                     _ => false,
                 },
             },
@@ -3338,12 +3677,20 @@ impl App {
             return;
         }
         if self.popup.is_some() {
-            let last = self.popup_rows().saturating_sub(1);
+            let rows = self.popup_rows();
+            let last = rows.saturating_sub(1);
+            // The spelling card goes round: the row that adds the word to
+            // the dictionary is under the suggestions and a step up from
+            // the first of them, so that the two ends of a short list are
+            // one key apart either way.
+            let round = self.popup.as_ref().map(|popup| popup.kind) == Some(PopupKind::Spelling);
             if let Some(popup) = &mut self.popup {
-                popup.selected = if forward {
-                    (popup.selected + 1).min(last)
-                } else {
-                    popup.selected.saturating_sub(1)
+                popup.selected = match (forward, round) {
+                    (_, true) if rows == 0 => 0,
+                    (true, true) => (popup.selected + 1) % rows,
+                    (false, true) => popup.selected.checked_sub(1).unwrap_or(last),
+                    (true, false) => (popup.selected + 1).min(last),
+                    (false, false) => popup.selected.saturating_sub(1),
                 };
             }
             return;
@@ -3372,11 +3719,14 @@ impl App {
             Some(PopupKind::Search) => self.search_results().total,
             Some(PopupKind::Move) => self.move_choices().len(),
             Some(PopupKind::Repeat) => repeat_shapes().len(),
+            // The suggestions and, under them, the row that adds the
+            // word to the personal dictionary.
             Some(PopupKind::Spelling) => self
                 .popup
                 .as_ref()
                 .and_then(Popup::spelling)
-                .map_or(0, |card| card.suggestions.len()),
+                .map_or(0, |card| card.suggestions.len() + 1),
+            Some(PopupKind::Dictionary) => self.dictionary_rows().len(),
             _ => 0,
         }
     }
@@ -3507,6 +3857,13 @@ impl App {
     /// Escape backs out one level: the popup, then the field, then the
     /// notes page, which `esc` leaves the same way `n` does.
     fn back_out(&mut self) {
+        // A word being written over the dictionary is what Escape leaves
+        // first: the manager stands, and a second Escape is the one that
+        // gives the settings page back.
+        if self.writing_a_word() {
+            self.close_the_word_field();
+            return;
+        }
         if self.popup.take().is_some() {
             return;
         }
@@ -3560,6 +3917,7 @@ impl App {
             PopupKind::Date => self.take_the_typed_date(),
             PopupKind::Repeat => self.take_the_rule(),
             PopupKind::Spelling => self.take_the_suggestion(),
+            PopupKind::Dictionary => self.take_the_typed_word(),
             PopupKind::DeleteQuestion => self.take_the_delete(),
             // The copy question has no answer safe enough to be Enter's.
             PopupKind::Help | PopupKind::CopyQuestion => {}
@@ -3666,6 +4024,9 @@ impl App {
             let typed = match popup.kind {
                 PopupKind::Palette | PopupKind::Search => true,
                 PopupKind::Date => !matches!(&popup.card, Card::Date(draft) if draft.in_calendar),
+                PopupKind::Dictionary => {
+                    matches!(&popup.card, Card::Dictionary(draft) if draft.field.is_some())
+                }
                 _ => false,
             };
             if !typed {
@@ -3725,7 +4086,12 @@ impl App {
     /// far as the domain can read it.
     fn after_typing(&mut self) {
         if let Some(popup) = &mut self.popup {
-            popup.selected = 0;
+            // The dictionary manager's list is not what is being typed
+            // into: the field stands over it, and the row it was left on
+            // is the row it is still on.
+            if popup.kind != PopupKind::Dictionary {
+                popup.selected = 0;
+            }
         }
         let today = self.today;
         let Some(popup) = &mut self.popup else {
@@ -3929,6 +4295,9 @@ fn stepped(settings: &Settings, row: SettingRow, forward: bool) -> Settings {
         }
         SettingRow::ConfirmDelete => next.set_confirm_delete(forward),
         SettingRow::SpellCheckNotes => next.set_spell_check_notes(forward),
+        // The dictionary is a list of words, not a value with a step on
+        // either side of it.
+        SettingRow::PersonalDictionary => {}
     }
     next
 }
@@ -3962,7 +4331,8 @@ fn cycled(settings: &Settings, row: SettingRow) -> Settings {
         | SettingRow::BackfillDays
         | SettingRow::PileHorizonDays
         | SettingRow::WindowSize
-        | SettingRow::MessageSeconds => {}
+        | SettingRow::MessageSeconds
+        | SettingRow::PersonalDictionary => {}
     }
     next
 }

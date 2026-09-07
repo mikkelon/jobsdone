@@ -65,8 +65,12 @@ pub enum PopupKind {
     /// or a note.
     DeleteQuestion,
     /// The spelling card: what the dictionary offers in place of the
-    /// misspelt word the caret of an open note is in.
+    /// misspelt word the caret of an open note is in, and the offer to
+    /// keep the word instead.
     Spelling,
+    /// The personal dictionary: the words spell checking is told to
+    /// know, opened from the notes group of the settings page.
+    Dictionary,
 }
 
 /// The in-place text field on the home page, which is the only place a
@@ -1700,9 +1704,14 @@ const SEARCH_BOX: &[Binding] = filter_box![
 ];
 
 /// The spelling card: the words the dictionary offers in place of a
-/// misspelt one. It is a list that is chosen from and answered, so its
-/// keys are the keys every card's list has; nothing here is on Alt,
-/// because the note under it has given the keyboard up while it stands.
+/// misspelt one, and under them the offer to keep the word instead. It
+/// is a list that is chosen from and answered, so its keys are the keys
+/// every card's list has; nothing here is on Alt, because the note under
+/// it has given the keyboard up while it stands.
+///
+/// Enter is called "choose" rather than "replace" because the last row
+/// replaces nothing: it adds the word to the personal dictionary. Each
+/// row says which of the two it is.
 const SPELLING_CARD: &[Binding] = &[
     Binding {
         keys: &[("up", Action::Up), ("down", Action::Down)],
@@ -1714,9 +1723,80 @@ const SPELLING_CARD: &[Binding] = &[
     Binding {
         keys: &[("enter", Action::Confirm)],
         shown: "⏎",
-        label: "replace the word",
+        label: "choose",
         bar: Bar::Left,
-        narrow: Bar::Short(Side::Left, "replace"),
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("esc", Action::Cancel)],
+        shown: "esc",
+        label: "cancel",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+];
+
+/// The personal dictionary: the words the checker is told to know, as a
+/// list with the three keys a list of rows anywhere else has. `a`, `e`
+/// and `x` mean here what they mean on the notes list, so there is one
+/// idea of adding, changing and removing a row to learn.
+const DICTIONARY_LIST: &[Binding] = &[
+    Binding {
+        keys: &[("up", Action::Up), ("down", Action::Down)],
+        shown: "↑/↓",
+        label: "move",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("a", Action::Add)],
+        shown: "a",
+        label: "add a word",
+        bar: Bar::Left,
+        narrow: Bar::Short(Side::Left, "add"),
+    },
+    // Enter on a row of words is the row itself, which is the word to
+    // write again; there is nothing else for it to open.
+    Binding {
+        keys: &[("e", Action::Edit), ("enter", Action::Confirm)],
+        shown: "e ⏎",
+        label: "change",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("x", Action::Delete)],
+        shown: "x",
+        label: "remove",
+        bar: Bar::Left,
+        narrow: Bar::Short(Side::Left, "del"),
+    },
+    Binding {
+        keys: &[("esc", Action::Cancel)],
+        shown: "esc",
+        label: "back to settings",
+        bar: Bar::Left,
+        narrow: Bar::Short(Side::Left, "back"),
+    },
+    Binding {
+        keys: &[("j", Action::Down), ("k", Action::Up)],
+        shown: "j/k",
+        label: "move",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+];
+
+/// A word being typed into the dictionary. Every letter types there, so
+/// the two keys that leave are the whole table: `x` in a field is an
+/// `x`, and no word is removed while one is being written.
+const DICTIONARY_FIELD: &[Binding] = &[
+    Binding {
+        keys: &[("enter", Action::Confirm)],
+        shown: "⏎",
+        label: "save",
+        bar: Bar::Left,
+        narrow: Bar::Left,
     },
     Binding {
         keys: &[("esc", Action::Cancel)],
@@ -1916,6 +1996,14 @@ pub fn bindings(context: KeyContext) -> &'static [Binding] {
             kind: PopupKind::Spelling,
             ..
         } => SPELLING_CARD,
+        KeyContext::Popup {
+            kind: PopupKind::Dictionary,
+            text_field: true,
+        } => DICTIONARY_FIELD,
+        KeyContext::Popup {
+            kind: PopupKind::Dictionary,
+            text_field: false,
+        } => DICTIONARY_LIST,
         KeyContext::Settings { field: true } => SETTINGS_FIELD,
         KeyContext::Settings { field: false } => SETTINGS_LIST,
     }
@@ -2000,6 +2088,10 @@ pub fn name(context: KeyContext) -> &'static str {
             kind: PopupKind::Spelling,
             ..
         } => "SPELLING",
+        KeyContext::Popup {
+            kind: PopupKind::Dictionary,
+            ..
+        } => "DICTIONARY",
         KeyContext::Settings { .. } => "SETTINGS",
     }
 }

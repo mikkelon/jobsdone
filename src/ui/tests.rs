@@ -3035,7 +3035,7 @@ fn the_spelling_card_names_the_word_and_lists_what_to_put_in_its_place() {
     let bar = &drawn[34];
     assert!(bar.contains("SPELLING"), "{bar:?}");
     assert!(bar.contains("↑/↓ move"), "{bar:?}");
-    assert!(bar.contains("⏎ replace the word"), "{bar:?}");
+    assert!(bar.contains("⏎ choose"), "{bar:?}");
     assert!(bar.contains("esc cancel"), "{bar:?}");
 }
 
@@ -3132,6 +3132,220 @@ fn the_spelling_card_keeps_inside_a_narrow_window() {
             drawn[top + 2].contains(&word),
             "with a word to choose at {width} by {height}: {:?}",
             drawn[top + 2]
+        );
+    }
+}
+
+#[test]
+fn the_card_offers_to_add_the_word_under_a_rule_of_its_own() {
+    let mut app = card_over_a_note();
+    let offered = offered(&app).len();
+    let drawn = look(&app, 120, 36);
+    let top = top_of_the_card(&drawn);
+
+    // The suggestions, then the rule, then the offer that keeps the
+    // word: a different kind of answer, drawn apart from them.
+    let rule = top + 2 + offered;
+    assert!(
+        drawn[rule].contains('─'),
+        "a rule under the words: {:?}",
+        drawn[rule]
+    );
+    assert!(
+        drawn[rule + 1].contains("Add to dictionary"),
+        "and the offer under that: {:?}",
+        drawn[rule + 1]
+    );
+
+    // Up from the first word is the offer, which is what carries the
+    // mark once it is.
+    let mut terminal = Terminal::new(TestBackend::new(120, 36)).expect("a test terminal");
+    app.update(Action::Up);
+    terminal
+        .draw(|frame| _ = draw(&app, frame))
+        .expect("a frame");
+    let buffer = terminal.backend().buffer();
+    let (top, left) = card_at(buffer);
+    assert!(
+        buffer[(left, top + 2 + offered as u16 + 1)]
+            .modifier
+            .contains(Modifier::REVERSED),
+        "the offer is the row selected"
+    );
+}
+
+#[test]
+fn a_word_with_nothing_offered_says_so_and_still_offers_to_add_it() {
+    let mut app = empty();
+    app.update(Action::NotesPage);
+    app.update(Action::Add);
+    for typed in "Zqxjkv".chars() {
+        app.update(Action::Insert(typed));
+    }
+    app.update(Action::FixSpelling);
+    assert!(
+        offered(&app).is_empty(),
+        "a name the dictionary cannot better"
+    );
+
+    let drawn = look(&app, 120, 36);
+    let top = top_of_the_card(&drawn);
+    assert!(
+        drawn[top].contains("Spelling Zqxjkv"),
+        "the card is about the word: {:?}",
+        drawn[top]
+    );
+    assert!(
+        drawn[top + 2].contains("nothing to put in its place"),
+        "and says why it has no words: {:?}",
+        drawn[top + 2]
+    );
+    assert!(
+        drawn[top + 4].contains("Add to dictionary"),
+        "with the one answer it has left: {:?}",
+        drawn[top + 4]
+    );
+}
+
+// ---- the personal dictionary ----------------------------------------
+
+/// The manager open over the settings page, holding the words given.
+fn dictionary_holding(words: &[&str]) -> App {
+    let mut app = empty();
+    app.update(Action::SettingsPage);
+    for _ in 0..setting_rows().len() {
+        if app.cursor(List::Settings) == Some(RowId::Setting(SettingRow::PersonalDictionary)) {
+            break;
+        }
+        app.update(Action::Down);
+    }
+    app.update(Action::Confirm);
+    for word in words {
+        app.update(Action::Add);
+        for typed in word.chars() {
+            app.update(Action::Insert(typed));
+        }
+        app.update(Action::Confirm);
+    }
+    app
+}
+
+/// Which drawn row the manager's top border is on.
+fn top_of_the_manager(drawn: &[String]) -> usize {
+    drawn
+        .iter()
+        .position(|row| row.contains("┌─ Personal dictionary"))
+        .unwrap_or_else(|| panic!("the manager was not drawn: {drawn:?}"))
+}
+
+#[test]
+fn the_dictionary_row_of_the_settings_counts_the_words_it_holds() {
+    let app = dictionary_holding(&[]);
+    let text = look(&app, 120, 36).join("\n");
+    assert!(
+        text.contains("Personal dictionary"),
+        "the row is on the page:\n{text}"
+    );
+
+    let mut app = app;
+    app.update(Action::Cancel);
+    let line = |app: &App| {
+        look(app, 120, 36)
+            .into_iter()
+            .find(|line| line.trim_start().starts_with("Personal dictionary"))
+            .expect("the dictionary row")
+    };
+    assert!(
+        line(&app).contains("no words yet"),
+        "an empty dictionary says so: {:?}",
+        line(&app)
+    );
+
+    let mut app = dictionary_holding(&["Overgaard"]);
+    app.update(Action::Cancel);
+    assert!(
+        line(&app).contains("1 word"),
+        "and a full one counts them: {:?}",
+        line(&app)
+    );
+}
+
+#[test]
+fn the_manager_lists_its_words_and_names_the_keys_that_change_them() {
+    let app = dictionary_holding(&["Overgaard", "jira"]);
+    let drawn = look(&app, 120, 36);
+    let top = top_of_the_manager(&drawn);
+
+    assert!(drawn[top + 2].contains("jira"), "{:?}", drawn[top + 2]);
+    assert!(drawn[top + 3].contains("Overgaard"), "{:?}", drawn[top + 3]);
+
+    // The footer is the card's own key table, so it cannot teach a key
+    // the dispatcher does not have.
+    let footer = drawn[top + 5].clone();
+    for named in ["a add", "e ⏎ change", "x del", "esc back"] {
+        assert!(footer.contains(named), "{named:?} is not in {footer:?}");
+    }
+
+    // And the hint bar names the manager it is over.
+    let bar = drawn[34].clone();
+    assert!(bar.contains("DICTIONARY"), "{bar:?}");
+}
+
+#[test]
+fn an_empty_dictionary_says_what_it_is_for_and_names_the_key() {
+    let app = dictionary_holding(&[]);
+    let drawn = look(&app, 120, 36);
+    let top = top_of_the_manager(&drawn);
+    assert!(
+        drawn[top + 2].contains("No words yet") && drawn[top + 2].contains("a to add"),
+        "the empty state names the key that fills it: {:?}",
+        drawn[top + 2]
+    );
+}
+
+#[test]
+fn a_word_being_written_stands_in_a_field_under_the_list() {
+    let mut app = dictionary_holding(&["Overgaard"]);
+    app.update(Action::Edit);
+    let drawn = look(&app, 120, 36);
+    let top = top_of_the_manager(&drawn);
+
+    assert!(
+        drawn[top + 2].contains("Overgaard"),
+        "the list is still there under the field: {:?}",
+        drawn[top + 2]
+    );
+    let field = drawn[top + 4].clone();
+    assert!(
+        field.contains("word") && field.contains("Overgaard"),
+        "the field opens on the word it is about: {field:?}"
+    );
+    assert!(
+        drawn[top + 5].contains("⏎ save") && drawn[top + 5].contains("esc cancel"),
+        "and the footer is the field's own two keys: {:?}",
+        drawn[top + 5]
+    );
+}
+
+#[test]
+fn the_manager_keeps_inside_a_narrow_window_and_scrolls_to_its_row() {
+    let words = ["alpha", "bravo", "charlie", "delta", "echo", "foxtrot"];
+    let mut app = dictionary_holding(&words);
+    for _ in 0..words.len() {
+        app.update(Action::Down);
+    }
+
+    for (width, height) in [(80, 44), (80, 24)] {
+        let drawn = look(&app, width, height);
+        let top = top_of_the_manager(&drawn);
+        assert!(
+            drawn[top].contains('┐'),
+            "both sides of the card are on a {width} by {height} window: {:?}",
+            drawn[top]
+        );
+        assert!(
+            drawn.iter().any(|row| row.contains("foxtrot")),
+            "the row the cursor is on is scrolled to at {width} by {height}: {drawn:?}"
         );
     }
 }
