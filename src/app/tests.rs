@@ -2667,6 +2667,455 @@ fn enter_is_a_line_of_the_note_and_the_caret_walks_it() {
     );
 }
 
+// ---- the open note on screen: its rows, its caret and its mouse ------
+
+/// The pane the note was drawn in, as the frame in front of the writer
+/// would have left it: `width` cells of body and `height` rows of them,
+/// at a corner no other part of these tests uses.
+///
+/// The application never draws; a frame is `ui::draw` and then
+/// `set_layout`, and this is the second half of that on its own.
+fn note_pane(app: &mut App, width: u16, height: u16) {
+    let note = app
+        .draft()
+        .map(|draft| draft.note)
+        .or_else(|| note_cursor(app))
+        .expect("a note to draw");
+    app.set_layout(Layout {
+        note: Some(NoteArea {
+            note,
+            // One column more than the body is wrapped at, which is the
+            // caret's own.
+            area: Rect {
+                x: 4,
+                y: 10,
+                width: width + 1,
+                height,
+            },
+        }),
+        ..Layout::default()
+    });
+}
+
+/// A note of `lines` numbered lines, open with a pane around it.
+fn lined_note(width: u16, height: u16) -> App {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    let body: Vec<String> = (0..8).map(|at| format!("line {at}")).collect();
+    note_saying(&mut app, &body.join("\n"));
+    note_pane(&mut app, width, height);
+    app
+}
+
+fn caret(app: &App) -> usize {
+    app.draft().expect("the open note").caret
+}
+
+fn first_row(app: &App) -> usize {
+    app.draft().expect("the open note").first
+}
+
+#[test]
+fn up_from_the_end_of_a_long_note_walks_the_rows_on_screen_before_they_move() {
+    // Eight rows in a pane three high, opened at the end of the body, so
+    // the last three rows are the ones on screen.
+    let mut app = lined_note(20, 3);
+    assert_eq!(first_row(&app), 5, "rows five, six and seven");
+
+    // Two steps up the rows already on screen move nothing.
+    app.update(Action::Up);
+    assert_eq!(first_row(&app), 5, "the rows stayed where they were");
+    app.update(Action::Up);
+    assert_eq!(first_row(&app), 5);
+    assert_eq!(
+        caret(&app),
+        "line 0\nline 1\nline 2\nline 3\nline 4\nline 5".len()
+    );
+
+    // The third reaches the top row, and only the fourth moves them.
+    app.update(Action::Up);
+    assert_eq!(first_row(&app), 4, "one row, and one row only");
+    app.update(Action::Up);
+    assert_eq!(first_row(&app), 3);
+}
+
+#[test]
+fn down_from_the_top_of_a_long_note_does_the_same_the_other_way() {
+    let mut app = lined_note(20, 3);
+    app.update(Action::LineStart);
+    for _ in 0..7 {
+        app.update(Action::Up);
+    }
+    assert_eq!(first_row(&app), 0, "back at the top of the body");
+
+    app.update(Action::Down);
+    app.update(Action::Down);
+    assert_eq!(first_row(&app), 0, "the rows on screen have the caret");
+    app.update(Action::Down);
+    assert_eq!(first_row(&app), 1);
+}
+
+#[test]
+fn the_caret_steps_by_the_rows_the_pane_wrapped_and_not_the_lines_typed() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    // One line the writer typed, four rows the pane drew: "one two ",
+    // "three ", "four " and "five".
+    note_saying(&mut app, "one two three four five");
+    note_pane(&mut app, 8, 10);
+    app.update(Action::LineStart);
+    assert_eq!(caret(&app), 19, "the start of the row, not of the line");
+
+    app.update(Action::Up);
+    assert_eq!(caret(&app), 14, "the row above, not the start of the body");
+    app.update(Action::Up);
+    assert_eq!(caret(&app), 8);
+    app.update(Action::Up);
+    assert_eq!(caret(&app), 0);
+    app.update(Action::Up);
+    assert_eq!(caret(&app), 0, "and no further");
+}
+
+#[test]
+fn the_end_of_a_row_the_pane_broke_stays_on_that_row() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "one two three four");
+    note_pane(&mut app, 10, 10);
+
+    // The rows are "one two " and "three four"; End on the first is the
+    // character the second starts at, drawn at the end of the first.
+    app.update(Action::Up);
+    app.update(Action::LineEnd);
+    let draft = app.draft().expect("the open note");
+    assert_eq!(draft.caret, 8);
+    assert_eq!(draft.affinity, Affinity::BeforeTheBreak);
+
+    // A step to either side is a body being walked through, and forgets
+    // which side of the break the caret was on.
+    app.update(Action::Left);
+    app.update(Action::Right);
+    let draft = app.draft().expect("the open note");
+    assert_eq!(draft.caret, 8);
+    assert_eq!(draft.affinity, Affinity::AfterTheBreak);
+}
+
+#[test]
+fn a_step_onto_a_row_too_short_for_the_column_keeps_it_for_the_next_one() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "12345\n1\n12345");
+    note_pane(&mut app, 20, 10);
+    app.update(Action::Up);
+    app.update(Action::Up);
+    app.update(Action::LineStart);
+    for _ in 0..4 {
+        app.update(Action::Right);
+    }
+    assert_eq!(caret(&app), 4, "the fifth cell of the first row");
+
+    // Down onto a row with one character on it, and down again: the cell
+    // the steps started in is the cell they come back out in.
+    app.update(Action::Down);
+    assert_eq!(caret(&app), 7, "the end of the short row");
+    app.update(Action::Down);
+    assert_eq!(caret(&app), 12, "the fifth cell again, not the second");
+}
+
+#[test]
+fn a_column_kept_across_rows_is_forgotten_by_every_other_way_of_moving() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "12345\n1\n12345");
+    note_pane(&mut app, 20, 10);
+    app.update(Action::Up);
+    app.update(Action::Up);
+    app.update(Action::LineStart);
+    for _ in 0..4 {
+        app.update(Action::Right);
+    }
+    app.update(Action::Down);
+    // A step to the side on the short row is where the next step down
+    // takes its column from.
+    app.update(Action::Left);
+    app.update(Action::Down);
+    assert_eq!(caret(&app), 8, "the start of the last row");
+}
+
+#[test]
+fn a_click_puts_the_caret_on_the_character_it_landed_on() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "one two three four");
+    note_pane(&mut app, 10, 10);
+
+    // The second row is "three four"; its fourth cell is the "e".
+    app.update(Action::MouseDown {
+        column: 4 + 3,
+        row: 10 + 1,
+    });
+    assert_eq!(caret(&app), 11);
+    assert_eq!(app.notes_pane(), NotesPane::Note);
+}
+
+#[test]
+fn a_click_reads_the_row_it_landed_on_as_it_was_drawn() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "one two three four");
+    note_pane(&mut app, 10, 10);
+    // The caret at the start of the second row has a cell of its own, so
+    // "three four" is drawn one cell along.
+    app.update(Action::Up);
+    app.update(Action::LineStart);
+    app.update(Action::Down);
+    app.update(Action::LineStart);
+    assert_eq!(caret(&app), 8);
+
+    app.update(Action::MouseDown {
+        column: 4 + 3,
+        row: 10 + 1,
+    });
+    assert_eq!(caret(&app), 10, "the character drawn in that cell");
+}
+
+#[test]
+fn a_click_in_the_blank_below_the_last_row_goes_to_the_end_of_the_note() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "one two three four");
+    note_pane(&mut app, 10, 10);
+    app.update(Action::LineStart);
+    app.update(Action::Up);
+
+    app.update(Action::MouseDown {
+        column: 4 + 6,
+        row: 10 + 7,
+    });
+    assert_eq!(caret(&app), 18, "the end of the body, not a column of it");
+}
+
+#[test]
+fn a_click_on_the_note_beside_the_list_opens_it_where_it_was_clicked() {
+    let mut app = lined_note(20, 20);
+    app.update(Action::Cancel);
+    assert_eq!(
+        app.notes_pane(),
+        NotesPane::List,
+        "the list has the keyboard"
+    );
+    note_pane(&mut app, 20, 20);
+
+    // The third row of the note the list is on, three cells along.
+    app.update(Action::MouseDown {
+        column: 4 + 3,
+        row: 10 + 2,
+    });
+
+    assert_eq!(app.notes_pane(), NotesPane::Note);
+    assert_eq!(caret(&app), "line 0\nline 1\nlin".len());
+    assert_eq!(first_row(&app), 0, "the rows the click was aimed at");
+}
+
+#[test]
+fn a_click_on_a_note_beside_the_list_lands_where_the_frame_showed_it() {
+    // A note longer than the pane, which the list has the keyboard on:
+    // the pane shows it from its first row, whatever the caret would be
+    // when it opens.
+    let mut app = lined_note(20, 3);
+    app.update(Action::Cancel);
+    note_pane(&mut app, 20, 3);
+
+    app.update(Action::MouseDown {
+        column: 4 + 2,
+        row: 10 + 1,
+    });
+
+    assert_eq!(caret(&app), "line 0\nli".len(), "the second row on screen");
+    assert_eq!(first_row(&app), 0, "and the rows have not moved under it");
+}
+
+#[test]
+fn a_click_after_the_note_has_been_scrolled_reads_the_rows_on_screen() {
+    // Opened at the end of eight rows in a pane three high, so the top
+    // row on screen is the sixth of the body.
+    let mut app = lined_note(20, 3);
+    assert_eq!(first_row(&app), 5);
+
+    app.update(Action::MouseDown {
+        column: 4 + 2,
+        row: 10,
+    });
+    assert_eq!(
+        caret(&app),
+        "line 0\nline 1\nline 2\nline 3\nline 4\nli".len()
+    );
+    assert_eq!(first_row(&app), 5, "the click moved no rows");
+}
+
+#[test]
+fn a_pane_that_shrank_keeps_the_caret_on_screen() {
+    let mut app = lined_note(20, 6);
+    assert_eq!(first_row(&app), 2, "six of the eight rows");
+
+    // The window is drawn again, two rows shorter.
+    note_pane(&mut app, 20, 2);
+    assert_eq!(first_row(&app), 6, "the caret is on the last row");
+    assert_eq!(
+        caret(&app),
+        "line 0\nline 1\nline 2\nline 3\nline 4\nline 5\nline 6\nline 7".len()
+    );
+}
+
+#[test]
+fn a_pane_that_grew_shows_as_much_of_the_note_as_it_can() {
+    let mut app = lined_note(20, 3);
+    assert_eq!(first_row(&app), 5);
+
+    note_pane(&mut app, 20, 6);
+    assert_eq!(first_row(&app), 2, "rows came back rather than blank ones");
+    note_pane(&mut app, 20, 12);
+    assert_eq!(
+        first_row(&app),
+        0,
+        "and a pane taller than the note shows it all"
+    );
+}
+
+#[test]
+fn a_window_that_changed_width_steps_by_the_rows_it_drew() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "one two three four five");
+    // Wide enough for one row, so up has nowhere to go.
+    note_pane(&mut app, 40, 10);
+    app.update(Action::Up);
+    assert_eq!(caret(&app), 23, "one row, and the caret at the end of it");
+
+    // Narrow enough for four, the caret four cells along the last of
+    // them.
+    note_pane(&mut app, 8, 10);
+    app.update(Action::Up);
+    assert_eq!(caret(&app), 18, "the row the narrower pane drew");
+    app.update(Action::Up);
+    assert_eq!(caret(&app), 12);
+}
+
+#[test]
+fn the_rows_of_a_note_include_the_empty_lines_in_it() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    // A line, an empty one, and the empty line a trailing newline opens.
+    note_saying(&mut app, "one\n\n");
+    note_pane(&mut app, 20, 10);
+    assert_eq!(caret(&app), 5, "the end of the body");
+
+    app.update(Action::Up);
+    assert_eq!(caret(&app), 4, "the empty line between them");
+    app.update(Action::Up);
+    assert_eq!(caret(&app), 0);
+    app.update(Action::Down);
+    app.update(Action::Down);
+    assert_eq!(caret(&app), 5);
+
+    // And a click on one of them is that line, not the one with words.
+    app.update(Action::MouseDown {
+        column: 4 + 6,
+        row: 10 + 1,
+    });
+    assert_eq!(caret(&app), 4);
+}
+
+#[test]
+fn a_note_of_wide_characters_steps_and_is_clicked_by_cells() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    // Three characters of two cells each, and two of one.
+    note_saying(&mut app, "\u{65e5}\u{672c}\u{8a9e}\nab");
+    note_pane(&mut app, 20, 10);
+    assert_eq!(caret(&app), 6, "the end of the body");
+
+    // The second cell of the row above is the middle of the first
+    // character, so the step lands in front of the second.
+    app.update(Action::Up);
+    assert_eq!(caret(&app), 1);
+    app.update(Action::Down);
+    assert_eq!(
+        caret(&app),
+        6,
+        "and the column it kept is past both of them"
+    );
+
+    // The row is drawn as the first character, the caret, and the rest,
+    // so the fifth cell of it is the second character.
+    app.update(Action::Up);
+    app.update(Action::MouseDown {
+        column: 4 + 4,
+        row: 10,
+    });
+    assert_eq!(caret(&app), 1);
+}
+
+#[test]
+fn another_note_opens_at_its_own_end_with_none_of_the_last_one_showing() {
+    let mut app = lined_note(20, 3);
+    app.update(Action::Cancel);
+    // A second note, which the list puts above the first.
+    note_saying(&mut app, "short");
+    app.update(Action::Cancel);
+
+    // The long one, scrolled to the end of its body.
+    app.update(Action::Down);
+    app.update(Action::Confirm);
+    note_pane(&mut app, 20, 3);
+    assert_eq!(first_row(&app), 5);
+
+    // And the short one, which has rows of its own.
+    app.update(Action::Cancel);
+    app.update(Action::Up);
+    app.update(Action::Confirm);
+    assert_eq!(first_row(&app), 0, "a note of its own, from its first row");
+    assert_eq!(caret(&app), 5, "at the end of what is written in it");
+}
+
+#[test]
+fn a_column_kept_across_rows_is_kept_across_a_resize_too() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "abcdefgh\nij\nabcdefgh");
+    note_pane(&mut app, 20, 10);
+    app.update(Action::Up);
+    app.update(Action::Up);
+    app.update(Action::LineStart);
+    for _ in 0..5 {
+        app.update(Action::Right);
+    }
+    app.update(Action::Down);
+    assert_eq!(caret(&app), 11, "the end of the short line");
+
+    // The window is drawn again at another width, and the step that
+    // follows is still aiming at the cell the first one was.
+    note_pane(&mut app, 30, 10);
+    app.update(Action::Down);
+    assert_eq!(caret(&app), 17, "the sixth cell of the last row");
+}
+
+#[test]
+fn a_click_after_a_resize_lands_on_the_rows_the_new_window_drew() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "one two three four five");
+    note_pane(&mut app, 40, 10);
+    // Narrower: three rows where there was one.
+    note_pane(&mut app, 8, 10);
+
+    app.update(Action::MouseDown {
+        column: 4 + 2,
+        row: 10 + 1,
+    });
+    assert_eq!(caret(&app), 10, "the third cell of \"three \"");
+}
+
 #[test]
 fn the_note_the_cursor_is_on_is_the_one_that_opens() {
     let mut app = started();
@@ -2959,6 +3408,7 @@ fn a_click_outside_any_row_still_moves_the_keyboard_to_that_pane() {
             },
         }],
         rows: Vec::new(),
+        note: None,
     });
     let was = cursor(&app, List::Backlog);
 
@@ -3035,6 +3485,7 @@ fn dragging_a_row_carries_it_the_way_the_keys_do() {
             },
         }],
         rows,
+        note: None,
     });
 
     // Take hold of the third row and drag it over the first.

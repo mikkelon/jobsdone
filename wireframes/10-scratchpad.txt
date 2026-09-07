@@ -14,8 +14,8 @@
                                             │
                                             │  Draft:
                                             │  Hi Anna, two things before Friday. The CI runner budget needs a decision
-                                            │  this week, and I would like the demo slot after lunch rather than before.
-                                            │
+                                            │  this week, and I would like the demo slot after lunch rather than
+                                            │  before.
                                             │
                                             │
                                             │

@@ -21,8 +21,8 @@ use unicode_segmentation::UnicodeSegmentation;
 use unicode_width::UnicodeWidthStr;
 
 use crate::app::{
-    App, Editor, Layout, List, ListArea, Page, Rect as Cells, RowArea, RowId, SettingGroup,
-    SettingRow,
+    App, Editor, Layout, List, ListArea, NoteArea, Page, Rect as Cells, RowArea, RowId,
+    SettingGroup, SettingRow, wrap,
 };
 use crate::domain::{
     self, DateOrder, DayListRow, MonthDay, NoteRow, Place, Rule, ScheduleRow, Stretch, Weekday,
@@ -645,7 +645,7 @@ fn two_panes(canvas: &mut Canvas, app: &App, rows: &Rows, layout: &mut Layout) {
         }
         Page::Notes => {
             pane(canvas, app, List::Notes, left, rows, on_left, layout);
-            open_note(canvas, app, right, Some(rows.headers), !on_left);
+            open_note(canvas, app, right, Some(rows.headers), !on_left, layout);
         }
         Page::Settings => {
             pane(canvas, app, List::Settings, left, rows, true, layout);
@@ -684,7 +684,7 @@ fn one_pane(canvas: &mut Canvas, app: &App, rows: &Rows, layout: &mut Layout) {
     };
     let on_list = app.notes_pane() == NotesPane::List;
     pane(canvas, app, List::Notes, list, rows, on_list, layout);
-    open_note(canvas, app, note, None, !on_list);
+    open_note(canvas, app, note, None, !on_list, layout);
 }
 
 /// The cells a pane occupies: its columns, and the first and last row of
@@ -1753,6 +1753,7 @@ fn open_note(
     column: Column,
     header_row: Option<u16>,
     focused: bool,
+    layout: &mut Layout,
 ) {
     let Column { x, width, .. } = column;
     let open = app.cursor(List::Notes).and_then(RowId::note);
@@ -1795,22 +1796,56 @@ fn open_note(
             .map_or_else(String::new, |note| note.body.clone()),
     };
 
-    // The body has the pane from its second column to its last.
-    let lines = wrapped(&body, width.saturating_sub(2));
-    let caret = draft.map(|draft| caret_at(&lines, draft.caret));
+    // The body has the pane from its second column to its last, and
+    // wraps a column short of it so that the caret at the end of a full
+    // row has a cell to be drawn in.
     let height = column.height() as usize;
-    let first = scroll_to(lines.len(), caret.map(|(row, _)| row), height);
+    let area = NoteArea {
+        note: open,
+        area: Cells {
+            x: x + 2,
+            y: column.top,
+            width: width.saturating_sub(2),
+            height: column.height(),
+        },
+    };
+    layout.note = Some(area);
+
+    let wrapping = wrap::Wrapping::of(&body, area.wrapped_at());
+    let lines = wrapping.rows();
+    let caret = draft.map(|draft| {
+        let row = wrapping.row_of(draft.caret, draft.affinity);
+        (
+            row,
+            draft.caret - lines.get(row).map_or(0, |line| line.start),
+        )
+    });
+    // Where the note is scrolled to is the application's (ARCHITECTURE.md
+    // rule 4); the same clamp is applied here so that a frame drawn
+    // between a resize and the action after it still shows the caret.
+    let first = match (draft, caret) {
+        (Some(draft), Some((row, _))) => wrap::viewport(draft.first, row, lines.len(), height),
+        _ => 0,
+    };
 
     // The words to underline, worked out once by the application and
     // counted in the same clusters the lines carry their starts in.
     let misspellings = app.misspellings();
 
-    for (at, (text, start)) in lines.iter().skip(first).take(height).enumerate() {
+    for (at, line) in lines.iter().skip(first).take(height).enumerate() {
         let y = column.top + at as u16;
         let on_this_line = caret
             .filter(|(row, _)| *row == first + at)
             .map(|(_, glyph)| glyph);
-        note_line(canvas, x + 2, y, text, *start, misspellings, on_this_line);
+        note_line(
+            canvas,
+            x + 2,
+            y,
+            &line.text,
+            line.start,
+            misspellings,
+            on_this_line,
+        );
     }
 }
 
@@ -1869,58 +1904,19 @@ fn stacked_rule(canvas: &mut Canvas, column: Column, view: &PaneView) {
     rule(canvas, column.x, column.width, column.top - 1, text.trim());
 }
 
-/// A note body as the lines it is drawn on: every line of the body broken
-/// at the width of the pane, on a space where there is one, each with the
-/// character of the body it starts at so that the caret can be found on
-/// it again.
+/// A text as the lines it is drawn on: every line of it broken at
+/// `width` cells, on a space where there is one, each with the character
+/// of the text it starts at.
+///
+/// The breaking itself is `app::wrap`, which the caret's vertical steps
+/// and the mouse read too, so that a wrapped note is one picture rather
+/// than three.
 fn wrapped(body: &str, width: u16) -> Vec<(String, usize)> {
-    let width = width.max(1);
-    let mut lines = Vec::new();
-    let mut at = 0;
-    for line in body.split('\n') {
-        let glyphs: Vec<&str> = line.graphemes(true).collect();
-        let mut from = 0;
-        loop {
-            // How many clusters of the rest the line has room for. A
-            // cluster wider than the whole pane still takes a line of
-            // its own rather than none.
-            let mut fits = 0;
-            let mut taken = 0;
-            while from + fits < glyphs.len() {
-                let cells = cells(glyphs[from + fits]);
-                if taken + cells > width {
-                    break;
-                }
-                taken += cells;
-                fits += 1;
-            }
-            let fits = fits.max(1);
-            if from + fits >= glyphs.len() {
-                lines.push((glyphs[from..].concat(), at + from));
-                break;
-            }
-            // After the last space that fits, or through a word longer
-            // than the pane.
-            let take = glyphs[from..from + fits]
-                .iter()
-                .rposition(|glyph| *glyph == " ")
-                .map_or(fits, |space| space + 1);
-            lines.push((glyphs[from..from + take].concat(), at + from));
-            from += take;
-        }
-        // The newline the split took off.
-        at += glyphs.len() + 1;
-    }
-    lines
-}
-
-/// Which drawn line a caret is on, and how many clusters along it.
-fn caret_at(lines: &[(String, usize)], caret: usize) -> (usize, usize) {
-    let row = lines
+    wrap::Wrapping::of(body, width)
+        .rows()
         .iter()
-        .rposition(|(_, start)| *start <= caret)
-        .unwrap_or_default();
-    (row, caret - lines.get(row).map_or(0, |(_, start)| *start))
+        .map(|row| (row.text.clone(), row.start))
+        .collect()
 }
 
 /// As much of `text` as fits in `width` cells. A cluster that would

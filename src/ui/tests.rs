@@ -3390,3 +3390,150 @@ fn the_caret_fills_the_cell_it_has_wherever_it_is_drawn() {
         "the note body: {drawn:?}"
     );
 }
+
+/// A note of `body`, open, with the layout of the frame it was drawn in
+/// left behind the way the event loop leaves it.
+fn note_open(body: &str, width: u16, height: u16) -> App {
+    let mut model = Model::empty();
+    model.notes.insert(
+        1,
+        Note {
+            id: 1,
+            body: body.to_owned(),
+            created_at: at(NOW),
+            updated_at: at(NOW),
+            deleted_at: None,
+        },
+    );
+    let mut app = app_on(MemStore::holding(model));
+    app.update(Action::NotesPage);
+    app.update(Action::Confirm);
+    let (_, layout) = screen(&app, width, height);
+    app.set_layout(layout);
+    app
+}
+
+/// The rows of the open note that have any of the body on them.
+fn body_rows(app: &App, width: u16, height: u16) -> Vec<String> {
+    let area = app.layout().note.expect("the note body");
+    look(app, width, height)
+        .into_iter()
+        .skip(area.area.y as usize)
+        .take(area.area.height as usize)
+        .map(|row| row.chars().skip(area.area.x as usize).collect())
+        .collect()
+}
+
+#[test]
+fn a_line_as_long_as_the_body_keeps_its_last_character_and_its_caret_on_screen() {
+    // The note pane wraps a column short of its width, which is the
+    // column the caret at the end of a full row is drawn in.
+    let mut app = note_open("x", 120, 36);
+    let wide = app.layout().note.expect("the note body").wrapped_at();
+    app = note_open(&"x".repeat(wide as usize), 120, 36);
+
+    // The caret opens at the end of the body, which is the last cell.
+    let row = body_rows(&app, 120, 36).remove(0);
+    assert_eq!(
+        row,
+        format!("{}\u{2588}", "x".repeat(wide as usize)),
+        "the whole line and the caret after it"
+    );
+    assert_eq!(look(&app, 120, 36)[5].chars().count(), 120);
+
+    // And with the caret at the start of the row, the cell it takes does
+    // not push the last character off the window.
+    app.update(Action::LineStart);
+    let row = body_rows(&app, 120, 36).remove(0);
+    assert_eq!(row, format!("\u{2588}{}", "x".repeat(wide as usize)));
+}
+
+#[test]
+fn the_open_note_says_where_its_body_was_drawn() {
+    let app = note_open("Mention to Anna:", 120, 36);
+    let area = app.layout().note.expect("the note body");
+
+    assert_eq!(area.note, 1);
+    assert_eq!(area.area.x, 47, "two columns in from the divider");
+    assert_eq!(area.area.y, 5, "under the header and its rule");
+    assert_eq!(
+        area.wrapped_at(),
+        area.area.width - 1,
+        "the body, and the column the caret needs after it"
+    );
+}
+
+#[test]
+fn a_click_in_the_body_puts_the_caret_where_the_character_was_drawn() {
+    let mut app = note_open("Mention to Anna:", 120, 36);
+    let area = app.layout().note.expect("the note body");
+
+    app.update(Action::MouseDown {
+        column: area.area.x + 3,
+        row: area.area.y,
+    });
+
+    assert_eq!(app.draft().expect("the open note").caret, 3);
+}
+
+#[test]
+fn a_long_note_opens_at_its_end_and_holds_the_rows_it_is_showing() {
+    let body: Vec<String> = (0..60).map(|at| format!("line {at}")).collect();
+    let mut app = note_open(&body.join("\n"), 120, 36);
+    let rows = body_rows(&app, 120, 36);
+    let last = rows
+        .iter()
+        .rposition(|row| row.starts_with("line"))
+        .expect("the body");
+    assert_eq!(rows[last], "line 59\u{2588}", "the end of the body");
+
+    // Two steps up move the caret and not the rows.
+    let top = rows[0].clone();
+    app.update(Action::Up);
+    app.update(Action::Up);
+    let stepped = body_rows(&app, 120, 36);
+    assert_eq!(stepped[0], top, "the same rows are on screen");
+    assert_eq!(stepped[last], "line 59");
+    assert_eq!(stepped[last - 2], "line 57\u{2588}");
+}
+
+#[test]
+fn a_window_that_shrinks_under_an_open_note_keeps_the_caret_on_screen() {
+    let body: Vec<String> = (0..60).map(|at| format!("line {at}")).collect();
+    let mut app = note_open(&body.join("\n"), 120, 36);
+    // Half the window, and then a step up in it.
+    let (_, layout) = screen(&app, 120, 18);
+    app.set_layout(layout);
+
+    let rows = body_rows(&app, 120, 18);
+    let last = rows
+        .iter()
+        .rposition(|row| row.starts_with("line"))
+        .expect("the body");
+    assert_eq!(rows[last], "line 59\u{2588}", "still the end of the body");
+
+    app.update(Action::Up);
+    let stepped = body_rows(&app, 120, 18);
+    assert_eq!(stepped[last - 1], "line 58\u{2588}");
+}
+
+#[test]
+fn a_window_that_collapses_to_one_tab_takes_the_body_and_the_mouse_with_it() {
+    let mut app = note_open("one two three four five six seven", 120, 36);
+    let wide = app.layout().note.expect("the body").area;
+
+    // Too narrow for two panes: the note stacks under the list.
+    let (_, layout) = screen(&app, 80, 44);
+    app.set_layout(layout);
+    let narrow = app.layout().note.expect("the body").area;
+    assert!(narrow.y > wide.y, "under the list rather than beside it");
+    assert_ne!(narrow.x, wide.x);
+
+    // And a click reads the geometry the frame in front of the writer
+    // was drawn with, not the one before it.
+    app.update(Action::MouseDown {
+        column: narrow.x + 3,
+        row: narrow.y,
+    });
+    assert_eq!(app.draft().expect("the open note").caret, 3);
+}

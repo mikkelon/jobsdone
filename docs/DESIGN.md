@@ -147,7 +147,8 @@ Conventions, so the map is guessable:
 - A pane with more rows than the window has lines scrolls to keep the
   cursor row on screen and keeps no scroll position of its own. The wheel
   moves the cursor, so the view always follows it and there is never a
-  cursor somewhere off screen.
+  cursor somewhere off screen. The open note is the one exception, and
+  section 9 says why.
 - Where a text field has focus (search, the palette, the date card, an
   open note, a title being edited, a number typed on a settings row),
   every letter and digit types. Only `Enter`, `Escape`, `↑`/`↓` and `Tab`
@@ -327,6 +328,23 @@ A note has no title, so the list row is the first line of the body and how
 long ago the note was made, which is the order the list is in. The number
 of notes is already in the status line, so the list header names the key
 that makes another one instead.
+
+A note wider than the pane is wrapped at a space where there is one, and
+the rows it is wrapped into are the rows the caret moves through: `↑` and
+`↓` step one row of the screen, not one line of the file, and `Home` and
+`End` are the ends of the row the caret is on. A run of them keeps the
+column it started in across rows too short to reach it, so stepping down a
+ragged edge and back up comes out where it began. A click puts the caret in
+front of the character it landed on, and a click in the blank below the
+last row puts it at the end of the body.
+
+Unlike a list, the open note keeps the rows it is showing: they move only
+when the caret would otherwise leave them, so `↑` from the end of a long
+note walks up the rows on screen before any of them moves, and a window
+that is resized keeps the caret in view rather than jumping the note
+somewhere else. The body is wrapped one column short of the pane, because
+the caret is a cell of its own rather than a mark under a character: that
+column is where a caret at the end of a full row goes.
 
 `y` or `Alt+y` on the notes list copies the selected note's entire body.
 While editing, `Alt+y` copies the current text, including unsaved typing,

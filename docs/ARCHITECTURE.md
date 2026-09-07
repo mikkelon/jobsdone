@@ -47,7 +47,7 @@ means none. Names are separated by commas.
 | `domain`   | none                  | jiff, serde, serde_json, unicode_normalization |
 | `storage`  | domain                | rusqlite, jiff, serde_json     |
 | `input`    | none                  | crossterm                      |
-| `app`      | domain, input         | jiff, tracing, unicode_segmentation, unicode_normalization, harper_core |
+| `app`      | domain, input         | jiff, tracing, unicode_segmentation, unicode_normalization, unicode_width, harper_core |
 | `ui`       | domain, app, input    | ratatui, jiff, unicode_width, unicode_segmentation |
 | `terminal` | app, ui, input        | crossterm, ratatui, tracing    |
 | `desktop`  | app                   | xdg                            |
@@ -395,7 +395,8 @@ adds it here first, the way a new dependency is added to section 2 first.
   context of the page under an open popup, which is the one the palette
   lists the commands of.
 - `Layout`: which pane and which row occupies which cell rectangle, as a
-  `narrow` flag, a `ListArea` per pane and a `RowArea` per row, over a
+  `narrow` flag, a `ListArea` per pane, a `RowArea` per row and, when a
+  note is on screen, one `NoteArea`, over a
   `Rect` of the terminal's own cells. A row is named by a `RowId`, which
   is a task, a schedule, a note, a day or a setting, because the backlog
   pane draws the schedules under its tasks, the notes page has its own
@@ -403,7 +404,28 @@ adds it here first, the way a new dependency is added to section 2 first.
   the settings page's are settings. `app` may not name ratatui, so the
   rectangle is its own.
   `App::set_layout(Layout)` stores the last one and the mouse actions are
-  resolved against it.
+  resolved against it. `NoteArea` is the body of the open note: the cells
+  it was drawn in, whose last column is the one a caret at the end of a
+  full row takes, and the note it is of, so that geometry from a frame
+  showing another note is never read as this one's. Storing a layout also
+  settles where the note is scrolled to, because the frame just drawn is
+  the frame the next key and the next click are aimed at.
+- `app::wrap`: the one wrapping of a note body, which the drawing, the
+  caret's vertical steps and the mouse all read, so that the rows on
+  screen, the row `↑` lands on and the row a click points at cannot be
+  three different pictures of the same body. `Wrapping::of(body, width)`
+  breaks the body into `Row`s at a width in cells, each row carrying the
+  cluster of the body it starts at and whether the row after it carries
+  on the same line; `row_of`, `column_of`, `caret_at` and `pointed_at`
+  cross between a caret in clusters and a cell of a row, and `viewport`
+  is how far the note is scrolled. `Affinity` is which of the two rows a
+  caret sitting exactly on a wrap the pane made is on, which only the way
+  it arrived can say. This is why `app` names `unicode_width`: a row is
+  measured in the cells a terminal draws it in.
+- `Draft` holds that geometry's share of the note being typed: the caret
+  in clusters, its affinity, the cell a run of `↑` and `↓` is aiming at,
+  and the first row on screen. Every other way of moving a caret goes
+  through `App::field`, which forgets the first two.
 - Read access to the model and the application state for `ui`:
   `today`, `showing` and `shown`, the day the day pane is on and which
   side of today it is, `browsing`, `model`, the views `day`, `backlog`,
@@ -442,6 +464,10 @@ adds it here first, the way a new dependency is added to section 2 first.
 ### `ui`
 
 - `draw(&App, &mut Frame) -> Layout`.
+- The open note is wrapped by `app::wrap` and drawn from the row the
+  application has it scrolled to. Rendering owns none of that: it reports
+  the cells the body had in the `Layout` it returns, and the application
+  settles the rest when that layout is handed back.
 - Note spelling underlines read `App::misspellings()`, ranges counted in
   grapheme clusters. `app::spelling` privately owns Harper and its lazy
   dictionary; the application caches results and filters the active caret
@@ -576,6 +602,7 @@ section 2, in the commit that needs it, with the reason in the message.
 | A migration or a change to how rows are written   | `storage`         |
 | A new key, or a key that means something new      | `input`           |
 | A popup, a page, cursor behaviour, the review session | `app`         |
+| Where a caret goes, and which row of a wrapped note it is on | `app`     |
 | Colours, box drawing, date formatting, the collapse to tabs | `ui`    |
 | Resize, focus, panic, the tick                    | `terminal`        |
 | Paths, logging setup, the desktop pieces          | `main.rs`, the Makefile |

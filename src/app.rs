@@ -24,6 +24,9 @@ use crate::input::{
 };
 
 mod spelling;
+pub mod wrap;
+
+use wrap::{Affinity, Wrapping};
 
 #[cfg(test)]
 mod tests;
@@ -469,6 +472,17 @@ pub struct Draft {
     /// body: what a person calls a character, and what a terminal draws
     /// in one cell (or two).
     pub caret: usize,
+    /// Which of the two rows a caret on a wrap the pane made is drawn on.
+    pub affinity: Affinity,
+    /// The cell `↑` and `↓` are aiming at, kept across rows too short to
+    /// reach it so that a run of steps down a ragged edge comes back out
+    /// in the column it started in. Every other way of moving the caret
+    /// forgets it.
+    pub wanted: Option<u16>,
+    /// The first row of the wrapped body on screen. The note holds its
+    /// own place, unlike a list, which follows its cursor from the top
+    /// every frame (DESIGN.md section 4).
+    pub first: usize,
 }
 
 /// The misspellings of the open note, kept between redraws.
@@ -874,6 +888,35 @@ pub struct RowArea {
     pub area: Rect,
 }
 
+/// Where the body of the open note was drawn: the note it is of, and the
+/// cells its text has, without the margin beside it and with the column
+/// the caret needs after the last character of a full row.
+///
+/// A caret stepped up or down, a click, and the rows on screen are all
+/// worked out from this, so all three read the geometry the frame in
+/// front of the writer was drawn with.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct NoteArea {
+    pub note: Id,
+    /// The cells a click may land in: the body, and the column after the
+    /// widest row it can reach.
+    pub area: Rect,
+}
+
+impl NoteArea {
+    /// The cells the body is wrapped at, which is the area without the
+    /// column at the end of it.
+    ///
+    /// A caret is a cell of its own rather than a mark under a character
+    /// (DESIGN.md section 9), so a row that filled the pane would put
+    /// its own end caret past the edge of the window, and a caret in the
+    /// middle of it would push its last character there. The column the
+    /// body gives up is the column both of those need.
+    pub fn wrapped_at(self) -> u16 {
+        self.area.width.saturating_sub(1)
+    }
+}
+
 /// Which pane and which row, with its task or note id, occupies which cell
 /// rectangle. `ui::draw` returns one and the mouse is resolved against it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
@@ -883,6 +926,8 @@ pub struct Layout {
     pub narrow: bool,
     pub lists: Vec<ListArea>,
     pub rows: Vec<RowArea>,
+    /// The body of the note on screen, when there is one.
+    pub note: Option<NoteArea>,
 }
 
 impl Layout {
@@ -1071,6 +1116,7 @@ impl App {
         // A window being closed has no next redraw to check a note for.
         if flow != Flow::Quit {
             self.check_the_spelling();
+            self.follow_the_caret();
         }
         flow
     }
@@ -2853,8 +2899,13 @@ impl App {
             note,
             caret: glyphs(&body),
             text: body,
+            affinity: Affinity::default(),
+            wanted: None,
+            first: 0,
         });
         self.notes_pane = NotesPane::Note;
+        // A note opened at the end of a long body opens showing its end.
+        self.follow_the_caret();
     }
 
     /// Leaving the note: what was typed is written and the keyboard goes
@@ -3052,6 +3103,10 @@ impl App {
         // end, which is also where it was left when the card opened on a
         // word that had just been finished.
         draft.caret = card.at.start + glyphs(&chosen);
+        // A word replaced is a body edited, so the caret has no column
+        // and no side of a wrap to keep, the same as a keystroke.
+        draft.affinity = Affinity::default();
+        draft.wanted = None;
         // The body is what the next tick writes (ARCHITECTURE.md rule
         // 8), the same as a keystroke.
         self.say(format!("{} became {chosen}.", card.word), false);
@@ -3636,6 +3691,10 @@ impl App {
 
     pub fn set_layout(&mut self, layout: Layout) {
         self.layout = layout;
+        // A window resized under an open note has moved the rows the
+        // note is scrolled to, and the frame that has just been drawn is
+        // the one the next click will be aimed at.
+        self.follow_the_caret();
     }
 
     // ---- moving about ------------------------------------------------
@@ -3780,6 +3839,9 @@ impl App {
         if self.popup.is_some() || self.editor.is_some() {
             return;
         }
+        if self.point_at_the_note(column, row) {
+            return;
+        }
         let Some(list) = self.layout.list_at(column, row) else {
             return;
         };
@@ -3788,6 +3850,64 @@ impl App {
             self.set_cursor(clicked.list, clicked.id);
             self.dragging = Some((clicked.list, clicked.id));
         }
+    }
+
+    /// A click in the body of the open note: the note takes the keyboard
+    /// if the list had it, and the caret goes to the character under the
+    /// pointer. Answers whether the click was in the note at all.
+    ///
+    /// The rows are read off the frame that was clicked on: the row the
+    /// pane is scrolled to, plus the rows down the pointer was, and
+    /// within the row the cell, which is the caret's own cell and then
+    /// the characters after it one cell further along.
+    fn point_at_the_note(&mut self, column: u16, row: u16) -> bool {
+        let Some(area) = self.layout.note.filter(|note| note.area.holds(column, row)) else {
+            return false;
+        };
+        // The pane draws the note the cursor is on; a click cannot mean
+        // one the frame it landed on was not showing.
+        if self.cursor(List::Notes).and_then(RowId::note) != Some(area.note) {
+            return false;
+        }
+        // The rows the frame was showing: where the note was left when
+        // it had the keyboard, and its first row when the list had it.
+        let showing = self
+            .draft
+            .as_ref()
+            .filter(|draft| draft.note == area.note)
+            .map(|draft| draft.first);
+        if showing.is_none() {
+            self.open_the_note();
+        }
+        let first = showing.unwrap_or(0);
+        let Some((wrapping, _)) = self.note_on_screen() else {
+            return true;
+        };
+        let Some(draft) = &mut self.draft else {
+            return true;
+        };
+        // A note the list had the keyboard on was drawn from its first
+        // row and opens with its caret at the end of the body, which
+        // would otherwise take the rows on screen to the end with it and
+        // leave the row that was clicked somewhere else.
+        draft.first = first;
+        let clicked = first + usize::from(row - area.area.y);
+        let (caret, affinity) = if clicked >= wrapping.rows().len() {
+            // The blank below the last row is not a column of anything:
+            // a click there means the end of what is written, the way it
+            // does in every other text area.
+            (wrapping.end(), Affinity::default())
+        } else {
+            // The caret already on that row has a cell of its own, which
+            // is only there while the note has the keyboard.
+            let drawn = (wrapping.row_of(draft.caret, draft.affinity) == clicked)
+                .then(|| wrapping.column_of(draft.caret, draft.affinity));
+            wrapping.pointed_at(clicked, column - area.area.x, drawn)
+        };
+        draft.caret = caret;
+        draft.affinity = affinity;
+        draft.wanted = None;
+        true
     }
 
     /// Dragging carries the row under the pointer, one reorder per row it
@@ -4019,7 +4139,16 @@ impl App {
 
     /// The text field with the keyboard: the one in a popup that is typed
     /// into, the field on a row, or the open note.
+    ///
+    /// Reaching for the field is what makes the open note forget the cell
+    /// `↑` and `↓` were aiming at and which side of a wrap the caret was
+    /// on: every way of moving a caret but those two steps goes through
+    /// here, and none of them has a column to keep.
     fn field(&mut self) -> Option<(&mut String, &mut usize)> {
+        if let Some(draft) = &mut self.draft {
+            draft.wanted = None;
+            draft.affinity = Affinity::default();
+        }
         if let Some(popup) = &mut self.popup {
             let typed = match popup.kind {
                 PopupKind::Palette | PopupKind::Search => true,
@@ -4044,41 +4173,96 @@ impl App {
         Some((&mut draft.text, &mut draft.caret))
     }
 
-    /// The caret one line down or up the open note, keeping the column it
-    /// was in as far as the line it lands on has one.
-    fn step_the_caret(&mut self, down: bool) {
-        let Some(draft) = &mut self.draft else {
-            return;
-        };
-        let starts = line_starts(&draft.text);
-        let at = line_at(&starts, draft.caret);
-        let next = if down { at + 1 } else { at.wrapping_sub(1) };
-        let Some(start) = starts.get(next).copied() else {
-            return;
-        };
-        let column = draft.caret - starts[at];
-        let end = starts
-            .get(next + 1)
-            .map_or(glyphs(&draft.text), |after| after - 1);
-        draft.caret = (start + column).min(end);
+    /// The open note as it is on screen: the rows the pane wrapped its
+    /// body into, and how many of them fit in it.
+    ///
+    /// The width and the height are the ones the last frame drew with,
+    /// which is the frame the writer is looking at while the key is
+    /// pressed. A note that has not been drawn yet has no width to wrap
+    /// at, and its rows are the lines the writer typed.
+    fn note_on_screen(&self) -> Option<(Wrapping, usize)> {
+        let draft = self.draft.as_ref()?;
+        let area = self.layout.note.filter(|note| note.note == draft.note);
+        let width = area.map_or(u16::MAX, NoteArea::wrapped_at);
+        let height = area.map_or(0, |note| usize::from(note.area.height));
+        Some((Wrapping::of(&draft.text, width), height))
     }
 
-    /// Home and End, which in a note are the ends of the line the caret is
-    /// on rather than the ends of the whole body.
-    fn jump_to_the_edge(&mut self, end: bool) {
+    /// Where the open note is scrolled to once an action is over: the
+    /// rows it was showing, moved as little as it takes for the caret to
+    /// be among them.
+    ///
+    /// This is settled here rather than while drawing, because drawing
+    /// is a pure function of what the application holds (ARCHITECTURE.md
+    /// rule 4) and because a click has to land on the rows the frame it
+    /// was aimed at was showing.
+    fn follow_the_caret(&mut self) {
+        let Some((wrapping, height)) = self.note_on_screen() else {
+            return;
+        };
+        // Nothing has been drawn yet, so there is no window to hold.
+        if height == 0 {
+            return;
+        }
         let Some(draft) = &mut self.draft else {
+            return;
+        };
+        let row = wrapping.row_of(draft.caret, draft.affinity);
+        draft.first = wrap::viewport(draft.first, row, wrapping.rows().len(), height);
+    }
+
+    /// The caret one drawn row down or up the open note, keeping the cell
+    /// it was in as far as the row it lands on reaches it.
+    ///
+    /// The rows are the rows on screen, so a line the pane wrapped is
+    /// walked the way it is read rather than in one step. The cell is
+    /// kept across rows too short to reach it, so that stepping down a
+    /// ragged edge and back up comes out where it started.
+    fn step_the_caret(&mut self, down: bool) {
+        let Some((wrapping, _)) = self.note_on_screen() else {
+            return;
+        };
+        let Some(draft) = &mut self.draft else {
+            return;
+        };
+        let at = wrapping.row_of(draft.caret, draft.affinity);
+        let next = if down { at + 1 } else { at.wrapping_sub(1) };
+        if next >= wrapping.rows().len() {
+            return;
+        }
+        let wanted = draft
+            .wanted
+            .unwrap_or_else(|| wrapping.column_of(draft.caret, draft.affinity));
+        let (caret, affinity) = wrapping.caret_at(next, wanted);
+        draft.caret = caret;
+        draft.affinity = affinity;
+        draft.wanted = Some(wanted);
+    }
+
+    /// Home and End, which in a note are the ends of the row the caret is
+    /// drawn on rather than the ends of the whole body: a line the pane
+    /// wrapped has as many of them as it has rows, which is what the
+    /// writer sees.
+    fn jump_to_the_edge(&mut self, end: bool) {
+        let Some((wrapping, _)) = self.note_on_screen() else {
             self.set_caret(if end { usize::MAX } else { 0 });
             return;
         };
-        let starts = line_starts(&draft.text);
-        let at = line_at(&starts, draft.caret);
-        draft.caret = if end {
-            starts
-                .get(at + 1)
-                .map_or(glyphs(&draft.text), |after| after - 1)
-        } else {
-            starts[at]
+        let Some(draft) = &mut self.draft else {
+            return;
         };
+        let at = wrapping.row_of(draft.caret, draft.affinity);
+        let (caret, affinity) = if end {
+            wrapping.caret_at(at, u16::MAX)
+        } else {
+            (
+                wrapping.rows().get(at).map_or(0, |row| row.start),
+                Affinity::AfterTheBreak,
+            )
+        };
+        draft.caret = caret;
+        draft.affinity = affinity;
+        draft.wanted = None;
     }
 
     /// What a keystroke changes besides the text: a filtered list starts
@@ -4201,26 +4385,6 @@ fn shape_of(rule: &Rule) -> Option<usize> {
         Rule::EveryNWeeks { .. } => Action::EveryFewWeeks,
     };
     repeat_shapes().iter().position(|other| *other == shape)
-}
-
-/// Where every line of a body starts, in clusters. A body has at least
-/// one line, and a trailing newline opens another.
-fn line_starts(text: &str) -> Vec<usize> {
-    let mut starts = vec![0];
-    for (at, glyph) in text.graphemes(true).enumerate() {
-        if glyph == "\n" {
-            starts.push(at + 1);
-        }
-    }
-    starts
-}
-
-/// Which of those lines a caret is on.
-fn line_at(starts: &[usize], caret: usize) -> usize {
-    starts
-        .iter()
-        .rposition(|start| *start <= caret)
-        .unwrap_or_default()
 }
 
 /// How many grapheme clusters a string is, which is the unit a caret
