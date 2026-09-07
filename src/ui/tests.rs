@@ -2701,19 +2701,19 @@ fn the_notes_spell_check_row_names_its_dictionary_and_reads_on_or_off() {
     let drawn = look(&app, 120, 36);
     let text = drawn.join("\n");
     assert!(text.contains("NOTES"), "the group it is under:\n{text}");
-    assert_eq!(spell_check_row(&app), "on", "on to begin with");
+    assert_eq!(spell_check_row(&app), "off", "off to begin with");
     assert!(
         text.contains("US English") && text.contains("dictionary"),
         "and the pane beside it says what it checks against:\n{text}"
     );
     assert!(
-        text.contains("Default: on"),
+        text.contains("Default: off"),
         "and what it holds when nobody has changed it:\n{text}"
     );
 
     // The key under the cursor turns the row over, value and all.
     app.update(Action::Pick);
-    assert_eq!(spell_check_row(&app), "off");
+    assert_eq!(spell_check_row(&app), "on");
 }
 
 /// The value the spell-check row is drawn with, with the leader and the
@@ -2801,12 +2801,20 @@ fn a_typed_row_becomes_a_field_where_its_value_was() {
     );
 }
 
+fn spelling_app() -> App {
+    let mut app = empty();
+    let mut settings = app.settings().clone();
+    settings.set_spell_check_notes(true);
+    app.change_settings(settings);
+    app
+}
+
 // ---- the spell check ----------------------------------------------
 
 /// The notes page with one note open and typed into, drawn on a terminal
 /// a test can read the cells of.
 fn note_on_screen(body: &str, keep_typing: bool) -> Terminal<TestBackend> {
-    let mut app = empty();
+    let mut app = spelling_app();
     app.update(Action::NotesPage);
     app.update(Action::Add);
     for typed in body.chars() {
@@ -2896,8 +2904,9 @@ fn a_word_the_checker_does_not_know_is_underlined_where_it_is_drawn() {
         "and the space after the word is not part of it"
     );
 
-    // An underline is a weight, not a colour: the note keeps the
+    // Only the underline is red: the note keeps the
     // terminal's own foreground (DESIGN.md section 3).
+    assert_eq!(buffer[(cells[0], row)].underline_color, Color::Red);
     assert_eq!(buffer[(cells[0], row)].fg, Color::Reset);
     assert_eq!(buffer[(cells[0], row)].bg, Color::Reset);
 }
@@ -2947,7 +2956,7 @@ fn a_wide_character_before_a_word_does_not_shift_its_underline() {
 fn the_caret_keeps_its_cell_beside_a_word_that_is_underlined() {
     // The caret is left two characters into "meeting", so the word it is
     // in is the one held back and the word before it is marked.
-    let mut app = empty();
+    let mut app = spelling_app();
     app.update(Action::NotesPage);
     app.update(Action::Add);
     for typed in "remember teh meeting".chars() {
@@ -2986,7 +2995,7 @@ fn the_caret_keeps_its_cell_beside_a_word_that_is_underlined() {
 /// A note open with the caret in the misspelt word of it and the card of
 /// suggestions over it, which is what `alt-s` leaves on screen.
 fn card_over_a_note() -> App {
-    let mut app = empty();
+    let mut app = spelling_app();
     app.update(Action::NotesPage);
     app.update(Action::Add);
     for typed in "remember teh meeting".chars() {
@@ -3176,7 +3185,7 @@ fn the_card_offers_to_add_the_word_under_a_rule_of_its_own() {
 
 #[test]
 fn a_word_with_nothing_offered_says_so_and_still_offers_to_add_it() {
-    let mut app = empty();
+    let mut app = spelling_app();
     app.update(Action::NotesPage);
     app.update(Action::Add);
     for typed in "Zqxjkv".chars() {

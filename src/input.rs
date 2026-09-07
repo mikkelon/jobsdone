@@ -220,6 +220,8 @@ pub enum Action {
     DeleteForward,
     Left,
     Right,
+    WordLeft,
+    WordRight,
     LineStart,
     LineEnd,
 
@@ -2184,11 +2186,15 @@ fn key_name(key: &KeyEvent) -> Option<String> {
 /// The keys that move and change a caret. They are the text field itself
 /// rather than a row of the table, so they are never in the hint bar.
 fn editing(key: &KeyEvent) -> Option<Action> {
-    if key
-        .modifiers
-        .contains(KeyModifiers::ALT | KeyModifiers::CONTROL)
-    {
+    if key.modifiers.contains(KeyModifiers::ALT) {
         return None;
+    }
+    if key.modifiers.contains(KeyModifiers::CONTROL) {
+        return match key.code {
+            KeyCode::Left => Some(Action::WordLeft),
+            KeyCode::Right => Some(Action::WordRight),
+            _ => None,
+        };
     }
     match key.code {
         KeyCode::Backspace => Some(Action::Backspace),

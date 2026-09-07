@@ -1266,6 +1266,8 @@ impl App {
             }
             Action::LineStart => self.jump_to_the_edge(false),
             Action::LineEnd => self.jump_to_the_edge(true),
+            Action::WordLeft => self.move_by_word(false),
+            Action::WordRight => self.move_by_word(true),
 
             Action::MouseDown { column, row } => self.point_at(column, row),
             Action::MouseDrag { column, row } => self.drag_to(column, row),
@@ -4339,6 +4341,12 @@ impl App {
         }
     }
 
+    fn move_by_word(&mut self, forward: bool) {
+        if let Some((text, caret)) = self.field() {
+            *caret = word_caret(text, *caret, forward);
+        }
+    }
+
     fn set_caret(&mut self, at: usize) {
         if let Some((text, caret)) = self.field() {
             *caret = at.min(glyphs(text));
@@ -4400,6 +4408,47 @@ fn byte_at(text: &str, caret: usize) -> usize {
     text.grapheme_indices(true)
         .nth(caret)
         .map_or(text.len(), |(at, _)| at)
+}
+
+/// Desktop-style word steps: right passes the current run and its trailing
+/// whitespace; left passes whitespace and then the preceding run. Punctuation
+/// is a separate run, so date components and paths can be traversed too.
+/// Classify whole graphemes to keep accents and joined emoji intact.
+fn word_caret(text: &str, caret: usize, forward: bool) -> usize {
+    let classes: Vec<u8> = text
+        .graphemes(true)
+        .map(|glyph| {
+            if glyph.chars().all(char::is_whitespace) {
+                0
+            } else if glyph.chars().any(|ch| ch.is_alphanumeric() || ch == '_') {
+                1
+            } else {
+                2
+            }
+        })
+        .collect();
+    let mut at = caret.min(classes.len());
+    if forward {
+        if let Some(&class) = classes.get(at) {
+            while at < classes.len() && classes[at] == class {
+                at += 1;
+            }
+        }
+        while at < classes.len() && classes[at] == 0 {
+            at += 1;
+        }
+    } else {
+        while at > 0 && classes[at - 1] == 0 {
+            at -= 1;
+        }
+        if at > 0 {
+            let class = classes[at - 1];
+            while at > 0 && classes[at - 1] == class {
+                at -= 1;
+            }
+        }
+    }
+    at
 }
 
 /// The three date orders in the order the row steps through them, which

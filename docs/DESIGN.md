@@ -353,11 +353,13 @@ The hint bar names the shortcut and briefly says "Note copied" after
 success, or explains a clipboard failure. The list's command palette
 also offers "copy note".
 
-Possible US English spelling mistakes are underlined in the open note body.
+Possible US English spelling mistakes have red squiggly underlines in the open
+note body, with straight underlines when styled underlines are unavailable.
+The note text keeps its normal colour.
 The active word stays unmarked while the caret is in it or immediately at
 its end, so unfinished typing does not flash errors. The underline is a
 display annotation; copying and saving preserve the original plain text.
-Checking is local, enabled by default, and controlled by "Spell-check notes
+Checking is local, disabled by default, and controlled by "Spell-check notes
 in US English" in settings. It offers no grammar advice or automatic
 corrections. URLs, email addresses and obvious code-like tokens are skipped.
 

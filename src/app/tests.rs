@@ -3920,31 +3920,31 @@ fn every_kind_of_row_is_changed_by_the_same_two_keys() {
 }
 
 #[test]
-fn the_notes_spell_check_is_on_until_a_key_turns_it_off_and_stays_off() {
+fn the_notes_spell_check_is_off_until_enabled_and_stays_on() {
     let store = MemStore::holding(reviewed(Model::empty()));
     let mut app = app_at(store.clone(), NOW);
     assert!(
-        app.settings().spell_check_notes(),
-        "a database with nothing to say about it spell-checks notes"
+        !app.settings().spell_check_notes(),
+        "a database with no preference leaves spell checking off"
     );
 
     app.update(Action::SettingsPage);
     cursor_to(&mut app, SettingRow::SpellCheckNotes);
     app.update(Action::Pick);
 
-    assert!(!app.settings().spell_check_notes());
+    assert!(app.settings().spell_check_notes());
     assert!(
-        !store
+        store
             .load()
             .expect("the model")
             .settings
             .spell_check_notes(),
-        "and the row is written, so the next launch opens with it off"
+        "and the row is written, so the next launch opens with it on"
     );
 
     // A second window reads it back the way it reads any other setting.
     let next = app_at(store.clone(), NOW);
-    assert!(!next.settings().spell_check_notes());
+    assert!(next.settings().spell_check_notes());
 }
 
 #[test]
@@ -4183,6 +4183,30 @@ fn copying_without_a_note_leaves_the_clipboard_alone() {
     assert_eq!(app.message().unwrap().text, "There is no note here yet.");
 }
 
+#[test]
+fn default_off_does_not_load_a_dictionary_or_mark_a_note() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "remember teh meeting");
+    app.update(Action::Cancel);
+    assert!(!app.settings().spell_check_notes());
+    assert!(app.misspellings().is_empty());
+    assert!(app.spelling.checker.is_none());
+}
+
+/// Spelling scenarios explicitly opt in, just as a user does in Settings.
+fn enable_spelling(app: &mut App) {
+    let mut settings = app.settings().clone();
+    settings.set_spell_check_notes(true);
+    app.change_settings(settings);
+}
+
+fn spell_started() -> App {
+    let mut app = started();
+    enable_spelling(&mut app);
+    app
+}
+
 // ---- the spell check ----------------------------------------------
 
 /// The words the open note has marked, read back as the text they cover,
@@ -4205,7 +4229,7 @@ fn misspelt(app: &App) -> Vec<String> {
 
 #[test]
 fn a_word_the_checker_does_not_know_is_marked_where_it_sits() {
-    let mut app = started();
+    let mut app = spell_started();
     app.update(Action::NotesPage);
     note_saying(&mut app, "remember teh meeting ");
 
@@ -4219,7 +4243,7 @@ fn a_word_the_checker_does_not_know_is_marked_where_it_sits() {
 
 #[test]
 fn the_word_the_caret_is_in_waits_until_the_caret_has_left_it() {
-    let mut app = started();
+    let mut app = spell_started();
     app.update(Action::NotesPage);
     note_saying(&mut app, "remember teh");
 
@@ -4244,7 +4268,7 @@ fn the_word_the_caret_is_in_waits_until_the_caret_has_left_it() {
 
 #[test]
 fn a_note_being_looked_at_shows_every_word_in_it() {
-    let mut app = started();
+    let mut app = spell_started();
     app.update(Action::NotesPage);
     note_saying(&mut app, "remember the mistayk");
 
@@ -4271,7 +4295,7 @@ fn a_note_being_looked_at_shows_every_word_in_it() {
 
 #[test]
 fn the_body_is_read_once_and_a_caret_a_tick_and_a_save_reuse_it() {
-    let mut app = started();
+    let mut app = spell_started();
     app.update(Action::NotesPage);
     note_saying(&mut app, "remember teh meeting ");
     let read = app.spelling.runs;
@@ -4297,7 +4321,7 @@ fn the_body_is_read_once_and_a_caret_a_tick_and_a_save_reuse_it() {
 
 #[test]
 fn nothing_is_read_until_there_is_a_note_with_something_in_it() {
-    let mut app = started();
+    let mut app = spell_started();
     assert!(
         app.spelling.checker.is_none(),
         "a program that only ever looks at tasks builds no dictionary"
@@ -4317,7 +4341,7 @@ fn nothing_is_read_until_there_is_a_note_with_something_in_it() {
 
 #[test]
 fn turning_the_setting_off_takes_the_marks_away_and_on_brings_them_back() {
-    let mut app = started();
+    let mut app = spell_started();
     app.update(Action::NotesPage);
     note_saying(&mut app, "remember teh meeting");
     assert_eq!(misspelt(&app), ["teh"]);
@@ -4345,7 +4369,7 @@ fn turning_the_setting_off_takes_the_marks_away_and_on_brings_them_back() {
 fn the_setting_changed_without_a_key_takes_effect_at_once() {
     // `change_settings` is a way into the application of its own, so
     // what is on screen cannot wait for the next key to catch up.
-    let mut app = started();
+    let mut app = spell_started();
     app.update(Action::NotesPage);
     note_saying(&mut app, "remember teh meeting");
     assert_eq!(misspelt(&app), ["teh"]);
@@ -4363,7 +4387,7 @@ fn the_setting_changed_without_a_key_takes_effect_at_once() {
 
 #[test]
 fn the_marks_follow_the_cursor_from_one_note_to_another() {
-    let mut app = started();
+    let mut app = spell_started();
     app.update(Action::NotesPage);
     note_saying(&mut app, "remember teh meeting");
     app.update(Action::Cancel);
@@ -4381,6 +4405,7 @@ fn the_marks_follow_the_cursor_from_one_note_to_another() {
 fn a_note_another_window_rewrote_is_read_again_on_the_tick() {
     let store = MemStore::new();
     let mut app = app_at(store.clone(), NOW);
+    enable_spelling(&mut app);
     app.update(Action::NotesPage);
     note_saying(&mut app, "remember teh meeting");
     app.update(Action::Cancel);
@@ -4404,7 +4429,7 @@ fn a_note_another_window_rewrote_is_read_again_on_the_tick() {
 
 #[test]
 fn a_note_thrown_away_leaves_nothing_marked() {
-    let mut app = started();
+    let mut app = spell_started();
     app.update(Action::NotesPage);
     note_saying(&mut app, "remember teh meeting");
     app.update(Action::Cancel);
@@ -4423,7 +4448,7 @@ fn a_note_thrown_away_leaves_nothing_marked() {
 /// A note with the caret put inside the misspelt word of it, which is
 /// where `alt-s` is pressed.
 fn note_with_the_caret_in_teh() -> App {
-    let mut app = started();
+    let mut app = spell_started();
     app.update(Action::NotesPage);
     note_saying(&mut app, "remember teh meeting");
     // Off the end of "meeting" and back onto the end of "teh", which is
@@ -4555,7 +4580,7 @@ fn selected(app: &App) -> usize {
 /// A note with a word no dictionary was ever going to know, with the
 /// caret left at the end of it.
 fn note_with_a_name() -> App {
-    let mut app = started();
+    let mut app = spell_started();
     app.update(Action::NotesPage);
     note_saying(&mut app, "Zqxjkv rang about Zqxjkv");
     app
@@ -4642,6 +4667,7 @@ fn a_word_the_card_adds_twice_over_is_refused_and_nothing_is_written() {
 fn a_word_another_window_adds_stops_being_marked_here() {
     let store = MemStore::new();
     let mut app = app_at(store.clone(), NOW);
+    enable_spelling(&mut app);
     app.update(Action::NotesPage);
     note_saying(&mut app, "Zqxjkv rang");
     app.update(Action::Tick);
@@ -4877,8 +4903,6 @@ fn the_dictionary_is_kept_and_read_back_by_the_next_window() {
 fn the_manager_works_while_the_spell_check_is_off() {
     let mut app = started();
     app.update(Action::SettingsPage);
-    cursor_to(&mut app, SettingRow::SpellCheckNotes);
-    app.update(Action::Pick);
     assert!(!app.settings().spell_check_notes());
 
     cursor_to(&mut app, SettingRow::PersonalDictionary);
@@ -4957,7 +4981,7 @@ fn escape_leaves_the_word_as_it_was_and_gives_the_note_back() {
 
 #[test]
 fn a_word_the_dictionary_knows_says_so_and_opens_nothing() {
-    let mut app = started();
+    let mut app = spell_started();
     app.update(Action::NotesPage);
     note_saying(&mut app, "remember teh meeting");
     // The caret is at the end of "meeting", which is a word.
@@ -4987,6 +5011,7 @@ fn the_setting_turned_off_says_why_there_is_nothing_to_offer() {
 fn a_note_thrown_away_under_the_card_is_not_written_back() {
     let store = MemStore::new();
     let mut app = app_at(store.clone(), NOW);
+    enable_spelling(&mut app);
     app.update(Action::NotesPage);
     note_saying(&mut app, "remember teh meeting");
     app.update(Action::Tick);
@@ -5016,7 +5041,7 @@ fn a_note_thrown_away_under_the_card_is_not_written_back() {
 
 #[test]
 fn the_word_written_in_keeps_every_byte_around_it() {
-    let mut app = started();
+    let mut app = spell_started();
     app.update(Action::NotesPage);
     // A decomposed accent and a family emoji on either side of the
     // misspelt word: clusters that a range counted in anything else
@@ -5044,4 +5069,67 @@ fn the_word_written_in_keeps_every_byte_around_it() {
         note_body(&app),
         "and the tick wrote what is on screen, byte for byte"
     );
+}
+
+#[test]
+fn word_steps_handle_spaces_punctuation_unicode_and_edges() {
+    for (text, stops) in [
+        ("", vec![0]),
+        ("   ", vec![0, 3]),
+        ("one  two\nthree", vec![0, 5, 9, 14]),
+        ("2026-09-07", vec![0, 4, 5, 7, 8, 10]),
+        ("cafe\u{301} 👨‍👩‍👧‍👦 blå", vec![0, 5, 7, 10]),
+    ] {
+        for pair in stops.windows(2) {
+            assert_eq!(word_caret(text, pair[0], true), pair[1], "{text:?}");
+            assert_eq!(word_caret(text, pair[1], false), pair[0], "{text:?}");
+        }
+        assert_eq!(word_caret(text, 0, false), 0);
+        assert_eq!(word_caret(text, glyphs(text), true), glyphs(text));
+    }
+    assert_eq!(word_caret("hello world", 2, false), 0);
+    assert_eq!(word_caret("hello world", 2, true), 6);
+    assert_eq!(word_caret("one   two", 4, false), 0);
+    assert_eq!(word_caret("one   two", 4, true), 6);
+}
+
+#[test]
+fn word_navigation_moves_task_popup_and_note_carets_without_editing() {
+    let mut app = started();
+    app.update(Action::Add);
+    for ch in "one two".chars() {
+        app.update(Action::Insert(ch));
+    }
+    app.update(Action::WordLeft);
+    assert_eq!(app.editor().unwrap().caret, 4);
+    app.update(Action::Insert('X'));
+    assert_eq!(app.editor().unwrap().text, "one Xtwo");
+    app.update(Action::Cancel);
+
+    app.update(Action::Search);
+    for ch in "one two".chars() {
+        app.update(Action::Insert(ch));
+    }
+    app.update(Action::WordLeft);
+    assert_eq!(app.popup.as_ref().unwrap().caret, 4);
+    app.update(Action::WordRight);
+    assert_eq!(app.popup.as_ref().unwrap().caret, 7);
+    assert_eq!(app.popup.as_ref().unwrap().text, "one two");
+    app.update(Action::Cancel);
+
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "one\ntwo three");
+    note_pane(&mut app, 6, 2);
+    app.update(Action::WordLeft);
+    assert_eq!(app.draft().unwrap().caret, 8);
+    app.update(Action::WordLeft);
+    assert_eq!(app.draft().unwrap().caret, 4);
+    app.update(Action::WordLeft);
+    assert_eq!(app.draft().unwrap().caret, 0);
+    app.update(Action::WordRight);
+    let draft = app.draft().unwrap();
+    assert_eq!(draft.caret, 4);
+    assert_eq!(draft.wanted, None);
+    assert_eq!(draft.affinity, Affinity::AfterTheBreak);
+    assert_eq!(draft.text, "one\ntwo three");
 }

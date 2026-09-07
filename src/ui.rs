@@ -84,12 +84,13 @@ fn accent() -> Style {
     Style::new().fg(Color::Blue).add_modifier(Modifier::BOLD)
 }
 
-/// A word in an open note the spell checker did not know. An underline
-/// rather than a colour: every colour the app uses already means
-/// something about a task (DESIGN.md section 3), and a misspelling is
-/// not one of those things.
+/// A spelling annotation: only the underline takes the terminal's red,
+/// leaving the note text unchanged. The terminal backend adds the curl
+/// when supported.
 fn misspelt() -> Style {
-    Style::new().add_modifier(Modifier::UNDERLINED)
+    Style::new()
+        .underline_color(Color::Red)
+        .add_modifier(Modifier::UNDERLINED)
 }
 
 /// The cursor row. A terminal does not tell an application what its

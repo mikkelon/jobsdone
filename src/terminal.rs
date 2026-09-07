@@ -17,7 +17,8 @@ use crossterm::terminal::{
     EnterAlternateScreen, LeaveAlternateScreen, disable_raw_mode, enable_raw_mode,
 };
 use ratatui::Terminal;
-use ratatui::backend::CrosstermBackend;
+mod spelling_backend;
+use spelling_backend::SpellingBackend;
 use tracing::error;
 
 use crate::app::{App, Flow};
@@ -35,7 +36,7 @@ pub fn run(mut app: App) -> io::Result<()> {
     enter(mouse)?;
     install_panic_hook();
 
-    let mut terminal = Terminal::new(CrosstermBackend::new(io::stdout()))?;
+    let mut terminal = Terminal::new(SpellingBackend::new(io::stdout()))?;
     let outcome = go_round(&mut terminal, &mut app, &mut mouse);
 
     // The terminal is restored whether or not the loop ended well.
@@ -46,7 +47,7 @@ pub fn run(mut app: App) -> io::Result<()> {
 }
 
 fn go_round(
-    terminal: &mut Terminal<CrosstermBackend<Stdout>>,
+    terminal: &mut Terminal<SpellingBackend<Stdout>>,
     app: &mut App,
     mouse: &mut bool,
 ) -> io::Result<()> {

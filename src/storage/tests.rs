@@ -344,7 +344,7 @@ fn the_settings_read_back_as_what_was_committed() {
     settings.set_day_starts_at(8);
     settings.set_window_size(domain::WindowSize::new(1200, 800));
     settings.set_confirm_delete(true);
-    settings.set_spell_check_notes(false);
+    settings.set_spell_check_notes(true);
 
     world.commit(&Change {
         writes: vec![Write::PutSettings(settings.clone())],
@@ -367,7 +367,7 @@ fn a_settings_key_this_build_does_not_know_is_ignored() {
     let settings = store.load().expect("load").settings;
     assert_eq!(settings, Settings::default());
     assert!(
-        settings.spell_check_notes(),
+        !settings.spell_check_notes(),
         "and a table with no row for a setting is that setting's default"
     );
 }

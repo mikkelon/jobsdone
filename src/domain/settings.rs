@@ -233,7 +233,7 @@ impl Default for Settings {
             message_seconds: 4,
             date_style: DateStyle::default(),
             confirm_delete: false,
-            spell_check_notes: true,
+            spell_check_notes: false,
         }
     }
 }

@@ -2637,7 +2637,7 @@ fn the_defaults_are_what_section_19_says() {
     assert_eq!(settings.message_seconds(), 4);
     assert_eq!(settings.date_style(), DateStyle::Locale);
     assert!(!settings.confirm_delete());
-    assert!(settings.spell_check_notes());
+    assert!(!settings.spell_check_notes());
 }
 
 #[test]
@@ -2656,7 +2656,7 @@ fn every_setting_reads_back_as_what_was_written() {
     settings.set_message_seconds(0);
     settings.set_date_style(DateStyle::MonthFirst);
     settings.set_confirm_delete(true);
-    settings.set_spell_check_notes(false);
+    settings.set_spell_check_notes(true);
 
     assert_eq!(Settings::from_pairs(settings.to_pairs()), settings);
 }
@@ -2688,11 +2688,12 @@ fn a_value_the_codec_cannot_read_is_the_default() {
 
 /// A database written before the setting existed has no row for it, and
 /// a row it cannot read is no better than no row, so both leave notes
-/// spell-checked.
+/// unchecked until explicitly enabled.
 #[test]
-fn notes_are_spell_checked_until_a_row_says_otherwise() {
-    assert!(Settings::from_pairs([("day_starts_at", "8")]).spell_check_notes());
-    assert!(Settings::from_pairs([("spell_check_notes", "off")]).spell_check_notes());
+fn notes_are_unchecked_until_explicitly_enabled() {
+    assert!(!Settings::from_pairs([("day_starts_at", "8")]).spell_check_notes());
+    assert!(!Settings::from_pairs([("spell_check_notes", "off")]).spell_check_notes());
+    assert!(Settings::from_pairs([("spell_check_notes", "true")]).spell_check_notes());
     assert!(!Settings::from_pairs([("spell_check_notes", "false")]).spell_check_notes());
 }
 

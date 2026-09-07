@@ -782,3 +782,26 @@ fn the_spelling_card_is_walked_and_answered_and_left() {
         None
     );
 }
+
+#[test]
+fn control_arrows_move_by_word_in_every_text_context_only() {
+    for context in every_context() {
+        for (code, action) in [
+            (KeyCode::Left, Action::WordLeft),
+            (KeyCode::Right, Action::WordRight),
+        ] {
+            assert_eq!(
+                action_for(&press_with(code, KeyModifiers::CONTROL), context),
+                context.text_field().then_some(action),
+                "{context:?}"
+            );
+            assert_eq!(
+                action_for(
+                    &press_with(code, KeyModifiers::CONTROL | KeyModifiers::ALT),
+                    context
+                ),
+                None
+            );
+        }
+    }
+}

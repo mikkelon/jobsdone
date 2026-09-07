@@ -728,7 +728,7 @@ page only draws them.
 | `message_seconds`    | seconds, 0..=60; 0 means until the next key | `4`   | Hint bar messages stand for | How long "closed X · u undo" stays when no key follows. 0 keeps it until the next key. |
 | `date_style`         | `locale`, `day_first`, `month_first`   | `locale`   | Date order            | `Fri 5 Sep` or `Fri Sep 5`, everywhere a date is written. `locale` follows the environment's locale (STACK.md section 8). |
 | `confirm_delete`     | `true`/`false`                         | `false`    | Confirm before delete | `x` asks first instead of deleting and offering `u`. Applies to tasks, notes and the review pile. |
-| `spell_check_notes`  | `true`/`false`                         | `true`     | Spell-check notes in US English | Underline possible US English spelling mistakes in notes. The application checks locally; note text is unchanged. |
+| `spell_check_notes`  | `true`/`false`                         | `false`    | Spell-check notes in US English | Underline possible US English spelling mistakes in notes. The application checks locally; note text is unchanged. |
 
 ### The window sizes
 

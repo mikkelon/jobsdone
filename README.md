@@ -48,15 +48,19 @@ or positions itself.
 Press `?` inside the app for every key that works where you are. The
 hint bar at the bottom always names the ones that matter most.
 
+In any text field, `Ctrl+Left` and `Ctrl+Right` move by word. This includes
+task titles, notes, dates, search, and settings fields.
+
 On the notes page (`n`), `y` copies the selected note; `Alt+y` copies it
 from either the list or the editor. Copying preserves the entire text and
 leaves the editor in place. This uses `wl-copy` (the `wl-clipboard` package)
 on Wayland, or `xclip` on X11.
 
-Notes underline possible US English spelling mistakes using Harper, entirely
-offline. Spell checking is on by default; turn off **Spell-check notes in US
-English** in settings (`,`). The word at the caret stays unmarked while
-editing. To correct a word, move the caret into it and press `Alt+s`; use
+Notes mark possible US English spelling mistakes using Harper, entirely
+offline, with red squiggly underlines (straight underlines on terminals without
+styled underline support). Spell checking is off by default; enable
+**Spell-check notes in US English** in settings (`,`). The word at the caret
+stays unmarked while editing. To correct a word, move the caret into it and press `Alt+s`; use
 the arrow keys to choose a suggestion, `Enter` to replace, or `Escape` to
 cancel. Checking never changes your text automatically, and notes can still
 be written in any language.
