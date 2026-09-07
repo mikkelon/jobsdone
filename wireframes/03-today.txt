@@ -1,7 +1,7 @@
 == 120×36 · floating window (the default)
 
 
- ‹ Today · Fri 5 Sep › [ ] day g go to date                       ● 2 in review   4 notes n   / search   : commands   ?
+ ‹ Today · Fri 5 Sep ›  [/] day  g go to date                 ● 2 on the pile M   4 notes n   / search   : commands   ?
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  Today Fri 5 Sep                 6 open · 2 done · 1 moved   Backlog                                     12 · 3 waiting
 ───────────────────────────────────────────────────────────┬────────────────────────────────────────────────────────────
@@ -40,7 +40,7 @@
 == 160×48 · full-width tile: same layout, more rows
 
 
- ‹ Today · Fri 5 Sep › [ ] day g go to date                                                               ● 2 in review   4 notes n   / search   : commands   ?
+ ‹ Today · Fri 5 Sep ›  [/] day  g go to date                                                         ● 2 on the pile M   4 notes n   / search   : commands   ?
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  Today Fri 5 Sep                                     6 open · 2 done · 1 moved   Backlog                                                         12 · 3 waiting
 ───────────────────────────────────────────────────────────────────────────────┬────────────────────────────────────────────────────────────────────────────────

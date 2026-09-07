@@ -844,7 +844,7 @@ fn the_narrow_window_makes_the_day_and_the_day_list_its_tabs() {
     assert!(tabs.contains("DAYS 11"), "and the backlog gives way to it");
     assert_eq!(
         drawn[drawn.len() - 2],
-        " PAST DAY  [ ] day  . back  space close  t today  x del                  ? more",
+        " PAST DAY  [/] day  . back  space close  t today  x del                  ? more",
         "and the bar keeps the way home in it"
     );
 }
@@ -860,7 +860,7 @@ fn a_hint_bar_too_full_for_its_right_end_leaves_it_out() {
     let drawn = look(&app, 120, 36);
     let bar = drawn[34].clone();
 
-    assert!(bar.starts_with(" FUTURE DAY  [ ] day  . today"));
+    assert!(bar.starts_with(" FUTURE DAY  [/] day  . today"));
     assert!(
         !bar.contains("pane"),
         "the row that does not fit is left out, not written over"
@@ -1070,8 +1070,8 @@ fn a_pile_left_behind_is_counted_in_red() {
 
     let text = look(&app, 120, 36).join("\n");
     assert!(
-        text.contains("● 5 in review"),
-        "two of the seven were dealt with"
+        text.contains("● 5 on the pile M"),
+        "two of the seven were dealt with, and the key that opens the review is on the count"
     );
     let buffer = terminal.backend().buffer();
     let at = look(&app, 120, 36)[1].find('●').expect("the count") as u16;
@@ -1215,8 +1215,12 @@ fn an_empty_list_names_the_keys_that_fill_it() {
     assert!(text.contains("a add · b on a day task sends it here"));
     assert!(text.contains("nothing planned"), "and the header says so");
     assert!(
-        text.contains("● 0 in review"),
-        "a zero is a count, not an alert"
+        !text.contains('●'),
+        "nothing on the pile is no alert, so the line does not count to zero"
+    );
+    assert!(
+        text.contains("›  [/] day  g go to date"),
+        "the two keys stand apart, so they do not read as one phrase"
     );
 }
 

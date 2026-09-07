@@ -8,7 +8,7 @@
 
 use super::{
     Canvas, Column, Content, PaneView, Section, accent, caret_line, count, counted, dim, header,
-    plain, wrapped,
+    plain, quiet, wrapped,
 };
 use crate::app::{App, List, RowId, SettingDraft, SettingGroup, SettingRow, setting_rows};
 use crate::domain::{DateStyle, Settings, WeekStart, Weekday};
@@ -44,11 +44,11 @@ pub(super) fn view() -> PaneView<'static> {
         sub: String::new(),
         // What the app does not hold, said where somebody looking for it
         // would look (DESIGN.md section 11).
-        right: "colour and font come from the terminal".to_owned(),
+        right: quiet("colour and font come from the terminal"),
         sections,
         foot: None,
         // Every setting there is is on the page, so it is never empty.
-        empty: ["", ""],
+        empty: [Vec::new(), Vec::new()],
     }
 }
 
@@ -306,10 +306,10 @@ pub(super) fn about_the_setting(canvas: &mut Canvas, app: &App, column: Column, 
     let view = PaneView {
         title: title(row).to_owned(),
         sub: String::new(),
-        right: String::new(),
+        right: Vec::new(),
         sections: Vec::new(),
         foot: None,
-        empty: ["", ""],
+        empty: [Vec::new(), Vec::new()],
     };
     header(canvas, x, width, header_row, &view, false);
 

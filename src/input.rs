@@ -361,7 +361,7 @@ macro_rules! home_table {
         &[
             Binding {
                 keys: &[("[", Action::PrevDay), ("]", Action::NextDay)],
-                shown: "[ ]",
+                shown: "[/]",
                 label: "prev/next day",
                 bar: $steps,
                 narrow: $steps_narrow,

@@ -22,8 +22,9 @@ half width. Both must feel right, and the floating case comes first.
 - The morning review runs once per day, on the first open of a work day
   that has something to review, when it is set to open itself; otherwise
   it waits for `M`. Later opens go straight to Today. Closing the window
-  mid-review leaves the pile intact; the home screen shows the count
-  until it is dealt with.
+  mid-review leaves the pile intact; the status line counts what is on
+  the pile, in red with `M` beside it, until it is dealt with, and says
+  nothing at all once the pile is empty.
 - The layout targets 120×36. A full-width tile shows the same layout with
   more rows. Under 100 columns the two panes collapse to tabs.
 - Hyprland does the windowing: a window rule on the app's class floats and
@@ -79,8 +80,8 @@ with no code and no setting of its own.
 | bold                   | focus items, pane titles                                            |
 | dim (or bright black)  | secondary text: metadata, hints, group labels, done and waiting rows, "still open" |
 | selection background   | the cursor row, so chips on it keep their colour                    |
-| blue (bold)            | accent: focused pane title, popup border, selected item, primary action, and every key name in the hint bar, help overlay and popup footers, so a key never looks like its description |
-| red                    | the review count when non-zero; overdue due-by chips; "on the pile" |
+| blue (bold)            | accent: focused pane title, popup border, selected item, primary action, and every key name wherever one is offered: the hint bar, the status line, pane headers, empty states, the help overlay and popup footers, so a key never looks like its description |
+| red                    | the count on the pile, which is only there when it is not zero; overdue due-by chips; "on the pile" |
 | yellow                 | due-by chips not yet overdue                                        |
 | cyan                   | remind-on chips                                                     |
 | magenta                | the waiting flag                                                    |

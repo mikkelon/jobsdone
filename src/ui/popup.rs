@@ -80,7 +80,7 @@ fn footer(canvas: &mut Canvas, x: u16, y: u16, width: u16, parts: &[(&str, &str)
     let mut at = x + 2;
     let edge = x + width - 2;
     for (key, label) in parts {
-        at = canvas.put(at, y, super::clip(key, edge.saturating_sub(at)), accent());
+        at = canvas.key(at, y, super::clip(key, edge.saturating_sub(at)));
         at = canvas.put(
             at + 1,
             y,
@@ -157,7 +157,7 @@ fn palette(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
                 };
                 let room = width.saturating_sub(6 + super::count(command.shown));
                 canvas.put(x + 2, row, super::clip(&label, room), plain());
-                canvas.rput(x + width - 2, row, command.shown, accent());
+                canvas.rkey(x + width - 2, row, command.shown);
                 if command_at == popup.selected {
                     canvas.restyle(x + 1, row, width - 2, cursor());
                 }
@@ -421,7 +421,7 @@ fn move_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
 
     for (at, choice) in choices.iter().enumerate() {
         let row = y + 2 + at as u16;
-        canvas.put(x + 2, row, choice.key, accent());
+        canvas.key(x + 2, row, choice.key);
         canvas.put(x + 8, row, choice.label, plain());
         let day = match choice.target {
             MoveTarget::Day(day) => day_label(day, app.dates()),
@@ -673,7 +673,7 @@ fn date_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
 
     for (at, choice) in choices.iter().enumerate() {
         let row = y + 4 + at as u16;
-        canvas.put(x + 2, row, choice.key, accent());
+        canvas.key(x + 2, row, choice.key);
         canvas.put(x + 8, row, choice.label, plain());
         let day = match choice.date {
             Some(day) => day_label(day, app.dates()),
@@ -846,7 +846,7 @@ fn repeat_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
         });
         let Some(binding) = named else { continue };
 
-        canvas.put(x + 2, row, binding.shown, accent());
+        canvas.key(x + 2, row, binding.shown);
         canvas.put(x + 8, row, binding.label, plain());
         shape_of(
             canvas,
@@ -999,7 +999,7 @@ fn copy_question(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     canvas.put(x + 2, y + 2, "This task repeats. Rename:", dim());
     for (at, answer) in answers.iter().enumerate() {
         let row = y + 4 + at as u16;
-        canvas.put(x + 2, row, answer.shown, accent());
+        canvas.key(x + 2, row, answer.shown);
         canvas.put(x + 8, row, &sentence(answer.label), plain());
     }
 }
@@ -1027,7 +1027,7 @@ fn delete_question(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     );
     for (at, answer) in answers.iter().enumerate() {
         let row = y + 4 + at as u16;
-        canvas.put(x + 2, row, answer.shown, accent());
+        canvas.key(x + 2, row, answer.shown);
         canvas.put(x + 8, row, &sentence(answer.label), plain());
     }
 }
@@ -1159,7 +1159,14 @@ fn help(canvas: &mut Canvas, rows: &Rows) {
 
     frame(canvas, x, y, width, height);
     canvas.put(x + 2, y, " Keys ", accent());
-    canvas.rput(x + width - 2, y, " ? or esc close ", dim());
+    // The way out, on the frame: ` ? or esc close `, whose blank cells
+    // are drawn too so that the frame does not show between the words.
+    let mut at = x + width - 2 - count(" ? or esc close ");
+    at = canvas.put(at, y, " ", dim());
+    at = canvas.key(at, y, "?");
+    at = canvas.put(at, y, " or ", dim());
+    at = canvas.key(at, y, "esc");
+    canvas.put(at, y, " close ", dim());
 
     let column = (width - 6) / columns.len() as u16;
     for (at, (title, lines)) in columns.iter().enumerate() {
@@ -1176,7 +1183,7 @@ fn help(canvas: &mut Canvas, rows: &Rows) {
                     canvas.put(left, row, text, dim());
                 }
                 Help::Key(binding) => {
-                    let after = canvas.put(left, row, binding.shown, accent());
+                    let after = canvas.key(left, row, binding.shown);
                     canvas.put(
                         after + 1,
                         row,

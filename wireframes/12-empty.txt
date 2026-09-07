@@ -29,10 +29,10 @@
 == C · Nothing to review: the review is skipped, not shown
 
 
- Today · Fri 5 Sep                              0 in review
+ ‹ Today · Fri 5 Sep ›                        4 notes n   ?
 ────────────────────────────────────────────────────────────
 
- Opens straight to Today. Count is 0, not an alert.
+ Opens straight to Today. Nothing on the pile, so no count.
 
 
 

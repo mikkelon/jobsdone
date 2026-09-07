@@ -3803,7 +3803,7 @@ impl App {
         &self.views.notes
     }
 
-    /// The size of the pile: the "n in review" the status line counts,
+    /// The size of the pile: the "n on the pile" the status line counts,
     /// whatever was or was not decided (DOMAIN.md section 13).
     pub fn review_count(&self) -> usize {
         self.views.pile

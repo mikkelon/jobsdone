@@ -508,7 +508,7 @@ not written. Escape leaves the review with the pile intact. The review
 can be started again any time from the command palette; that also runs
 StartReview, which changes nothing on the same day.
 
-The home screen's "n in review" is the live size of the pile, whatever
+The home screen's "n on the pile" is the live size of the pile, whatever
 was or was not decided.
 
 Which rows have been handled, the "2 of 7" progress, and the "→ today"

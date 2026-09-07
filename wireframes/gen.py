@@ -27,6 +27,14 @@ class Grid:
     def put(self, x, y, t, attr=''):
         if not 0 <= y < self.h:
             return x + len(t)
+        # The slash between two keys is the "or", not a key: dim, so the
+        # keys read as the keys. `/` on its own is the search key.
+        if attr == 'k' and '/' in t and t != '/':
+            for i, part in enumerate(t.split('/')):
+                if i:
+                    x = self.put(x, y, '/', 'd')
+                x = self.put(x, y, part, attr)
+            return x
         y += self.PAD
         for i, ch in enumerate(t):
             if 0 <= x + i < self.w:
@@ -103,10 +111,28 @@ def _span(t, a):
 
 
 # ------------------------------------------------------------ elements ---
+def items(g, x, y, its, gap):
+    """A run of items `gap` apart; the pieces of one item are a cell apart,
+    so `g go to date` is one thing and `[ ] day  g go to date` two."""
+    for parts in its:
+        x = g.seg(x, y, parts, gap=1) - 1 + gap
+    return x
+
+
+def ritems(g, x2, y, its, gap):
+    total = sum(sum(len(t) for t, _ in parts) + len(parts) - 1 for parts in its) + gap * (len(its) - 1)
+    return items(g, x2 - total, y, its, gap)
+
+
+def key(k, words=''):
+    """A key in accent and, after it, what it does in dim."""
+    return [(k, 'k')] + ([(words, 'd')] if words else [])
+
+
 def strip(g, left, right):
-    """Row 0: status line. left/right are segment lists."""
-    g.seg(1, 0, left, gap=1)
-    g.rseg(g.w - 1, 0, right, gap=3)
+    """Row 0: status line. left/right are lists of items."""
+    items(g, 1, 0, left, gap=2)
+    ritems(g, g.w - 1, 0, right, gap=3)
     g.hl(0, 1, g.w)
 
 
@@ -114,7 +140,9 @@ def header(g, x, w, y, title, sub='', right='', focus=False):
     g.put(x + 1, y, title, 'A b' if focus else 'b')
     if sub:
         g.put(x + 2 + len(title), y, sub, 'd')
-    if right:
+    if isinstance(right, list):
+        g.rseg(x + w - 1, y, right, gap=1)
+    elif right:
         g.rput(x + w - 1, y, right, 'd')
 
 
@@ -268,9 +296,14 @@ def sample_today(g, focus='left', cursor=True, div=None, wide=False):
     return lx, lw, rx, rw, y0, y1
 
 
+def pile(review, words=' on the pile'):
+    """The alert: red, with the key that opens the review; nothing at zero."""
+    return [[(f'● {review}{words}', 'R b'), ('M', 'k')]] if review else []
+
+
 def today_strip(g, review=2):
-    strip(g, [('‹', 'd'), ('Today · Fri 5 Sep', 'b'), ('›', 'd'), ('[ ] day', 'd'), ('g go to date', 'd')],
-          [(f'● {review} in review', 'R b' if review else 'd'), ('4 notes n', 'd'), ('/ search', 'd'), (': commands', 'd'), ('?', 'd')])
+    strip(g, [[('‹', 'd'), ('Today · Fri 5 Sep', 'b'), ('›', 'd')], key('[/]', 'day'), key('g', 'go to date')],
+          pile(review) + [[('4 notes', 'd'), ('n', 'k')], key('/', 'search'), key(':', 'commands'), key('?')])
 
 
 TODAY_HINTS = [('J/K', 'reorder'), ('space', 'done'), ('f', 'focus'), ('a', 'add'), ('e', 'edit'),
@@ -316,7 +349,7 @@ def p03():
 
 # 01 --------------------------------------------------------------------
 def review_frame(g, step, subtitle, count_text, title):
-    strip(g, [('MORNING REVIEW', 'b'), (f'step {step} of 2 · {subtitle}', 'd')], [(count_text, 'd'), ('esc skip for now', 'd')])
+    strip(g, [[('MORNING REVIEW', 'b'), (f'step {step} of 2 · {subtitle}', 'd')]], [[(count_text, 'd')], key('esc', 'skip for now')])
     div = g.w - 41
     lw, sx, sw = div, div + 1, g.w - div - 1
     g.hl(0, 3, g.w); g.put(div, 3, '┬', 'd'); g.vl(div, 4, g.h - 6); g.put(div, g.h - 2, '┴', 'd')
@@ -408,7 +441,7 @@ def p02():
 # 04 --------------------------------------------------------------------
 def p04():
     g = Grid(80, 44)
-    strip(g, [('‹', 'd'), ('Today · Fri 5 Sep', 'b'), ('›', 'd')], [('● 2', 'R b'), ('/', 'd'), (':', 'd'), ('?', 'd')])
+    strip(g, [[('‹', 'd'), ('Today · Fri 5 Sep', 'b'), ('›', 'd')]], pile(2, '') + [key('/'), key(':'), key('?')])
     x = g.put(1, 2, ' TODAY 6 ', 'A b r')
     x = g.put(x + 1, 2, ' BACKLOG 12 ', 'd')
     x = g.put(x + 1, 2, ' NOTES 4 ', 'd')
@@ -606,10 +639,10 @@ def p07():
 # 08 --------------------------------------------------------------------
 def p08():
     g = Grid(120, 36)
-    strip(g, [('‹', 'd'), ('Mon 1 Sep', 'b'), ('›', 'd'), ('4 days ago', 'd'), ('. back to today', 'd')],
-          [('● 5 in review', 'R b'), ('4 notes n', 'd'), ('/', 'd'), (':', 'd'), ('?', 'd')])
+    strip(g, [[('‹', 'd'), ('Mon 1 Sep', 'b'), ('›', 'd')], [('4 days ago', 'd')], key('.', 'back to today')],
+          pile(5) + [[('4 notes', 'd'), ('n', 'k')], key('/'), key(':'), key('?')])
     g.callout(48, 0, 1)
-    lx, lw, rx, rw, y0, y1 = frame2(g, ('Mon 1 Sep', 'past day', '8 planned · 3 done · 2 open · 3 moved'), ('Days', '', 'g go to date'), 'left')
+    lx, lw, rx, rw, y0, y1 = frame2(g, ('Mon 1 Sep', 'past day', '8 planned · 3 done · 2 open · 3 moved'), ('Days', '', key('g', 'go to date')), 'left')
     g.callout(rx + rw - 15, 2, 4)
     y = y0
     group(g, lx, lw, y, 'Plan'); y += 1
@@ -639,7 +672,7 @@ def p08():
     group(g, rx, rw, y, 'Earlier'); y += 1
     g.put(rx + 5, y, 'Fri 22 Aug'); g.rput(rx + rw - 1, y, '1 / 2 · 1 open', 'd'); y += 1
     g.put(rx + 5, y, '…'); g.rput(rx + rw - 1, y, 'days with nothing planned are skipped', 'd')
-    hints(g, g.h - 1, 'Past day', [('[ ]', 'day'), ('.', 'today'), ('g', 'go to date'), ('space', 'close'), ('t', 'to today'), ('b', 'to backlog'), ('m', 'move…'), ('⏎', 'follow moved')], PANE_KEYS)
+    hints(g, g.h - 1, 'Past day', [('[/]', 'day'), ('.', 'today'), ('g', 'go to date'), ('space', 'close'), ('t', 'to today'), ('b', 'to backlog'), ('m', 'move…'), ('⏎', 'follow moved')], PANE_KEYS)
     page('08-history', 'History', [('120×36 · floating window', g)], '''
 <h2>History: browsing past days</h2>
 <p>History is not a separate screen: it is the same day view stepped backwards. A past day is drawn exactly as it was while it was today, and the two panes stay in place.</p>
@@ -693,9 +726,9 @@ def p09():
 # 10 --------------------------------------------------------------------
 def p10():
     g = Grid(120, 36)
-    strip(g, [('Notes', 'b'), ('4 notes', 'd')], [('n or esc back to today', 'd'), ('/', 'd'), (':', 'd'), ('?', 'd')])
+    strip(g, [[('Notes', 'b'), ('4 notes', 'd')]], [key('n', 'or') + key('esc', 'back to today'), key('/'), key(':'), key('?')])
     g.callout(20, 0, 1)
-    lx, lw, rx, rw, y0, y1 = frame2(g, ('Notes', '', 'a new'), ('Note', 'Thu 4 Sep 16:40', 'esc back'), 'right', div=44)
+    lx, lw, rx, rw, y0, y1 = frame2(g, ('Notes', '', key('a', 'new')), ('Note', 'Thu 4 Sep 16:40', key('esc', 'back')), 'right', div=44)
     g.callout(rx + 24, 2, 3)
     y = y0
     notes = [('Mention to Anna: CI runner budget,', 'yesterday', True), ('Draft reply to tender Q3: "We can', '2 days', False),
@@ -755,12 +788,12 @@ def p11():
 
     h = Grid(120, 17)
     h.box(2, 1, 116, 13)
-    h.put(4, 1, ' Keys ', 'A b'); h.rput(116, 1, ' ? or esc close ', 'd')
+    h.put(4, 1, ' Keys ', 'A b'); h.rseg(116, 1, [(' ', 'd'), ('?', 'k'), (' or ', 'd'), ('esc', 'k'), (' close ', 'd')], gap=0)
     cols = [(5, 'Everywhere', [[('j/k', 'move'), ('h/l tab', 'pane')], [('a', 'add'), ('e', 'edit'), ('x', 'delete')],
                                [('u', 'undo'), ('space', 'done')], [('/', 'search'), (':', 'commands')],
                                [('?', 'help'), ('n', 'notes')], [(',', 'settings'), ('q', 'quit')]]),
             (33, 'Day', [[('J/K', 'reorder'), ('f', 'focus')], [('b', 'to backlog')], [('m', 'move to day…')],
-                         [('[ ]', 'prev/next day')], [('.', 'today'), ('g', 'go to date')], [('R', 'repeat')]]),
+                         [('[/]', 'prev/next day')], [('.', 'today'), ('g', 'go to date')], [('R', 'repeat')]]),
             (61, 'Backlog', [[('t', 'to today'), ('m', 'move…')], [('d', 'due by'), ('r', 'remind on')],
                              [('w', 'waiting'), ('R', 'repeat')], [],
                              'REVIEW', [('d', 'done'), ('t', 'today')], [('b', 'backlog'), ('m', 'move…')],
@@ -789,16 +822,16 @@ def p11():
 def p12():
     grids = []
     g = Grid(60, 11); header(g, 0, 60, 0, 'Today', 'Sat 6 Sep', 'nothing planned', focus=True); g.hl(0, 1, 60)
-    g.put(14, 4, 'Nothing planned.', 'd'); g.put(6, 5, 'a add a task · l then t pull from the backlog', 'd')
+    g.put(14, 4, 'Nothing planned.', 'd'); g.seg(6, 5, key('a', 'add a task ·') + key('l', 'then') + key('t', 'pull from the backlog'), gap=1)
     grids.append(('A · Empty day', g))
     g = Grid(60, 11); header(g, 0, 60, 0, 'Backlog', '', '0'); g.hl(0, 1, 60)
-    g.put(14, 4, 'Backlog is empty.', 'd'); g.put(8, 5, 'a add · b on a day task sends it here', 'd')
+    g.put(14, 4, 'Backlog is empty.', 'd'); g.seg(8, 5, key('a', 'add ·') + key('b', 'on a day task sends it here'), gap=1)
     grids.append(('B · Empty backlog', g))
-    g = Grid(60, 7); strip(g, [('Today · Fri 5 Sep', 'b')], [('0 in review', 'd')])
-    g.put(1, 3, 'Opens straight to Today. Count is 0, not an alert.', 'd')
+    g = Grid(60, 7); strip(g, [[('‹', 'd'), ('Today · Fri 5 Sep', 'b'), ('›', 'd')]], [[('4 notes', 'd'), ('n', 'k')], key('?')])
+    g.put(1, 3, 'Opens straight to Today. Nothing on the pile, so no count.', 'd')
     grids.append(('C · Nothing to review: the review is skipped, not shown', g))
     g = Grid(60, 11); header(g, 0, 60, 0, 'Sun 31 Aug', 'past day', 'nothing was planned', focus=True); g.hl(0, 1, 60)
-    g.put(10, 4, 'Nothing was planned on this day.', 'd'); g.put(8, 5, '[ keeps stepping back · g pick a date', 'd')
+    g.put(10, 4, 'Nothing was planned on this day.', 'd'); g.seg(8, 5, key('[', 'keeps stepping back ·') + key('g', 'pick a date'), gap=1)
     grids.append(('D · Past day with nothing planned', g))
     g = Grid(60, 10); g.box(2, 0, 56, 7)
     g.put(4, 1, '/', 'b'); inp(g, 6, 1, 38, 'tax return'); g.rput(56, 1, '0 matches', 'd'); g.hl(3, 2, 54, 'd')
@@ -822,8 +855,8 @@ def p12():
 # 13 --------------------------------------------------------------------
 def p13():
     g = Grid(120, 36)
-    strip(g, [('Settings', 'b'), ('kept in the database, beside the tasks', 'd')],
-          [(', or esc back', 'd'), (':', 'd'), ('?', 'd')])
+    strip(g, [[('Settings', 'b'), ('kept in the database, beside the tasks', 'd')]],
+          [key(',', 'or') + key('esc', 'back'), key(':'), key('?')])
     lx, lw, rx, rw, y0, y1 = frame2(g, ('Settings', '', 'colour and font come from the terminal'),
                                     ('Day starts at',), 'left', div=79)
     rows = [('g', 'Day'),

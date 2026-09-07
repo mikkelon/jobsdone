@@ -167,20 +167,81 @@ impl Canvas<'_> {
         right
     }
 
-    /// A run of segments from `x`, separated by `gap` spaces.
-    fn segments(&mut self, x: u16, y: u16, parts: &[(String, Style)], gap: u16) -> u16 {
+    /// A key name, in accent. The slash between two keys (`J/K`, `tab
+    /// h/l`) is dim, so the keys read as the keys and the slash as the
+    /// "or" it is; `/` on its own is the search key and stays in accent.
+    fn key(&mut self, x: u16, y: u16, shown: &str) -> u16 {
+        if shown == "/" {
+            return self.put(x, y, shown, accent());
+        }
         let mut at = x;
-        for (text, style) in parts {
-            at = self.put(at, y, text, *style).saturating_add(gap);
+        for (part, name) in shown.split('/').enumerate() {
+            if part > 0 {
+                at = self.put(at, y, "/", dim());
+            }
+            at = self.put(at, y, name, accent());
         }
         at
     }
 
     /// The same, ending just before `right`.
-    fn rsegments(&mut self, right: u16, y: u16, parts: &[(String, Style)], gap: u16) {
-        let text: u16 = parts.iter().map(|(text, _)| count(text)).sum();
-        let gaps = gap * (parts.len().saturating_sub(1)) as u16;
-        self.segments(right.saturating_sub(text + gaps), y, parts, gap);
+    fn rkey(&mut self, right: u16, y: u16, shown: &str) -> u16 {
+        self.key(right.saturating_sub(count(shown)), y, shown);
+        right
+    }
+
+    /// A run of items from `x`, `gap` cells apart. The parts of one item
+    /// are a cell apart, which is what makes `g go to date` one thing and
+    /// `[ ] day  g go to date` two.
+    fn segments(&mut self, x: u16, y: u16, items: &[Item], gap: u16) -> u16 {
+        let mut at = x;
+        for item in items {
+            at = self.item(at, y, item).saturating_add(gap);
+        }
+        at
+    }
+
+    /// The same, ending just before `right`.
+    fn rsegments(&mut self, right: u16, y: u16, items: &[Item], gap: u16) {
+        let text: u16 = items.iter().map(item_width).sum();
+        let gaps = gap * (items.len().saturating_sub(1)) as u16;
+        self.segments(right.saturating_sub(text + gaps), y, items, gap);
+    }
+
+    /// One item, its parts a cell apart, and where it ended.
+    fn item(&mut self, x: u16, y: u16, item: &Item) -> u16 {
+        let mut at = x;
+        for (n, part) in item.iter().enumerate() {
+            if n > 0 {
+                at = at.saturating_add(1);
+            }
+            at = match part {
+                Part::Key(shown) => self.key(at, y, shown),
+                Part::Words(text, style) => self.put(at, y, text, *style),
+            };
+        }
+        at
+    }
+
+    /// An item ending just before `right`, in `room` cells: the parts
+    /// that fit are drawn whole and the one that does not is cut where
+    /// the room ends.
+    fn ritem(&mut self, right: u16, y: u16, item: &Item, room: u16) {
+        let width = item_width(item).min(room);
+        let end = right;
+        let mut at = right.saturating_sub(width);
+        for (n, part) in item.iter().enumerate() {
+            if n > 0 {
+                at = at.saturating_add(1);
+            }
+            if at >= end {
+                break;
+            }
+            at = match part {
+                Part::Key(shown) => self.key(at, y, clip(shown, end - at)),
+                Part::Words(text, style) => self.put(at, y, clip(text, end - at), *style),
+            };
+        }
     }
 
     fn hline(&mut self, x: u16, y: u16, width: u16, style: Style) {
@@ -398,9 +459,64 @@ pub fn draw(app: &App, frame: &mut Frame) -> Layout {
     layout
 }
 
-/// A status-line segment at the weight most of them have.
-fn quiet(text: &str) -> (String, Style) {
-    (text.to_owned(), dim())
+/// One thing a line says, in parts a cell apart: a word, `g go to
+/// date`, `4 notes n`. A key is in accent and the words beside it are
+/// dim, so a key never looks like its description (DESIGN.md section 3).
+type Item = Vec<Part>;
+
+/// A part of an item: a key as the key table shows it, or words at a
+/// weight of their own.
+enum Part {
+    Key(String),
+    Words(String, Style),
+}
+
+impl Part {
+    fn width(&self) -> u16 {
+        match self {
+            Part::Key(shown) => count(shown),
+            Part::Words(text, _) => count(text),
+        }
+    }
+}
+
+/// The cells an item takes, parts and the cells between them.
+fn item_width(item: &Item) -> u16 {
+    let text: u16 = item.iter().map(Part::width).sum();
+    text + item.len().saturating_sub(1) as u16
+}
+
+/// Words at a weight of their own.
+fn words(text: &str, style: Style) -> Part {
+    Part::Words(text.to_owned(), style)
+}
+
+/// Words at the weight most of a status line has.
+fn quiet(text: &str) -> Item {
+    vec![words(text, dim())]
+}
+
+/// Keys and what each does: `a add · b on a day task sends it here`. A
+/// key with nothing after it is just the key.
+fn keys(pairs: &[(&str, &str)]) -> Item {
+    let mut item = Vec::new();
+    for (shown, name) in pairs {
+        item.push(Part::Key(shown.to_string()));
+        if !name.is_empty() {
+            item.push(words(name, dim()));
+        }
+    }
+    item
+}
+
+/// One key and what it does.
+fn key(shown: &str, name: &str) -> Item {
+    keys(&[(shown, name)])
+}
+
+/// An item that is only there when there is something to say.
+fn with(first: Option<Item>, rest: Vec<Item>) -> Vec<Item> {
+    first.into_iter().chain(rest).collect()
 }
 
 /// Which day, how to move between days, and the only global indicators.
@@ -411,93 +527,93 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
         review::status(canvas, under_way, y, narrow);
         return;
     }
-    let review = app.review_count();
-    // Red only while there is something on the pile: a zero is a count,
-    // not an alert.
-    let pile = if review > 0 {
-        Style::new().fg(Color::Red).add_modifier(Modifier::BOLD)
-    } else {
-        dim()
-    };
     let browsing = app.shown() != Shown::Today;
     let day = if browsing {
-        (day_label(app.showing(), app.dates()), bold())
+        day_label(app.showing(), app.dates())
     } else {
-        (
-            format!("Today · {}", day_label(app.today(), app.dates())),
-            bold(),
-        )
+        format!("Today · {}", day_label(app.today(), app.dates()))
     };
-    let count = app.notes().count;
-    let notes = counted(count, "note", "notes");
-    // A day that is not today says how far off it is and how to come
-    // back, which leaves the right end no room for its own words.
-    let short = vec![
-        (format!("● {review} in review"), pile),
-        quiet(&format!("{notes} n")),
-        quiet("/"),
-        quiet(":"),
-        quiet("?"),
+    let day = vec![words("‹", dim()), words(&day, bold()), words("›", dim())];
+    let notes = vec![
+        words(&counted(app.notes().count, "note", "notes"), dim()),
+        Part::Key("n".to_owned()),
     ];
 
+    // What was left on the pile is an alert: red, first, and with the key
+    // that opens the review on it. Nothing on the pile is no alert, so
+    // the line says nothing rather than counting to zero.
+    let on_pile = app.review_count();
+    let alert = |words: &str| -> Option<Item> {
+        (on_pile > 0).then(|| {
+            vec![
+                Part::Words(
+                    format!("● {on_pile}{words}"),
+                    Style::new().fg(Color::Red).add_modifier(Modifier::BOLD),
+                ),
+                Part::Key("M".to_owned()),
+            ]
+        })
+    };
+
+    // A day that is not today says how far off it is and how to come
+    // back, which leaves the right end no room for its own words.
     let (left, right) = match (app.page(), narrow) {
         (Page::Home, true) => (
-            vec![quiet("‹"), day, quiet("›")],
-            vec![
-                (format!("● {review}"), pile),
-                quiet("/"),
-                quiet(":"),
-                quiet("?"),
-            ],
+            vec![day],
+            with(alert(""), vec![key("/", ""), key(":", ""), key("?", "")]),
         ),
         (Page::Home, false) if browsing => (
             vec![
-                quiet("‹"),
                 day,
-                quiet("›"),
                 quiet(&ago(app.showing(), app.today())),
-                quiet(". back to today"),
+                key(".", "back to today"),
             ],
-            short,
+            with(
+                alert(" on the pile"),
+                vec![notes, key("/", ""), key(":", ""), key("?", "")],
+            ),
         ),
         (Page::Home, false) => (
-            vec![
-                quiet("‹"),
-                day,
-                quiet("›"),
-                quiet("[ ] day"),
-                quiet("g go to date"),
-            ],
-            vec![
-                (format!("● {review} in review"), pile),
-                quiet(&format!("{notes} n")),
-                quiet("/ search"),
-                quiet(": commands"),
-                quiet("?"),
-            ],
+            vec![day, key("[/]", "day"), key("g", "go to date")],
+            with(
+                alert(" on the pile"),
+                vec![
+                    notes,
+                    key("/", "search"),
+                    key(":", "commands"),
+                    key("?", ""),
+                ],
+            ),
         ),
         (Page::Notes, _) => (
-            vec![("Notes".to_owned(), bold()), quiet(&notes)],
+            vec![vec![
+                words("Notes", bold()),
+                words(&counted(app.notes().count, "note", "notes"), dim()),
+            ]],
             vec![
-                quiet("n or esc back to today"),
-                quiet("/"),
-                quiet(":"),
-                quiet("?"),
+                keys(&[("n", "or"), ("esc", "back to today")]),
+                key("/", ""),
+                key(":", ""),
+                key("?", ""),
             ],
         ),
         // The settings are about the program rather than about a day, so
         // the indicators the other pages carry mean nothing here. The way
         // out is where the notes page puts its own.
         (Page::Settings, _) => (
+            vec![vec![
+                words("Settings", bold()),
+                words("kept in the database, beside the tasks", dim()),
+            ]],
             vec![
-                ("Settings".to_owned(), bold()),
-                quiet("kept in the database, beside the tasks"),
+                keys(&[(",", "or"), ("esc", "back")]),
+                key(":", ""),
+                key("?", ""),
             ],
-            vec![quiet(", or esc back"), quiet(":"), quiet("?")],
         ),
     };
 
-    canvas.segments(1, y, &left, 1);
+    canvas.segments(1, y, &left, 2);
     canvas.rsegments(canvas.width() - 1, y, &right, 3);
 }
 
@@ -520,7 +636,7 @@ fn hint_bar(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
         let room = edge.saturating_sub(x + if offer { 8 } else { 0 });
         x = canvas.put(x, y, clip(&message.text, room), plain()) + 2;
         if offer {
-            x = canvas.put(x, y, "u", accent());
+            x = canvas.key(x, y, "u");
             x = canvas.put(x + 2, y, "undo", dim()) + 2;
         }
     }
@@ -542,7 +658,7 @@ fn hint_bar(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
         if x + count(shown) + 1 + count(name) > edge {
             break;
         }
-        x = canvas.put(x, y, shown, accent());
+        x = canvas.key(x, y, shown);
         x = canvas.put(x + 1, y, name, dim()) + 2;
     }
 
@@ -554,7 +670,7 @@ fn hint_bar(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
             break;
         }
         edge = canvas.rput(edge, y, name, dim()) - count(name) - 1;
-        edge = canvas.rput(edge, y, shown, accent()) - count(shown) - 2;
+        edge = canvas.rkey(edge, y, shown) - count(shown) - 2;
     }
 }
 
@@ -763,14 +879,16 @@ struct Section<'a> {
 struct PaneView<'a> {
     title: String,
     sub: String,
-    right: String,
+    /// The right end of the header: a count, or the key that fills the
+    /// pane.
+    right: Item,
     sections: Vec<Section<'a>>,
     /// A last dim line under the whole pane, which only the day list has:
     /// what it does not show.
     foot: Option<&'static str>,
     /// What the list is for and the keys that fill it (DESIGN.md section
     /// 10).
-    empty: [&'static str; 2],
+    empty: [Item; 2],
 }
 
 /// Today, or whichever day the day pane has been stepped to. A day is
@@ -824,7 +942,7 @@ fn day_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
     // Today counts what it still holds; a day that is over is a record,
     // so it counts everything that was planned on it (DOMAIN.md section
     // 6).
-    let right = match (counts.planned, shown) {
+    let right = quiet(&match (counts.planned, shown) {
         (0, Shown::Past) => "nothing was planned".to_owned(),
         (0, _) => "nothing planned".to_owned(),
         (_, Shown::Today) => {
@@ -851,7 +969,7 @@ fn day_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
         .map(|(n, name)| format!("{n} {name}"))
         .collect::<Vec<_>>()
         .join(" · "),
-    };
+    });
 
     let (title, sub) = match shown {
         Shown::Today => ("Today".to_owned(), day_label(view.day, app.dates())),
@@ -867,16 +985,20 @@ fn day_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
         foot: None,
         empty: match shown {
             Shown::Today => [
-                "Nothing planned.",
-                "a add a task · l then t pull from the backlog",
+                quiet("Nothing planned."),
+                keys(&[
+                    ("a", "add a task ·"),
+                    ("l", "then"),
+                    ("t", "pull from the backlog"),
+                ]),
             ],
             Shown::Past => [
-                "Nothing was planned on this day.",
-                "[ keeps stepping back · g pick a date",
+                quiet("Nothing was planned on this day."),
+                keys(&[("[", "keeps stepping back ·"), ("g", "pick a date")]),
             ],
             Shown::Future => [
-                "Nothing planned for this day.",
-                "] keeps stepping on · g pick a date",
+                quiet("Nothing planned for this day."),
+                keys(&[("]", "keeps stepping on ·"), ("g", "pick a date")]),
             ],
         },
     }
@@ -901,12 +1023,12 @@ fn days_pane(app: &App) -> PaneView<'_> {
     PaneView {
         title: "Days".to_owned(),
         sub: String::new(),
-        right: "g go to date".to_owned(),
+        right: key("g", "go to date"),
         sections,
         foot: Some("days with nothing planned are skipped"),
         empty: [
-            "Nothing has been planned on any day yet.",
-            ". back to today",
+            quiet("Nothing has been planned on any day yet."),
+            key(".", "back to today"),
         ],
     }
 }
@@ -958,11 +1080,11 @@ fn backlog_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
         });
     }
 
-    let right = if view.waiting_count > 0 {
+    let right = quiet(&if view.waiting_count > 0 {
         format!("{} · {} waiting", view.open, view.waiting_count)
     } else {
         view.open.to_string()
-    };
+    });
 
     PaneView {
         title: "Backlog".to_owned(),
@@ -970,7 +1092,10 @@ fn backlog_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
         right,
         sections,
         foot: None,
-        empty: ["Backlog is empty.", "a add · b on a day task sends it here"],
+        empty: [
+            quiet("Backlog is empty."),
+            keys(&[("a", "add ·"), ("b", "on a day task sends it here")]),
+        ],
     }
 }
 
@@ -984,7 +1109,7 @@ fn notes_pane(app: &App) -> PaneView<'_> {
         sub: String::new(),
         // The count is in the status line; the header names the key that
         // fills the list instead (DESIGN.md section 9).
-        right: "a new".to_owned(),
+        right: key("a", "new"),
         // The new-note row is the whole empty state (DESIGN.md section 10).
         sections: vec![
             Section {
@@ -1001,7 +1126,7 @@ fn notes_pane(app: &App) -> PaneView<'_> {
             },
         ],
         foot: None,
-        empty: ["", ""],
+        empty: [Vec::new(), Vec::new()],
     }
 }
 
@@ -1105,7 +1230,7 @@ fn pane(
     });
 
     if view.sections.is_empty() {
-        empty_state(canvas, column, view.empty);
+        empty_state(canvas, column, &view.empty);
         return;
     }
 
@@ -1173,7 +1298,7 @@ fn pane(
                     Some(editor) => add_field(canvas, x, width, y, editor),
                     None => {
                         canvas.put(x + 1, y, &format!(" +  {label}"), dim());
-                        canvas.rput(x + width - 1, y, "a", accent());
+                        canvas.rkey(x + width - 1, y, "a");
                     }
                 }
                 None
@@ -1266,10 +1391,11 @@ fn row_area(list: List, id: RowId, column: Column, y: u16, height: u16) -> RowAr
 
 /// What an empty list is for, and the one or two keys that fill it
 /// (DESIGN.md section 10). No illustration, no encouragement.
-fn empty_state(canvas: &mut Canvas, column: Column, empty: [&str; 2]) {
-    let middle = |text: &str| column.x + column.width.saturating_sub(count(text)) / 2;
-    canvas.put(middle(empty[0]), column.top + 2, empty[0], dim());
-    canvas.put(middle(empty[1]), column.top + 3, empty[1], dim());
+fn empty_state(canvas: &mut Canvas, column: Column, empty: &[Item; 2]) {
+    for (line, item) in empty.iter().enumerate() {
+        let x = column.x + column.width.saturating_sub(item_width(item)) / 2;
+        canvas.item(x, column.top + 2 + line as u16, item);
+    }
 }
 
 /// The blank cells a header keeps between what it names on the left and
@@ -1289,7 +1415,7 @@ fn header(canvas: &mut Canvas, x: u16, width: u16, y: u16, view: &PaneView, focu
         // of room rather than into each other.
         let edge = x + width.saturating_sub(1);
         let room = edge.saturating_sub(left + HEADER_GAP);
-        canvas.rput(edge, y, clip(&view.right, room), dim());
+        canvas.ritem(edge, y, &view.right, room);
     }
 }
 
@@ -1770,13 +1896,13 @@ fn open_note(
         sub: made.clone().unwrap_or_default(),
         // The way out, on the pane the way out is from.
         right: if focused && made.is_some() {
-            "esc back".to_owned()
+            key("esc", "back")
         } else {
-            String::new()
+            Vec::new()
         },
         sections: Vec::new(),
         foot: None,
-        empty: ["No notes yet.", "a writes one"],
+        empty: [quiet("No notes yet."), key("a", "writes one")],
     };
     match header_row {
         Some(y) => header(canvas, x, width, y, &view, focused),
@@ -1784,7 +1910,7 @@ fn open_note(
     }
 
     let Some(open) = open else {
-        empty_state(canvas, column, view.empty);
+        empty_state(canvas, column, &view.empty);
         return;
     };
     // What is being typed, or the note as it was last saved.

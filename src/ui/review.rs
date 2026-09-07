@@ -9,8 +9,9 @@
 use jiff::civil::Date;
 
 use super::{
-    Canvas, Column, HEADER_GAP, Kind, Look, NARROW, Rows, accent, bold, clip, count, cursor,
-    day_label, dim, group_rule, place_label, plain, row_area, scroll_to, task_row, title_field,
+    Canvas, Column, HEADER_GAP, Kind, Look, NARROW, Rows, bold, clip, count, cursor, day_label,
+    dim, group_rule, item_width, keys, place_label, plain, quiet, row_area, scroll_to, task_row,
+    title_field, words,
 };
 use crate::app::{App, Decided, Editor, Layout, List, ListArea, Rect as Cells, Review, RowId};
 use crate::domain::{DateOrder, Place, Row};
@@ -33,12 +34,9 @@ pub(super) fn status(canvas: &mut Canvas, review: &Review, y: u16, narrow: bool)
         } else {
             format!("{handled} of {total}")
         };
-        vec![(progress, dim())]
+        vec![quiet(&progress)]
     } else {
-        vec![
-            (count_of(review), dim()),
-            ("esc skip for now".to_owned(), dim()),
-        ]
+        vec![quiet(&count_of(review)), keys(&[("esc", "skip for now")])]
     };
 
     // The step keeps the gap clear of what the right end says, so the two
@@ -46,15 +44,12 @@ pub(super) fn status(canvas: &mut Canvas, review: &Review, y: u16, narrow: bool)
     // for the name of the step drops it whole rather than cutting a word
     // in half; the count of the steps is the part that has to be there.
     let gaps = 3 * (right.len().saturating_sub(1)) as u16;
-    let taken: u16 = right.iter().map(|(text, _)| count(text)).sum();
+    let taken: u16 = right.iter().map(item_width).sum();
     let room = (canvas.width() - 1).saturating_sub(1 + count(name) + 1 + taken + gaps + HEADER_GAP);
     let steps = format!("step {at} of {of}");
     let step = format!("{steps} · {}", subtitle(review.step()));
     let step = if count(&step) <= room { step } else { steps };
-    let left = vec![
-        (name.to_owned(), bold()),
-        (clip(&step, room).to_owned(), dim()),
-    ];
+    let left = vec![vec![words(name, bold()), words(clip(&step, room), dim())]];
 
     canvas.segments(1, y, &left, 1);
     canvas.rsegments(canvas.width() - 1, y, &right, 3);
@@ -334,7 +329,7 @@ fn panel(canvas: &mut Canvas, review: &Review, column: Column) {
 
     for (at, outcome) in outcomes.iter().enumerate() {
         let y = top + at as u16;
-        canvas.put(x + 2, y, outcome.key, accent());
+        canvas.key(x + 2, y, outcome.key);
         canvas.put(x + 8, y, outcome.label, plain());
         if !outcome.note.is_empty() {
             canvas.rput(x + width - 2, y, outcome.note, dim());
@@ -420,5 +415,5 @@ fn button(canvas: &mut Canvas, review: &Review, column: Column) {
     let (box_x, box_width, y) = (x + 1, width - 2, bottom - 2);
     super::popup::frame(canvas, box_x, y, box_width, 3);
     let at = canvas.put(box_x + 2, y + 1, &label, plain());
-    canvas.put(at + 1, y + 1, "⏎", accent());
+    canvas.key(at + 1, y + 1, "⏎");
 }
