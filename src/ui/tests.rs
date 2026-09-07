@@ -7,7 +7,7 @@ use ratatui::backend::{CrosstermBackend, TestBackend};
 use ratatui::style::Color;
 use ratatui::{Terminal, TerminalOptions, Viewport};
 
-use crate::app::{App, Desktop, List, Locale, RowId, SettingRow, WindowSize, setting_rows};
+use crate::app::{App, Desktop, List, Locale, Popup, RowId, SettingRow, WindowSize, setting_rows};
 use crate::domain::tests::MemStore;
 use crate::domain::{
     DateStyle, DueChip, FromPlace, Model, Note, Placement, Schedule, Task, WeekStart, Weekday,
@@ -1232,7 +1232,7 @@ fn the_add_line_becomes_the_field_that_is_typed_into() {
     // Nothing is planned yet, so no group label stands over the field:
     // the add line is the pane's own (DESIGN.md section 6).
     assert!(
-        drawn[5].contains("+  Call the landlord about the leak▏"),
+        drawn[5].contains("+  Call the landlord about the leak█"),
         "the field is where the add line was: {:?}",
         drawn[5]
     );
@@ -1249,7 +1249,7 @@ fn a_title_is_edited_in_the_row_it_belongs_to() {
     app.update(Action::Edit);
     let drawn = look(&app, 120, 36);
 
-    assert!(drawn[6].contains("[ ] Ship invoice export▏"));
+    assert!(drawn[6].contains("[ ] Ship invoice export█"));
     assert!(drawn[34].contains("⏎ save"));
     assert!(drawn[34].contains("esc cancel"));
 }
@@ -1441,7 +1441,7 @@ fn the_date_cards_calendar_takes_the_keyboard_on_tab() {
     assert!(
         drawn
             .iter()
-            .any(|row| row.contains('▏') && row.contains("Sat 13 Sep")),
+            .any(|row| row.contains('█') && row.contains("Sat 13 Sep")),
         "the card opened on the due date the task has and l walked a day on"
     );
 }
@@ -2094,7 +2094,7 @@ fn a_note_of_wide_characters_wraps_and_puts_its_caret_by_cells() {
         .find(|row| row.contains("日本語"))
         .expect("the body");
 
-    assert!(row.contains("日本語▏です"), "{row:?}");
+    assert!(row.contains("日本語█です"), "{row:?}");
 }
 
 #[test]
@@ -2108,10 +2108,10 @@ fn a_field_of_wide_characters_puts_its_caret_where_the_cells_end() {
 
     let row = glyphs(&app, 120, 36)
         .into_iter()
-        .find(|row| row.contains('▏'))
+        .find(|row| row.contains('█'))
         .expect("the field");
 
-    assert!(row.contains("日本🙂▏語"), "{row:?}");
+    assert!(row.contains("日本🙂█語"), "{row:?}");
 }
 
 #[test]
@@ -2195,18 +2195,18 @@ fn a_field_longer_than_its_line_scrolls_to_keep_the_caret_on_it() {
 
     let field = look(&app, 120, 36)
         .into_iter()
-        .find(|row| row.contains('▏'))
+        .find(|row| row.contains('█'))
         .expect("the add field");
-    assert!(field.contains("going END▏"), "the end of it: {field:?}");
+    assert!(field.contains("going END█"), "the end of it: {field:?}");
     assert!(!field.contains("The quick"), "and not the start: {field:?}");
 
     // Back to the beginning, and the line comes with it.
     app.update(Action::LineStart);
     let field = look(&app, 120, 36)
         .into_iter()
-        .find(|row| row.contains('▏'))
+        .find(|row| row.contains('█'))
         .expect("the add field");
-    assert!(field.contains("▏The quick brown fox"), "{field:?}");
+    assert!(field.contains("█The quick brown fox"), "{field:?}");
 }
 
 /// An empty group is not drawn, and the add line is not a row of Plan:
@@ -2397,10 +2397,10 @@ fn a_long_query_scrolls_with_its_caret_and_stops_before_the_count() {
             .find(|row| row.contains("matches"))
             .unwrap_or_else(|| panic!("the search box at {width}"));
         assert!(
-            box_row.contains('▏'),
+            box_row.contains('█'),
             "the caret is on it at {width}: {box_row:?}"
         );
-        let (query, count) = box_row.split_once('▏').expect("the caret");
+        let (query, count) = box_row.split_once('█').expect("the caret");
         assert!(
             query.ends_with("6789"),
             "the end of what was typed at {width}: {box_row:?}"
@@ -2464,7 +2464,7 @@ const CLUSTERS: &str = "cafe\u{301} \u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\
 fn typing(app: &App) -> String {
     glyphs(app, 120, 36)
         .into_iter()
-        .find(|row| row.contains('▏'))
+        .find(|row| row.contains('█'))
         .expect("the line being typed")
 }
 
@@ -2479,7 +2479,7 @@ fn a_title_of_clusters_keeps_its_marks_and_steps_over_them_whole() {
         app.update(Action::Insert(typed));
     }
     assert!(
-        typing(&app).contains(&format!("{CLUSTERS}▏")),
+        typing(&app).contains(&format!("{CLUSTERS}█")),
         "what was typed, with its caret after it: {:?}",
         typing(&app)
     );
@@ -2489,14 +2489,14 @@ fn a_title_of_clusters_keeps_its_marks_and_steps_over_them_whole() {
     app.update(Action::Left);
     assert!(
         typing(&app)
-            .contains("cafe\u{301} ▏\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}"),
+            .contains("cafe\u{301} █\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}"),
         "the caret in front of the family: {:?}",
         typing(&app)
     );
     app.update(Action::Left);
     app.update(Action::Insert('X'));
     assert!(
-        typing(&app).contains("cafe\u{301}X▏ \u{1F468}\u{200D}"),
+        typing(&app).contains("cafe\u{301}X█ \u{1F468}\u{200D}"),
         "a letter beside the accent, which keeps it: {:?}",
         typing(&app)
     );
@@ -2538,7 +2538,7 @@ fn a_query_of_clusters_finds_the_row_it_is_stored_in() {
         "the stored title, drawn whole: {found:?}"
     );
     assert!(
-        typing(&app).contains(&format!("{CLUSTERS}▏")),
+        typing(&app).contains(&format!("{CLUSTERS}█")),
         "and the query it was found by: {:?}",
         typing(&app)
     );
@@ -2546,7 +2546,7 @@ fn a_query_of_clusters_finds_the_row_it_is_stored_in() {
     app.update(Action::Left);
     app.update(Action::Insert('X'));
     assert!(
-        typing(&app).contains("cafe\u{301} X▏\u{1F468}\u{200D}"),
+        typing(&app).contains("cafe\u{301} X█\u{1F468}\u{200D}"),
         "a letter typed in front of the family: {:?}",
         typing(&app)
     );
@@ -2567,7 +2567,7 @@ fn a_note_of_clusters_wraps_and_saves_them_whole() {
         app.update(Action::Insert(typed));
     }
     assert!(
-        typing(&app).contains(&format!("{CLUSTERS}▏")),
+        typing(&app).contains(&format!("{CLUSTERS}█")),
         "the body being typed: {:?}",
         typing(&app)
     );
@@ -2576,7 +2576,7 @@ fn a_note_of_clusters_wraps_and_saves_them_whole() {
     app.update(Action::Left);
     app.update(Action::Insert('X'));
     assert!(
-        typing(&app).contains("cafe\u{301}X▏ \u{1F468}\u{200D}"),
+        typing(&app).contains("cafe\u{301}X█ \u{1F468}\u{200D}"),
         "a letter beside the accent: {:?}",
         typing(&app)
     );
@@ -2788,7 +2788,7 @@ fn a_typed_row_becomes_a_field_where_its_value_was() {
         .find(|line| line.starts_with("  Day starts at"))
         .expect("the row");
     assert!(
-        row.contains("9\u{258f}"),
+        row.contains("9\u{2588}"),
         "the caret follows the digit: {row:?}"
     );
     assert!(
@@ -2828,11 +2828,18 @@ fn note_on_screen(body: &str, keep_typing: bool) -> Terminal<TestBackend> {
 /// cell a double-width character owns beside it is folded back into the
 /// character, the way `glyphs` folds it.
 fn drawn_at(buffer: &Buffer, wanted: &str) -> (u16, Vec<u16>) {
+    drawn_from(buffer, wanted, NOTES_DIVIDER)
+}
+
+/// The same, from a column of the test's choosing: a popup is centred
+/// over both panes, so the note's own column is the wrong place to look
+/// for one.
+fn drawn_from(buffer: &Buffer, wanted: &str, from: u16) -> (u16, Vec<u16>) {
     let area = buffer.area();
     for y in 0..area.height {
         let mut text = String::new();
         let mut cells = Vec::new();
-        let mut x = NOTES_DIVIDER;
+        let mut x = from;
         while x < area.width {
             let symbol = buffer[(x, y)].symbol();
             text.push_str(symbol);
@@ -2954,13 +2961,13 @@ fn the_caret_keeps_its_cell_beside_a_word_that_is_underlined() {
 
     let row = glyphs(&app, 120, 36)
         .into_iter()
-        .find(|row| row.contains("remember teh me▏eting"))
+        .find(|row| row.contains("remember teh me█eting"))
         .expect("the caret between the two characters");
-    assert!(row.contains("remember teh me\u{258f}eting"));
+    assert!(row.contains("remember teh me\u{2588}eting"));
 
     let (at, cells) = drawn_at(buffer, "teh");
     assert!(all_underlined(buffer, at, &cells), "the finished word");
-    let (_, caret) = drawn_at(buffer, "\u{258f}");
+    let (_, caret) = drawn_at(buffer, "\u{2588}");
     assert!(
         !any_underlined(buffer, at, &caret),
         "the caret is a cell of the field, not of the word"
@@ -2968,5 +2975,201 @@ fn the_caret_keeps_its_cell_beside_a_word_that_is_underlined() {
     assert!(
         buffer[(caret[0], at)].modifier.contains(Modifier::BOLD),
         "and keeps the weight it is drawn in"
+    );
+}
+
+// ---- the spelling card ----------------------------------------------
+
+/// A note open with the caret in the misspelt word of it and the card of
+/// suggestions over it, which is what `alt-s` leaves on screen.
+fn card_over_a_note() -> App {
+    let mut app = empty();
+    app.update(Action::NotesPage);
+    app.update(Action::Add);
+    for typed in "remember teh meeting".chars() {
+        app.update(Action::Insert(typed));
+    }
+    // Off the end of "meeting" and back onto the end of "teh".
+    for _ in 0..8 {
+        app.update(Action::Left);
+    }
+    app.update(Action::FixSpelling);
+    assert!(app.popup().is_some(), "the card did not open");
+    app
+}
+
+/// The words the card is offering, which the application worked out and
+/// drawing only places.
+fn offered(app: &App) -> Vec<String> {
+    app.popup()
+        .and_then(Popup::spelling)
+        .expect("the card")
+        .suggestions
+        .clone()
+}
+
+#[test]
+fn the_spelling_card_names_the_word_and_lists_what_to_put_in_its_place() {
+    let app = card_over_a_note();
+    let drawn = look(&app, 120, 36);
+    let top = top_of_the_card(&drawn);
+
+    assert!(
+        drawn[top].contains("Spelling teh"),
+        "the card is about a word rather than a row: {:?}",
+        drawn[top]
+    );
+    for (at, word) in offered(&app).iter().enumerate() {
+        assert!(
+            drawn[top + 2 + at].contains(word.as_str()),
+            "{word:?} is not on the card: {:?}",
+            drawn[top + 2 + at]
+        );
+    }
+
+    // The card's keys are the rows of its context, so the hint bar
+    // teaches them the way it teaches every other card's.
+    let bar = &drawn[34];
+    assert!(bar.contains("SPELLING"), "{bar:?}");
+    assert!(bar.contains("↑/↓ move"), "{bar:?}");
+    assert!(bar.contains("⏎ replace the word"), "{bar:?}");
+    assert!(bar.contains("esc cancel"), "{bar:?}");
+}
+
+/// Which drawn row the card's top border is on.
+fn top_of_the_card(drawn: &[String]) -> usize {
+    drawn
+        .iter()
+        .position(|row| row.contains("┌ Spelling"))
+        .unwrap_or_else(|| panic!("the card was not drawn: {drawn:?}"))
+}
+
+/// Where the card was drawn: the row of its top border, and the column
+/// its words start in. A card is centred over both panes, so a word of
+/// it is looked for by where the card is rather than by its text, which
+/// the note underneath could be saying too. Cells rather than bytes: the
+/// panes the card is over are drawn with box characters.
+fn card_at(buffer: &Buffer) -> (u16, u16) {
+    let rows = lines(buffer);
+    let area = buffer.area();
+    for y in 0..area.height {
+        if !rows[y as usize].contains("┌ Spelling") {
+            continue;
+        }
+        for x in 0..area.width {
+            if buffer[(x, y)].symbol() == "┌" {
+                return (y, x + 2);
+            }
+        }
+    }
+    panic!("the card was not drawn: {rows:?}");
+}
+
+/// The word drawn on one row of the card: from its first column to the
+/// border down its other side.
+fn word_on(buffer: &Buffer, row: u16, left: u16) -> String {
+    let mut text = String::new();
+    for x in left..buffer.area().width {
+        let symbol = buffer[(x, row)].symbol();
+        if symbol == "│" {
+            break;
+        }
+        text.push_str(symbol);
+    }
+    text.trim().to_owned()
+}
+
+#[test]
+fn the_word_the_card_would_write_in_is_the_one_marked() {
+    let mut app = card_over_a_note();
+    let words = offered(&app);
+    let mut terminal = Terminal::new(TestBackend::new(120, 36)).expect("a test terminal");
+    terminal
+        .draw(|frame| _ = draw(&app, frame))
+        .expect("a frame");
+    let first = terminal.backend().buffer().clone();
+    let (top, left) = card_at(&first);
+
+    assert_eq!(word_on(&first, top + 2, left), words[0]);
+    assert!(
+        first[(left, top + 2)].modifier.contains(Modifier::REVERSED),
+        "the card opens on the word the dictionary put first"
+    );
+
+    // One row down, and the mark goes with it.
+    app.update(Action::Down);
+    terminal
+        .draw(|frame| _ = draw(&app, frame))
+        .expect("a frame");
+    let then = terminal.backend().buffer();
+    assert_eq!(
+        then[(left, top + 2)].modifier.contains(Modifier::REVERSED),
+        words.len() == 1,
+        "the first word keeps the mark only where it is the only word"
+    );
+    if let Some(second) = words.get(1) {
+        assert_eq!(word_on(then, top + 3, left), *second);
+        assert!(then[(left, top + 3)].modifier.contains(Modifier::REVERSED));
+    }
+}
+
+#[test]
+fn the_spelling_card_keeps_inside_a_narrow_window() {
+    let app = card_over_a_note();
+    let word = offered(&app).remove(0);
+    for (width, height) in [(80, 44), (80, 24)] {
+        let drawn = look(&app, width, height);
+        let top = top_of_the_card(&drawn);
+        assert!(
+            drawn[top].contains('┐'),
+            "both sides of the card are on a {width} by {height} window: {:?}",
+            drawn[top]
+        );
+        assert!(
+            drawn[top + 2].contains(&word),
+            "with a word to choose at {width} by {height}: {:?}",
+            drawn[top + 2]
+        );
+    }
+}
+
+#[test]
+fn the_open_note_names_the_key_that_fixes_a_spelling() {
+    let mut app = empty();
+    app.update(Action::NotesPage);
+    app.update(Action::Add);
+
+    let bar = look(&app, 120, 36)[34].clone();
+    assert!(bar.contains("alt-s fix spelling…"), "the wide bar: {bar:?}");
+
+    let narrow = look(&app, 80, 44)[42].clone();
+    assert!(
+        narrow.contains("alt-s spelling"),
+        "the narrow bar: {narrow:?}"
+    );
+}
+
+#[test]
+fn the_caret_fills_the_cell_it_has_wherever_it_is_drawn() {
+    // A field on a task row and the body of a note are the two places a
+    // caret is drawn, and in both the cell is the caret's alone.
+    let mut app = empty();
+    app.update(Action::Add);
+    let drawn = glyphs(&app, 120, 36);
+    assert!(
+        drawn.iter().any(|row| row.contains("+  █")),
+        "the add field: {drawn:?}"
+    );
+
+    app.update(Action::Cancel);
+    app.update(Action::NotesPage);
+    app.update(Action::Add);
+    for typed in "hello".chars() {
+        app.update(Action::Insert(typed));
+    }
+    let drawn = glyphs(&app, 120, 36);
+    assert!(
+        drawn.iter().any(|row| row.contains("hello█")),
+        "the note body: {drawn:?}"
     );
 }

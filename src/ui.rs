@@ -53,7 +53,12 @@ const ABOUT_SETTING: u16 = 40;
 
 /// The caret of a text field, which is a cell of its own rather than a
 /// terminal cursor, so that it sits where the text does.
-const CARET: &str = "▏";
+///
+/// A full block rather than a bar, because the cell is the caret's and
+/// nothing else is drawn in it: a bar leaves the rest of the cell empty,
+/// which reads as a gap in the line with a thin mark in it rather than
+/// as a caret sitting where the next character goes.
+const CARET: &str = "█";
 
 // ---- the meanings, as terminal colours -------------------------------
 

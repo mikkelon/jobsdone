@@ -64,6 +64,9 @@ pub enum PopupKind {
     /// The question `x` asks while `confirm_delete` is on, about a task
     /// or a note.
     DeleteQuestion,
+    /// The spelling card: what the dictionary offers in place of the
+    /// misspelt word the caret of an open note is in.
+    Spelling,
 }
 
 /// The in-place text field on the home page, which is the only place a
@@ -160,6 +163,10 @@ pub enum Action {
     Edit,
     Delete,
     CopyNote,
+    /// The misspelt word the caret of an open note is in, and what the
+    /// dictionary offers in place of it. It acts on a word rather than
+    /// on a row, which is why it is the note's key and no list's.
+    FixSpelling,
     ToToday,
     ToBacklog,
     MoveToDay,
@@ -823,6 +830,16 @@ const NOTES_NOTE: &[Binding] = &[
         label: "copy note",
         bar: Bar::Left,
         narrow: Bar::Left,
+    },
+    // Every letter types here, so the one key that acts on a word is on
+    // Alt, the way search's `alt-t` and the date card's picks are
+    // (DESIGN.md section 4).
+    Binding {
+        keys: &[("alt-s", Action::FixSpelling)],
+        shown: "alt-s",
+        label: "fix spelling…",
+        bar: Bar::Left,
+        narrow: Bar::Short(Side::Left, "spelling"),
     },
     Binding {
         keys: &[],
@@ -1682,6 +1699,34 @@ const SEARCH_BOX: &[Binding] = filter_box![
     },
 ];
 
+/// The spelling card: the words the dictionary offers in place of a
+/// misspelt one. It is a list that is chosen from and answered, so its
+/// keys are the keys every card's list has; nothing here is on Alt,
+/// because the note under it has given the keyboard up while it stands.
+const SPELLING_CARD: &[Binding] = &[
+    Binding {
+        keys: &[("up", Action::Up), ("down", Action::Down)],
+        shown: "↑/↓",
+        label: "move",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("enter", Action::Confirm)],
+        shown: "⏎",
+        label: "replace the word",
+        bar: Bar::Left,
+        narrow: Bar::Short(Side::Left, "replace"),
+    },
+    Binding {
+        keys: &[("esc", Action::Cancel)],
+        shown: "esc",
+        label: "cancel",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+];
+
 const HELP_OVERLAY: &[Binding] = &[Binding {
     keys: &[("?", Action::Cancel), ("esc", Action::Cancel)],
     shown: "? or esc",
@@ -1867,6 +1912,10 @@ pub fn bindings(context: KeyContext) -> &'static [Binding] {
             kind: PopupKind::Repeat,
             ..
         } => REPEAT_CARD,
+        KeyContext::Popup {
+            kind: PopupKind::Spelling,
+            ..
+        } => SPELLING_CARD,
         KeyContext::Settings { field: true } => SETTINGS_FIELD,
         KeyContext::Settings { field: false } => SETTINGS_LIST,
     }
@@ -1947,6 +1996,10 @@ pub fn name(context: KeyContext) -> &'static str {
             kind: PopupKind::Repeat,
             ..
         } => "REPEAT",
+        KeyContext::Popup {
+            kind: PopupKind::Spelling,
+            ..
+        } => "SPELLING",
         KeyContext::Settings { .. } => "SETTINGS",
     }
 }

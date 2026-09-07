@@ -543,6 +543,19 @@ impl Spelling {
         }
     }
 
+    /// What the dictionary offers in place of a word, best first and at
+    /// most a handful.
+    ///
+    /// Asked for one word at a time, and only when somebody asks: by the
+    /// time a word is known to be misspelt the checker has already built
+    /// the dictionary this reads, so the answer costs the search and
+    /// nothing else.
+    fn suggestions(&mut self, word: &str) -> Vec<String> {
+        self.checker
+            .get_or_insert_with(spelling::SpellChecker::default)
+            .suggestions(word)
+    }
+
     /// Nothing to check: another page, the setting off, or no note open.
     /// The checker itself stays, so a setting turned off and on again
     /// does not build the dictionary a second time.
@@ -617,6 +630,14 @@ impl Popup {
         }
     }
 
+    /// The spelling card's word, if that is what this popup is.
+    pub fn spelling(&self) -> Option<&SpellingDraft> {
+        match &self.card {
+            Card::Spelling(draft) => Some(draft),
+            _ => None,
+        }
+    }
+
     /// The task the popup is about, if the row it is about is one.
     pub fn task(&self) -> Option<Id> {
         self.target.and_then(RowId::task)
@@ -632,6 +653,7 @@ pub enum Card {
     None,
     Date(DateDraft),
     Repeat(RepeatDraft),
+    Spelling(SpellingDraft),
 }
 
 /// Which date the card is setting. One card, three things to set, and the
@@ -684,6 +706,30 @@ pub struct RepeatDraft {
     /// The date the preview of the next dates counts on from, which is
     /// how far the schedule has already been generated.
     pub after: Date,
+}
+
+/// The spelling card: one misspelt word of an open note, and what the
+/// dictionary offers in place of it.
+///
+/// The body the card was opened over is held with them. A card stands
+/// over a note that a tick can reload, save or throw away underneath it,
+/// and the range below indexes the body it was worked out from and no
+/// other; a suggestion written into a body that has moved on would
+/// replace whatever those clusters have come to be. So the correction is
+/// applied to this text or to none.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct SpellingDraft {
+    /// The body as it was when the card opened.
+    pub body: String,
+    /// Where the word is in it, in grapheme clusters, which is the unit
+    /// the checker answers in and the caret counts in.
+    pub at: Range<usize>,
+    /// The word as it is written there, which is what the card is about
+    /// and what the hint bar names once it has been replaced.
+    pub word: String,
+    /// What the dictionary offers instead, best first. Never empty: a
+    /// word with nothing to offer opens no card.
+    pub suggestions: Vec<String>,
 }
 
 /// Where the move card sends a task.
@@ -1024,6 +1070,7 @@ impl App {
             Action::Focus => self.turn_focus_over(),
             Action::Delete => self.delete(),
             Action::CopyNote => return self.copy_note(),
+            Action::FixSpelling => self.offer_a_spelling(),
             Action::MoveDown => self.reorder(true),
             Action::MoveUp => self.reorder(false),
             Action::ToToday => self.pull_onto_today(),
@@ -2769,6 +2816,126 @@ impl App {
         }
     }
 
+    /// `alt-s` in an open note: the words the dictionary offers in place
+    /// of the misspelt one the caret is in, as a card to choose from.
+    ///
+    /// The word is looked for among every word the checker found rather
+    /// than among the ones drawn. A word with the caret in it is held
+    /// back from the underlines until the caret has left it, because it
+    /// is still being typed (DESIGN.md section 9) — and it is exactly
+    /// the word this key is about, so the underlines are the wrong list
+    /// to read.
+    ///
+    /// The caret at the end of a word counts as being in it, which is
+    /// where a word that has just been typed leaves it.
+    fn offer_a_spelling(&mut self) {
+        // The key is a row of the open note's table and of no other, so
+        // there is nothing to say when there is no note: the key was
+        // never offered.
+        let Some(note) = self.draft.as_ref().map(|draft| draft.note) else {
+            return;
+        };
+        if !self.model.settings.spell_check_notes() {
+            self.say(
+                "Notes are not spell-checked while that setting is off.",
+                false,
+            );
+            return;
+        }
+
+        // What the open note says is settled after every action, so this
+        // asks again for a body that has not changed: a string
+        // comparison, and the ranges below are then this text's rather
+        // than whatever was last checked.
+        self.check_the_spelling();
+        let Some(draft) = self.draft.as_ref() else {
+            return;
+        };
+        let (caret, body) = (draft.caret, draft.text.clone());
+        let found = self
+            .spelling
+            .found
+            .iter()
+            .find(|word| word.start <= caret && caret <= word.end)
+            .cloned();
+        let Some(at) = found else {
+            self.say("There is no misspelt word at the caret.", false);
+            return;
+        };
+
+        let word = body[byte_at(&body, at.start)..byte_at(&body, at.end)].to_owned();
+        let suggestions = self.spelling.suggestions(&word);
+        if suggestions.is_empty() {
+            self.say(
+                format!("The dictionary has nothing to put in place of {word}."),
+                false,
+            );
+            return;
+        }
+
+        self.open(PopupKind::Spelling, Some(RowId::Note(note)));
+        if let Some(popup) = &mut self.popup {
+            popup.card = Card::Spelling(SpellingDraft {
+                body,
+                at,
+                word,
+                suggestions,
+            });
+        }
+    }
+
+    /// Enter on the spelling card: the word chosen goes in where the
+    /// misspelt one was, and nowhere else.
+    ///
+    /// What the card was opened over is checked against what is open now
+    /// before a character is changed. A card stands while ticks go by,
+    /// and a tick reloads the model, writes the note and drops the draft
+    /// of a note another window has thrown away; a correction written
+    /// into a body that has moved on since would replace whatever those
+    /// clusters have come to be. The body is compared whole, so it
+    /// answers for the word having moved as well as for it having
+    /// changed.
+    ///
+    /// Only the word's own bytes are replaced. Everything around it is
+    /// the string it always was, which is what keeps a note's
+    /// combining marks and emoji exactly as they were typed.
+    fn take_the_suggestion(&mut self) {
+        let Some(popup) = &self.popup else {
+            return;
+        };
+        let note = popup.target.and_then(RowId::note);
+        let Some(card) = popup.spelling() else {
+            return;
+        };
+        let Some(chosen) = card.suggestions.get(popup.selected).cloned() else {
+            return;
+        };
+        let card = card.clone();
+        self.popup = None;
+
+        let Some(draft) = self
+            .draft
+            .as_mut()
+            .filter(|draft| Some(draft.note) == note && draft.text == card.body)
+        else {
+            self.say(
+                "That note changed while the card was open. Nothing was replaced.",
+                false,
+            );
+            return;
+        };
+        let from = byte_at(&draft.text, card.at.start);
+        let to = byte_at(&draft.text, card.at.end);
+        draft.text.replace_range(from..to, &chosen);
+        // Where the caret would be if the word had been typed: at its
+        // end, which is also where it was left when the card opened on a
+        // word that had just been finished.
+        draft.caret = card.at.start + glyphs(&chosen);
+        // The body is what the next tick writes (ARCHITECTURE.md rule
+        // 8), the same as a keystroke.
+        self.say(format!("{} became {chosen}.", card.word), false);
+    }
+
     // ---- the title being typed ---------------------------------------
 
     /// `a`: a new note on the notes page, and a field at the end of the
@@ -3206,6 +3373,11 @@ impl App {
             Some(PopupKind::Search) => self.search_results().total,
             Some(PopupKind::Move) => self.move_choices().len(),
             Some(PopupKind::Repeat) => repeat_shapes().len(),
+            Some(PopupKind::Spelling) => self
+                .popup
+                .as_ref()
+                .and_then(Popup::spelling)
+                .map_or(0, |card| card.suggestions.len()),
             _ => 0,
         }
     }
@@ -3388,6 +3560,7 @@ impl App {
             PopupKind::Move => self.take_the_chosen_day(),
             PopupKind::Date => self.take_the_typed_date(),
             PopupKind::Repeat => self.take_the_rule(),
+            PopupKind::Spelling => self.take_the_suggestion(),
             PopupKind::DeleteQuestion => self.take_the_delete(),
             // The copy question has no answer safe enough to be Enter's.
             PopupKind::Help | PopupKind::CopyQuestion => {}

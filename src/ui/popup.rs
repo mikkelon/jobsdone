@@ -34,6 +34,7 @@ pub(super) fn draw(canvas: &mut Canvas, app: &App, rows: &Rows) {
         PopupKind::Repeat => repeat_card(canvas, app, popup, rows),
         PopupKind::CopyQuestion => copy_question(canvas, app, popup, rows),
         PopupKind::DeleteQuestion => delete_question(canvas, app, popup, rows),
+        PopupKind::Spelling => spelling_card(canvas, popup, rows),
     }
 }
 
@@ -59,7 +60,7 @@ fn divide(canvas: &mut Canvas, x: u16, y: u16, width: u16) {
     canvas.hline(x + 1, y, width - 2, dim());
 }
 
-/// `:  wa▏`, with the caret where the next character goes.
+/// `:  wa█`, with the caret where the next character goes.
 ///
 /// `taken` is how many cells at the right of the box something else has
 /// already had, so the line stops short of it rather than running under
@@ -424,6 +425,50 @@ fn move_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
         };
         canvas.rput(x + width - 2, row, &day, dim());
         if at == popup.selected {
+            canvas.restyle(x + 1, row, width - 2, cursor());
+        }
+    }
+}
+
+/// What the dictionary offers in place of one misspelt word, as a list
+/// to walk. The card is about a word rather than a row, so the word
+/// itself stands where a card usually names the task it is about.
+///
+/// A window with no room for every suggestion shows the ones around the
+/// one selected rather than losing the card: the list is short, but the
+/// card is centred in the panes and a short window has few rows to give
+/// it.
+fn spelling_card(canvas: &mut Canvas, popup: &Popup, rows: &Rows) {
+    let Some(spelling) = popup.spelling() else {
+        return;
+    };
+    let width = CARD_WIDTH.min(canvas.width().saturating_sub(4));
+    let body = rows.bottom - rows.top + 1;
+
+    // Two borders and a blank row above the words and below them.
+    let around = 4;
+    let room = body.saturating_sub(around) as usize;
+    let shown = spelling.suggestions.len().min(room).max(1);
+    let height = shown as u16 + around;
+    let (x, y) = place(canvas, rows, width, height);
+    card(canvas, x, y, width, height, "Spelling", &spelling.word);
+
+    let first = super::scroll_to(spelling.suggestions.len(), Some(popup.selected), shown);
+    for (at, word) in spelling
+        .suggestions
+        .iter()
+        .skip(first)
+        .take(shown)
+        .enumerate()
+    {
+        let row = y + 2 + at as u16;
+        canvas.put(
+            x + 2,
+            row,
+            super::clip(word, width.saturating_sub(4)),
+            plain(),
+        );
+        if first + at == popup.selected {
             canvas.restyle(x + 1, row, width - 2, cursor());
         }
     }

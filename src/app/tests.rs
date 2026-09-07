@@ -3966,3 +3966,247 @@ fn a_note_thrown_away_leaves_nothing_marked() {
         "there is no note left to mark"
     );
 }
+
+// ---- what the dictionary offers instead -----------------------------
+
+/// A note with the caret put inside the misspelt word of it, which is
+/// where `alt-s` is pressed.
+fn note_with_the_caret_in_teh() -> App {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "remember teh meeting");
+    // Off the end of "meeting" and back onto the end of "teh", which is
+    // where a word that has just been typed leaves the caret.
+    for _ in 0..8 {
+        app.update(Action::Left);
+    }
+    app
+}
+
+/// The card that is open, or what the hint bar said instead of opening
+/// one.
+fn spelling_card(app: &App) -> &SpellingDraft {
+    app.popup()
+        .and_then(Popup::spelling)
+        .unwrap_or_else(|| panic!("no spelling card: {:?}", hint(app)))
+}
+
+/// The body of the open note as it stands, typed or saved.
+fn note_body(app: &App) -> String {
+    let note = note_cursor(app).expect("an open note");
+    match app.draft().filter(|draft| draft.note == note) {
+        Some(draft) => draft.text.clone(),
+        None => app
+            .model()
+            .note(note)
+            .map_or_else(String::new, |note| note.body.clone()),
+    }
+}
+
+#[test]
+fn alt_s_offers_the_dictionary_words_for_the_one_at_the_caret() {
+    let mut app = note_with_the_caret_in_teh();
+    app.update(Action::FixSpelling);
+
+    let card = spelling_card(&app);
+    assert_eq!(card.word, "teh", "the word the caret was in");
+    assert_eq!(
+        card.at,
+        9..12,
+        "the range the checker found, in clusters from the start of the body"
+    );
+    assert!(
+        !card.suggestions.is_empty(),
+        "a word with nothing to offer opens no card"
+    );
+    assert!(
+        !card.suggestions.contains(&"teh".to_owned()),
+        "and it does not offer the word back: {:?}",
+        card.suggestions
+    );
+    assert_eq!(
+        app.key_context(),
+        KeyContext::Popup {
+            kind: PopupKind::Spelling,
+            text_field: false
+        },
+        "the card has the keyboard, so the note's letters stop typing"
+    );
+}
+
+#[test]
+fn the_word_the_caret_is_inside_is_offered_as_readily_as_the_one_it_ends() {
+    let mut app = note_with_the_caret_in_teh();
+    // One more step left, which puts the caret between the t and the e.
+    app.update(Action::Left);
+    app.update(Action::FixSpelling);
+    assert_eq!(spelling_card(&app).word, "teh");
+
+    // And the far end of it, which the underlines hold back and this key
+    // is entirely about.
+    app.update(Action::Cancel);
+    app.update(Action::Right);
+    assert!(app.misspellings().is_empty(), "nothing is underlined here");
+    app.update(Action::FixSpelling);
+    assert_eq!(spelling_card(&app).word, "teh");
+}
+
+#[test]
+fn enter_writes_the_chosen_word_over_that_word_and_over_nothing_else() {
+    let mut app = note_with_the_caret_in_teh();
+    app.update(Action::FixSpelling);
+    let chosen = spelling_card(&app).suggestions[0].clone();
+
+    app.update(Action::Confirm);
+    assert!(app.popup().is_none(), "the card is answered and gone");
+    assert_eq!(note_body(&app), format!("remember {chosen} meeting"));
+    assert_eq!(
+        app.draft().expect("the note is still open").caret,
+        9 + chosen.graphemes(true).count(),
+        "the caret comes to rest at the end of the word that was written"
+    );
+    assert_eq!(hint(&app), format!("teh became {chosen}."));
+}
+
+#[test]
+fn up_and_down_choose_which_word_goes_in() {
+    let mut app = note_with_the_caret_in_teh();
+    app.update(Action::FixSpelling);
+    let offered = spelling_card(&app).suggestions.clone();
+
+    app.update(Action::Down);
+    let at = app.popup().expect("the card").selected;
+    assert_eq!(
+        at,
+        1.min(offered.len() - 1),
+        "one row down, and the last row stops rather than wrapping"
+    );
+    app.update(Action::Up);
+    app.update(Action::Up);
+    assert_eq!(
+        app.popup().expect("the card").selected,
+        0,
+        "and the first row stops too"
+    );
+
+    app.update(Action::Down);
+    let chosen = offered[app.popup().expect("the card").selected].clone();
+    app.update(Action::Confirm);
+    assert_eq!(note_body(&app), format!("remember {chosen} meeting"));
+}
+
+#[test]
+fn escape_leaves_the_word_as_it_was_and_gives_the_note_back() {
+    let mut app = note_with_the_caret_in_teh();
+    let before = note_body(&app);
+    let caret = app.draft().expect("the note").caret;
+    app.update(Action::FixSpelling);
+
+    app.update(Action::Cancel);
+    assert!(app.popup().is_none());
+    assert_eq!(note_body(&app), before, "nothing was written");
+    assert_eq!(
+        app.draft().expect("the note is still open").caret,
+        caret,
+        "and the caret did not move"
+    );
+    assert_eq!(
+        app.key_context(),
+        KeyContext::Notes {
+            pane: NotesPane::Note,
+            text_field: true
+        },
+        "one Escape backs out of the card, not out of the note"
+    );
+}
+
+#[test]
+fn a_word_the_dictionary_knows_says_so_and_opens_nothing() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "remember teh meeting");
+    // The caret is at the end of "meeting", which is a word.
+    app.update(Action::FixSpelling);
+
+    assert!(app.popup().is_none());
+    assert_eq!(hint(&app), "There is no misspelt word at the caret.");
+}
+
+#[test]
+fn the_setting_turned_off_says_why_there_is_nothing_to_offer() {
+    let mut app = note_with_the_caret_in_teh();
+    let mut off = app.settings().clone();
+    off.set_spell_check_notes(false);
+    app.change_settings(off);
+
+    app.update(Action::FixSpelling);
+    assert!(app.popup().is_none());
+    assert_eq!(
+        hint(&app),
+        "Notes are not spell-checked while that setting is off."
+    );
+    assert_eq!(note_body(&app), "remember teh meeting");
+}
+
+#[test]
+fn a_note_thrown_away_under_the_card_is_not_written_back() {
+    let store = MemStore::new();
+    let mut app = app_at(store.clone(), NOW);
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "remember teh meeting");
+    app.update(Action::Tick);
+    for _ in 0..8 {
+        app.update(Action::Left);
+    }
+    app.update(Action::FixSpelling);
+    assert!(app.popup().is_some());
+
+    // Another window throws the note away while the card stands over it.
+    let mut other = app_at(store, NOW);
+    other.update(Action::NotesPage);
+    other.update(Action::Delete);
+    assert_eq!(other.notes().count, 0);
+
+    // The tick reloads, finds the note gone and drops the draft; the
+    // card is then about text that is not open anywhere.
+    app.update(Action::Tick);
+    app.update(Action::Confirm);
+    assert!(app.popup().is_none());
+    assert_eq!(
+        hint(&app),
+        "That note changed while the card was open. Nothing was replaced."
+    );
+    assert_eq!(app.notes().count, 0, "and nothing was written back");
+}
+
+#[test]
+fn the_word_written_in_keeps_every_byte_around_it() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    // A decomposed accent and a family emoji on either side of the
+    // misspelt word: clusters that a range counted in anything else
+    // would cut.
+    let before = "cafe\u{301} \u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466} ";
+    note_saying(&mut app, &format!("{before}teh \u{1F600} cafe\u{301}"));
+    // Back onto the end of "teh", over the accented word, the two
+    // spaces around the emoji, and the emoji itself: seven clusters.
+    for _ in 0..7 {
+        app.update(Action::Left);
+    }
+    app.update(Action::FixSpelling);
+    let chosen = spelling_card(&app).suggestions[0].clone();
+    app.update(Action::Confirm);
+
+    assert_eq!(
+        note_body(&app),
+        format!("{before}{chosen} \u{1F600} cafe\u{301}"),
+        "only the word's own bytes were replaced"
+    );
+    app.update(Action::Tick);
+    let note = note_cursor(&app).expect("the note");
+    assert_eq!(
+        app.model().note(note).expect("the row").body,
+        note_body(&app),
+        "and the tick wrote what is on screen, byte for byte"
+    );
+}

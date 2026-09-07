@@ -87,6 +87,7 @@ fn every_context() -> Vec<KeyContext> {
         field(PopupKind::Date),
         popup(PopupKind::Date),
         popup(PopupKind::Repeat),
+        popup(PopupKind::Spelling),
         KeyContext::Settings { field: false },
         KeyContext::Settings { field: true },
     ]
@@ -659,6 +660,81 @@ fn notes_yank_without_intercepting_plain_y_in_the_editor() {
             &press_with(KeyCode::Char('y'), KeyModifiers::ALT),
             home(Pane::Day)
         ),
+        None
+    );
+}
+
+#[test]
+fn the_open_note_offers_alt_s_where_plain_s_types() {
+    let list = KeyContext::Notes {
+        pane: NotesPane::List,
+        text_field: false,
+    };
+    let editor = KeyContext::Notes {
+        pane: NotesPane::Note,
+        text_field: true,
+    };
+    let alt_s = press_with(KeyCode::Char('s'), KeyModifiers::ALT);
+
+    assert_eq!(
+        action_for(&alt_s, editor),
+        Some(Action::FixSpelling),
+        "the word under the caret is what the key is about, so it is the \
+         open note that binds it"
+    );
+    assert_eq!(
+        action_for(&typing('s'), editor),
+        Some(Action::Insert('s')),
+        "and the letter itself still types"
+    );
+    assert_eq!(
+        action_for(&alt_s, list),
+        None,
+        "the list has no caret and so no word to fix"
+    );
+    assert_eq!(action_for(&alt_s, home(Pane::Day)), None);
+}
+
+#[test]
+fn the_open_note_names_alt_s_in_its_hint_bar_at_both_widths() {
+    let editor = KeyContext::Notes {
+        pane: NotesPane::Note,
+        text_field: true,
+    };
+    let row = bindings(editor)
+        .iter()
+        .find(|binding| {
+            binding
+                .keys
+                .iter()
+                .any(|(_, action)| *action == Action::FixSpelling)
+        })
+        .expect("the row that fixes a spelling");
+
+    assert_eq!(row.shown, "alt-s", "the key is written as it is pressed");
+    for bar in [row.bar, row.narrow] {
+        let (side, name) = bar.slot(row.label).expect("a slot in the bar");
+        assert_eq!(side, Side::Left, "beside the note's own keys");
+        assert!(!name.is_empty());
+    }
+}
+
+#[test]
+fn the_spelling_card_is_walked_and_answered_and_left() {
+    let card = popup(PopupKind::Spelling);
+    for (key, action) in [
+        ("up", Action::Up),
+        ("down", Action::Down),
+        ("enter", Action::Confirm),
+        ("esc", Action::Cancel),
+    ] {
+        assert_eq!(action_for(&event_for(key), card), Some(action), "{key:?}");
+    }
+    // A card is answered with the keys of a card, not with the letters
+    // the note under it types.
+    assert_eq!(action_for(&typing('s'), card), None);
+    assert_eq!(
+        action_for(&press_with(KeyCode::Char('s'), KeyModifiers::ALT), card),
         None
     );
 }
