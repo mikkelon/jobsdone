@@ -44,7 +44,7 @@ means none. Names are separated by commas.
 
 | Module     | Internal              | Crates                         |
 |------------|-----------------------|--------------------------------|
-| `domain`   | none                  | jiff, serde, serde_json        |
+| `domain`   | none                  | jiff, serde, serde_json, unicode_normalization |
 | `storage`  | domain                | rusqlite, jiff, serde_json     |
 | `input`    | none                  | crossterm                      |
 | `app`      | domain, input         | jiff, tracing, unicode_segmentation, unicode_normalization, harper_core |
@@ -111,6 +111,8 @@ task and schedule ids, never cursor positions.
 | `TruncateUndo(cap)`         | Delete the lowest ids beyond the cap.         |
 | `SetMeta(key, value)`       |                                               |
 | `PutSettings(Settings)`     | Every settings row at once; the table is one value. |
+| `PutDictionaryWord { key, word }` | Insert or update one personal word. |
+| `DeleteDictionaryWord { key }` | Remove one personal word. |
 
 Whole rows, not fields. A renumbered place is one `PutTask` per shifted
 task. Phase 5 may add a variant; it may not add a second way to express

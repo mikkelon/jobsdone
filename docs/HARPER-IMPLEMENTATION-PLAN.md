@@ -5,8 +5,69 @@
 Introduce offline US English spell checking in notes using Harper. Enable it
 by default and provide a persistent settings toggle. Highlight spelling
 issues without changing note text automatically. Add on-demand suggestions and
-explicit replacement at the note caret. Personal dictionaries and additional
-languages remain follow-up features. Render every text-input caret as a full block.
+explicit replacement at the note caret. Provide a persistent personal dictionary
+with add, edit, and remove actions. Additional languages remain a follow-up.
+Render every text-input caret as a full block.
+
+## Follow-up: personal dictionary
+
+- **Decision:** personal words match case-insensitively using NFC normalization
+  and Unicode lowercase, while preserving the entered capitalization for display.
+  Entries are individual words, not phrases; reject empty/control/whitespace-only
+  or multi-word input and duplicates. Dictionary changes do not alter note text.
+- **Complete — Persistence:** Opus 5 auto agent owns a dedicated SQLite table,
+  migration, domain validation and per-word changes. Dictionary preferences are
+  separate from task undo. Existing databases migrate without losing notes.
+- **Complete — Engine:** Opus 5 auto agent owns personal-word matching and
+  cache invalidation in the spelling helper. No fuzzy index rebuild for edits.
+- **Complete — UI:** Opus 5 auto agent owns adding the caret word via the
+  spelling card (even when Harper offers no corrections) and a dictionary
+  manager accessible from Notes settings, with add/edit/delete and empty states.
+  User refinement: append **Add to dictionary** below a separator in Alt+s;
+  Up from the first suggestion wraps to this last action. No new note-page
+  shortcut. Down also wraps; with no suggestions, select the add action.
+- **Complete — Integration:** combined bounded agent commits, updated documentation,
+  review validation/errors/reload behavior and immediately refresh underlines.
+- **Complete — Verification:** required checks and tmux-only scratch UAT for
+  adding a product name, case variants, restart persistence, editing/removing,
+  cancellation, duplicate rejection and narrow layout. No Omarchy VM exists.
+
+Personal dictionary validation results:
+
+- `make check` passed: formatting, clippy with warnings denied, 565 library and
+  7 binary tests passed; one pre-existing ignored test. Release build passed.
+- Persistence tests cover migration from the prior database with existing rows,
+  transaction rollback, version changes, and independent concurrent additions.
+- Tmux scratch session `jobsdone-dictionary-uat` confirmed Alt+s → Up → Enter
+  saves the word without changing note bytes; repeated occurrences lose their
+  marks immediately. No-suggestions addition and mixed-case acceptance passed.
+- Manager UAT covered add/edit/delete, duplicate rejection, cancelled input,
+  restart persistence, and 80×44 layout. Editing `Zqxjkv` to `Zqxjkw` restored
+  underlines on both `zqxjkv` and `Zqxjkv` in an unchanged note. One harness
+  navigation step toggled away from Notes; returning to Notes passed the check.
+- Visually inspected `uat/out/dictionary-add-selected.png` and
+  `uat/out/dictionary-manager-narrow.png`. Scratch session stopped; previous
+  harness state restored. No real note database or desktop configuration used.
+- All completed agent worktrees removed after clean-status and integration
+  checks. `git worktree list` now contains only the main checkout. Shared build
+  artifacts remain at `/tmp/jobsdone-build-cache`, outside any worktree.
+
+Interface contract: `Model.personal_dictionary: BTreeMap<String, String>` maps
+canonical keys to display words. Domain exports `dictionary_key(&str) -> String`
+and `add_dictionary_word(&Model, &str)`,
+`edit_dictionary_word(&Model, old_key: &str, word: &str)`, and
+`remove_dictionary_word(&Model, key: &str)`, each returning
+`Result<Change, Rejected>`. Engine exposes
+`SpellChecker::set_personal_dictionary(&BTreeMap<String, String>) -> bool`,
+returning whether its contents changed; application invalidates its range cache
+on a change. Existing `check` and `suggestions` signatures stay intact.
+
+Cleanup: removed completed `harper-editor`, `harper-settings`,
+`harper-suggestions-engine`, and `harper-suggestions-ui` worktrees after clean
+status and patch-equivalence checks. Relocated the shared build cache to
+`/tmp/jobsdone-build-cache` and removed the last old `harper-engine` worktree.
+All three dictionary worktrees were removed after integration and validation;
+the engine's 73 tests passed against the actual domain helper before UI integration.
 
 ## Follow-up: suggestions and block caret
 
@@ -89,6 +150,9 @@ Claude Code agent with explicit `--permission-mode auto`, as requested.
 
 | Agent | Worktree / branch | Model | Status |
 |---|---|---|---|
+| `dictionary-data` | `/tmp/jobsdone-personal-dictionary-data` / `personal-dictionary-data` | Opus 5, auto | Complete: `8b16504` → `a5be10b`; 138 domain and 20 storage tests passed |
+| `dictionary-engine` | `/tmp/jobsdone-personal-dictionary-engine` / `personal-dictionary-engine` | Opus 5, auto | Complete: `6f9f91b` → `88a8bc0`; 73 engine tests passed |
+| `dictionary-ui` | `/tmp/jobsdone-personal-dictionary-ui` / `personal-dictionary-ui` | Opus 5, auto | Complete: `0572924` → `469739f`; full checks and tmux UAT passed; worktree removed |
 | `harper-suggest-engine` | `/tmp/jobsdone-harper-suggestions-engine` / `harper-suggestions-engine` | Opus 5, auto | Complete: `06edbe5`, on-demand suggestions API and engine tests |
 | `harper-suggest-ui` | `/tmp/jobsdone-harper-suggestions-ui` / `harper-suggestions-ui` | Opus 5, auto | Complete: `b409531`, correction picker and app-wide block caret |
 | `harper-engine` | `/tmp/jobsdone-harper-engine` / `harper-engine` | Opus 5, auto | Complete: `4d347c6` → `6b4b530`; 41 engine tests and full checks passed |

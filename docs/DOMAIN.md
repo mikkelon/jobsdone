@@ -655,6 +655,10 @@ CREATE TABLE settings (
 PRAGMA user_version = 2;
 ```
 
+The third migration adds `personal_dictionary`, with a canonical `key` primary
+key and a `word` display value. Entries are written individually, so changing
+one word does not replace the other entries.
+
 Notes on the schema:
 
 - `tasks.day` NULL is the backlog. Position density is the domain's
@@ -769,3 +773,22 @@ not undoable, and `u` after it takes back whatever it was that came
 before. `date_style` is settled against the locale by the application,
 which is the only part of the program that knows what a locale is; the
 domain sees the resolved order in the `Context` of every command.
+
+## 20. Personal dictionary
+
+Personal words apply to every note. Matching normalizes to NFC, converts Unicode
+letters to lowercase, and normalizes again. Display words retain their entered
+capitalization. Thus a product name only needs one entry for ordinary case
+variants; canonically equivalent accents also share an entry.
+
+An entry is one word: outer whitespace is trimmed, internal whitespace and
+control characters are rejected, and at least one alphabetic character is
+required. Words are limited to 128 characters. Duplicate canonical keys are
+refused, while editing an entry's display capitalization is allowed. Editing
+and removing identify the entry by its original key rather than a list index.
+
+Dictionary changes use domain validation and transactional storage, without
+adding task undo entries. They never rewrite notes. The application reloads
+entries along with the model and invalidates its spelling caches when they
+change, including changes from another window. Removing an entry permits
+Harper to flag that word again; built-in dictionary words remain accepted.

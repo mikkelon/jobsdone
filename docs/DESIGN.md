@@ -349,6 +349,17 @@ replace that word, and `Escape` to cancel. Suggestions are computed only on
 request. Explicit replacements follow normal note autosave. All text-input
 carets use a full block, matching the terminal cell they occupy.
 
+The last row of the spelling card is **Add to dictionary**, below a separator.
+Arrow navigation wraps: `↑` from the first suggestion reaches that action in
+one keypress. If there are no suggestions, it is the selected action. Adding
+the word leaves the note and caret unchanged and removes its spelling marks.
+
+The Notes settings group also opens **Personal dictionary**, a sorted list
+with `a` to add, `e` to edit, and `x` to remove a word. A field saves with
+`Enter` and cancels with `Escape`; leaving the list returns to settings.
+Words match without regard to capitalization, with the entered spelling kept
+for display. Dictionary management remains available when checking is disabled.
+
 ## 10. Empty states name the key that fills them
 
 An empty list says what it is for and the one or two keys that put

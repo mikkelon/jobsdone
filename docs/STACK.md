@@ -369,6 +369,13 @@ using a lazily initialized FST dictionary. Results are ranked and filtered to
 US English, with at most eight replacements offered. Rendering and ordinary
 typing never trigger fuzzy searches.
 
+Personal dictionary entries live in SQLite and are supplied to the checker as
+a case-insensitive ignore list using the domain's canonical keys. They are
+kept separate from Harper's dictionaries, so editing them rebuilds no fuzzy
+index. A dictionary change invalidates both the application ranges and the
+engine's text cache. Personal words are accepted as written; they are not
+added to Harper's correction candidates.
+
 Suggestion searches try edit distances two and then three if needed. Distance
 four is excluded because its first automaton initialization measured about
 490 ms. Input beyond 28 characters cannot match this dictionary within three

@@ -61,6 +61,11 @@ the arrow keys to choose a suggestion, `Enter` to replace, or `Escape` to
 cancel. Checking never changes your text automatically, and notes can still
 be written in any language.
 
+To accept a product name or another personal word, open `Alt+s`, press `↑`
+to wrap to **Add to dictionary**, then `Enter`. Manage saved words under
+**Settings → Notes → Personal dictionary**: add, edit, or remove entries.
+Personal words ignore capitalization; the list preserves the spelling you enter.
+
 `,` opens the settings page: the hour the day starts, which days are work
 days, how far back the review pile reaches, whether the window floats and
 how big it is, and a few more. Each row says what it does and what it

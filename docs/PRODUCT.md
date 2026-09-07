@@ -108,6 +108,9 @@ mention X" or drafting a message before sending it.
   underlined. Checking is on by default and can be disabled in settings.
   Suggestions are available on request; choosing one replaces that word.
   Checking never changes text automatically or prevents writing in another language.
+- A personal dictionary accepts names and other words across all notes.
+  Entries ignore capitalization, persist locally, and can be added, edited,
+  or removed from settings. Adding a word does not change the note's text.
 - The entire note can be copied to the clipboard from the list or while
   editing, preserving its text and the editing position.
 - Notes are independent of tasks. They are not attached to or linked from
