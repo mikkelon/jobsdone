@@ -1,19 +1,26 @@
 //! Spell checking for note bodies: text in, the ranges of the words the
-//! dictionary does not know out.
+//! dictionary does not know out, and, for one of those words, the
+//! replacements to offer for it.
 //!
-//! The engine is Harper's (STACK.md section 10). This module uses two
+//! The engine is Harper's (STACK.md section 10). This module uses three
 //! pieces of it and nothing else: the `PlainEnglish` lexer, which splits
 //! text into words, numbers, punctuation, URLs, email addresses and
-//! hostnames, and the curated dictionary, which is asked whether a word
-//! is a word and whether it is one an American writes. Harper's own
-//! `SpellCheck` linter is deliberately not used: it builds a `Document`,
-//! which runs a part-of-speech tagger and a neural chunker over every
-//! sentence, and it fuzzy-searches the dictionary for corrections to put
-//! in a message. Underlining a word needs neither. The dictionary is
-//! `MutableDictionary` rather than `FstDictionary` for the same reason:
-//! the finite-state map exists to make fuzzy matching fast, and nothing
-//! here matches fuzzily. Building it would double the cost below and
-//! answer every question this module asks identically.
+//! hostnames; the curated dictionary, which is asked whether a word is a
+//! word and whether it is one an American writes; and
+//! `suggest_correct_spelling`, the fuzzy search and the ranking behind
+//! Harper's own corrections. Harper's `SpellCheck` linter is deliberately
+//! not used: it builds a `Document`, which runs a part-of-speech tagger
+//! and a neural chunker over every sentence, to reach the same search
+//! this module calls directly. Underlining a word and offering
+//! replacements for one need no grammar.
+//!
+//! **Two dictionaries.** A check asks whether a word is in the
+//! dictionary, which `MutableDictionary` answers as well as anything and
+//! builds in half the time. The finite-state map of `FstDictionary` is
+//! there to make fuzzy matching fast, and only a request for replacements
+//! matches fuzzily, so it is built by the first such request and never by
+//! a check. Both are values Harper holds for the life of the program, and
+//! the second is built from the first.
 //!
 //! **Offsets.** Every range this module returns is in Unicode grapheme
 //! clusters counted from the start of the text, end exclusive, which is
@@ -21,8 +28,9 @@
 //! check converts once per text.
 //!
 //! **Normalisation.** A check works on a composed (NFC) copy of the text
-//! when the text is not composed already. Harper's lexer ends a word at
-//! a combining mark, so a word written as an `i` and a combining
+//! when the text is not composed already, and a word a caller asks
+//! replacements for is composed the same way. Harper's lexer ends a word
+//! at a combining mark, so a word written as an `i` and a combining
 //! diaeresis would otherwise arrive as two words and be called two
 //! misspellings, while the same word written with one precomposed
 //! letter is a word. Composing changes how many `char`s the text is and
@@ -39,9 +47,17 @@
 //! 2.5 us for a line of text and 14 us for a screenful, and a check whose
 //! text has not changed since the last one is a string comparison at
 //! around 12 ns.
+//!
+//! Replacements cost more. The first word a caller asks about builds the
+//! finite-state map and the automaton the search runs it with, which
+//! together were 200 ms, once. Of the twenty-seven words asked about
+//! after that, every one the nearest search answered took 0.2 to 0.5 ms,
+//! and the worst, which had to be searched twice because the nearest
+//! search found nothing, took 1.4 ms. A word there is nothing to correct
+//! searches for nothing and was under a microsecond.
 
 use harper_core::parsers::{Parser, PlainEnglish};
-use harper_core::spell::{Dictionary, MutableDictionary};
+use harper_core::spell::{Dictionary, FstDictionary, MutableDictionary, suggest_correct_spelling};
 use harper_core::{CharStringExt, Dialect, Punctuation, Token, TokenKind};
 use std::borrow::Cow;
 use std::ops::Range;
@@ -61,10 +77,40 @@ pub struct SpellChecker {
     /// Built on the first check rather than at construction, so that
     /// nothing is paid for by a session that never opens a note.
     dictionary: Option<Arc<MutableDictionary>>,
+    /// Built on the first word a caller asks replacements for, which is
+    /// a question a session may never ask.
+    fuzzy: Option<Arc<FstDictionary>>,
     /// The text the answer below was given for.
     checked: String,
     found: Vec<Range<usize>>,
 }
+
+/// How many replacements a caller is offered for one word. Enough for a
+/// list to be worth reading and short enough to read.
+const OFFERED: usize = 8;
+
+/// How many words a search ranks before the dialect and the duplicates
+/// are taken out of them, which is the number Harper's own spell checker
+/// asks for.
+const CANDIDATES: usize = 200;
+
+/// The edit distances a search widens through, nearest first. A word two
+/// letters out is only ranked against words three letters out where
+/// nothing nearer was found, so a near miss is never buried under a
+/// distant one.
+///
+/// It stops at three. Searching four deep needs an automaton that Harper
+/// builds once per thread and that was measured at 490 ms to build, which
+/// is half a second of a keystroke doing nothing, and what it buys is a
+/// list of words no reader would recognise as what they meant.
+const DISTANCES: Range<u8> = 2..4;
+
+/// The longest word a search is run for. The longest entry in Harper's
+/// dictionary is 25 characters, and two words are at least as many edits
+/// apart as they are letters different in length, so nothing longer than
+/// this can be within [`DISTANCES`] of an entry. A search would read the
+/// whole dictionary to answer nothing.
+const LONGEST: usize = 28;
 
 impl SpellChecker {
     /// The words in `text` that the American English dictionary does not
@@ -120,16 +166,117 @@ impl SpellChecker {
         self.found.clone()
     }
 
+    /// What to offer in place of `word`, best first, at most eight of
+    /// them and no two of them the same.
+    ///
+    /// `word` is one word as the note writes it, which is what a caller
+    /// holding a range from [`check`](Self::check) has: composed or not,
+    /// capitalised or not. The answer is composed either way, and is
+    /// written the way the word is where the dictionary leaves that
+    /// open, so `Teh` at the start of a sentence is offered `The` and
+    /// `teh` is offered `the`.
+    ///
+    /// Nothing comes back for a word there is nothing to correct: one
+    /// the American dictionary holds as it is written, an identifier, an
+    /// acronym, something with no letter in it, a word longer than any
+    /// the dictionary holds, or nothing at all. A word held only for
+    /// another dialect's writers is none of those, and is answered:
+    /// `colour` is offered `color`.
+    ///
+    /// The first word that reaches the search pays for the finite-state
+    /// map; the words after it do not.
+    pub fn suggestions(&mut self, word: &str) -> Vec<String> {
+        let composed: Vec<char> = word.nfc().collect();
+        // What a check underlines is a word, so anything else that
+        // arrives here is answered before a dictionary is asked: nothing
+        // at all, something with no letter in it, an identifier, an
+        // acronym, and a word longer than anything the dictionary holds.
+        if !composed.iter().any(|letter| letter.is_alphabetic())
+            || composed.len() > LONGEST
+            || skipped(&composed)
+        {
+            return Vec::new();
+        }
+        // Before the fuzzy dictionary, so that a word there is nothing
+        // to correct never builds it.
+        let dictionary = self.warm().clone();
+        if known(dictionary.as_ref(), &composed) {
+            return Vec::new();
+        }
+
+        let fuzzy = self.fuzzy().clone();
+        DISTANCES
+            .map(|distance| ranked(&composed, distance, fuzzy.as_ref()))
+            .find(|offered| !offered.is_empty())
+            .unwrap_or_default()
+    }
+
     /// Builds the dictionary if it is not built yet, and answers with
     /// it.
     ///
-    /// The first call is the expensive one and the only expensive one in
-    /// the process: what it builds is a value Harper holds for the life
-    /// of the program, so every checker after the first is handed the
-    /// one that is already there.
+    /// The first call is the expensive one: what it builds is a value
+    /// Harper holds for the life of the program, so every checker after
+    /// the first is handed the one that is already there.
     fn warm(&mut self) -> &Arc<MutableDictionary> {
         self.dictionary
             .get_or_insert_with(MutableDictionary::curated)
+    }
+
+    /// Builds the fuzzy dictionary if it is not built yet, and answers
+    /// with it.
+    ///
+    /// A check never asks for this. The finite-state map it builds is
+    /// worth its cost to something that searches the dictionary for the
+    /// words near a word, and answers a plain lookup no differently.
+    fn fuzzy(&mut self) -> &Arc<FstDictionary> {
+        self.fuzzy.get_or_insert_with(FstDictionary::curated)
+    }
+}
+
+/// The words within `distance` edits of `word` that are worth offering,
+/// in the order Harper ranks them.
+///
+/// Three things take a candidate out: the dialect, since a word held for
+/// a British writer is not a correction here; the word itself, since
+/// offering a writer what they already wrote replaces nothing; and a
+/// spelling already offered, which two candidates can become once they
+/// are written the way `word` is.
+fn ranked(word: &[char], distance: u8, dictionary: &impl Dictionary) -> Vec<String> {
+    let written: String = word.iter().collect();
+    let mut offered: Vec<String> = Vec::new();
+    for candidate in suggest_correct_spelling(word, CANDIDATES, distance, dictionary) {
+        if !american(dictionary, candidate) {
+            continue;
+        }
+        let replacement = capitalised(word, candidate);
+        if replacement == written || offered.contains(&replacement) {
+            continue;
+        }
+        offered.push(replacement);
+        if offered.len() == OFFERED {
+            break;
+        }
+    }
+    offered
+}
+
+/// A replacement written the way the word it replaces is written.
+///
+/// A word that begins with a capital is replaced by one that begins with
+/// a capital, which is what makes the `Teh` of a sentence `The`. A word
+/// the dictionary capitalises somewhere other than the front is left as
+/// the dictionary writes it, because that spelling is the word: `macOS`
+/// is not `MacOS`, and `berlin` is corrected to `Berlin`.
+fn capitalised(word: &[char], replacement: &[char]) -> String {
+    let front = word.first().is_some_and(|first| first.is_uppercase());
+    let inner = replacement
+        .iter()
+        .skip(1)
+        .any(|letter| letter.is_uppercase());
+    let mut letters = replacement.iter().copied();
+    match letters.next() {
+        Some(first) if front && !inner => first.to_uppercase().chain(letters).collect(),
+        _ => replacement.iter().collect(),
     }
 }
 
@@ -142,12 +289,17 @@ impl SpellChecker {
 /// last is what makes `Berlin` right and `berlin` wrong, and the middle
 /// one is what makes `colour` wrong where `color` is right.
 fn known(dictionary: &impl Dictionary, word: &[char]) -> bool {
-    let Some(metadata) = dictionary.get_word_metadata(word) else {
-        return false;
-    };
-    metadata.dialects.is_dialect_enabled(Dialect::American)
+    american(dictionary, word)
         && (dictionary.contains_exact_word(word)
             || dictionary.contains_exact_word(&word.to_lower()))
+}
+
+/// Whether the dictionary knows some capitalisation of the word and
+/// holds it for the American dialect.
+fn american(dictionary: &impl Dictionary, word: &[char]) -> bool {
+    dictionary
+        .get_word_metadata(word)
+        .is_some_and(|metadata| metadata.dialects.is_dialect_enabled(Dialect::American))
 }
 
 /// Whether a word is one no English dictionary should be asked about.

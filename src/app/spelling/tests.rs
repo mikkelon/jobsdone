@@ -30,6 +30,16 @@ fn pairs(checker: &mut SpellChecker, text: &str) -> Vec<(usize, usize)> {
         .collect()
 }
 
+/// What a checker with nothing behind it yet offers for one word.
+fn offered(word: &str) -> Vec<String> {
+    SpellChecker::default().suggestions(word)
+}
+
+/// The first of those, which is what a caller shows first.
+fn best(word: &str) -> String {
+    offered(word).into_iter().next().unwrap_or_default()
+}
+
 // ---- what is a misspelling ---------------------------------------
 
 #[test]
@@ -349,4 +359,176 @@ fn a_digit_or_an_inner_capital_makes_a_word_skipped() {
     assert!(skipped(&chars("API")));
     assert!(!skipped(&chars("Friday")));
     assert!(!skipped(&chars("boiler")));
+}
+
+// ---- what is offered for a misspelling ----------------------------
+
+#[test]
+fn a_typo_is_offered_the_word_it_was_meant_to_be() {
+    assert_eq!(best("teh"), "the");
+    assert_eq!(best("recieved"), "received");
+    assert_eq!(best("wierd"), "weird");
+    assert_eq!(best("definately"), "definitely");
+    assert_eq!(best("seperate"), "separate");
+    assert_eq!(best("goverment"), "government");
+}
+
+#[test]
+fn a_correction_further_down_the_list_is_still_in_it() {
+    // The words nearest this one are other mis- words, so what was meant
+    // is not what is ranked first; a caller reads the list, not the head
+    // of it.
+    assert!(offered("mispeling").contains(&"misspelling".to_string()));
+}
+
+#[test]
+fn a_word_the_dictionary_has_is_offered_nothing() {
+    assert!(offered("received").is_empty());
+    assert!(offered("the").is_empty());
+    assert!(offered("Berlin").is_empty());
+    assert!(offered("don\u{2019}t").is_empty());
+}
+
+#[test]
+fn nothing_is_offered_for_what_a_check_leaves_alone() {
+    // A caller asks about the words a check underlined, and these are
+    // not among them: the shapes `skipped` names, a word with no letter
+    // in it, and no word at all.
+    assert!(offered("getUserName").is_empty());
+    assert!(offered("API").is_empty());
+    assert!(offered("v2").is_empty());
+    assert!(offered("\u{1f600}").is_empty());
+    assert!(offered("").is_empty());
+}
+
+// ---- the dialect of what is offered -------------------------------
+
+#[test]
+fn a_british_spelling_is_offered_the_american_one() {
+    assert_eq!(best("colour"), "color");
+    assert_eq!(best("realise"), "realize");
+    assert_eq!(best("theatre"), "theater");
+    assert_eq!(best("aluminium"), "aluminum");
+}
+
+#[test]
+fn no_spelling_from_another_dialect_is_offered() {
+    // The words nearest these are the rest of their own paradigm:
+    // `behaviours`, `behaviour's` and `behavioural` are each one edit
+    // away, and every one of them is held for a writer this checker does
+    // not serve.
+    assert_eq!(offered("behaviour"), ["behavior", "behaviors"]);
+    assert_eq!(offered("favourite"), ["favorite", "favorites"]);
+    assert!(
+        offered("colour")
+            .iter()
+            .all(|word| !word.contains("colour"))
+    );
+}
+
+// ---- how what is offered is written -------------------------------
+
+#[test]
+fn a_capitalised_word_is_offered_capitalised_replacements() {
+    assert_eq!(best("Teh"), "The");
+    assert_eq!(best("Recieved"), "Received");
+    assert!(
+        offered("Wierd")
+            .iter()
+            .all(|word| word.starts_with(|letter: char| letter.is_uppercase()))
+    );
+}
+
+#[test]
+fn a_replacement_the_dictionary_capitalises_is_left_as_it_writes_it() {
+    // The capital inside `TeX` is the word, so the front of it is not
+    // the checker's to change; a name is offered for the same reason,
+    // whichever way the word it replaces is written.
+    assert!(offered("Teh").contains(&"TeX".to_string()));
+    assert_eq!(best("berlin"), "Berlin");
+}
+
+// ---- normalisation ------------------------------------------------
+
+#[test]
+fn a_decomposed_word_is_offered_what_the_composed_one_is() {
+    // A caller takes the word out of the note as the note writes it,
+    // which is either of these.
+    let composed = "caf\u{e9}teria";
+    let decomposed = "cafe\u{301}teria";
+    assert_ne!(composed, decomposed);
+    assert_eq!(offered(composed), ["cafeteria", "cafeterias"]);
+    assert_eq!(offered(decomposed), offered(composed));
+}
+
+#[test]
+fn a_decomposed_word_the_dictionary_has_is_offered_nothing() {
+    // Uncomposed, the mark is a letter of its own, and the word the
+    // dictionary is asked about is not the word that was written.
+    assert!(offered("resum\u{e9}").is_empty());
+    assert!(offered("resume\u{301}").is_empty());
+}
+
+// ---- what a list of replacements is -------------------------------
+
+#[test]
+fn a_list_is_at_most_eight_long() {
+    assert_eq!(offered("teh").len(), OFFERED);
+    for word in ["recieved", "seperate", "Marck", "frnce", "hte"] {
+        assert!(offered(word).len() <= OFFERED, "{word}");
+    }
+}
+
+#[test]
+fn a_list_holds_no_word_twice_and_never_the_word_itself() {
+    for word in ["teh", "Teh", "colour", "Marck", "aprill", "youre", "hte"] {
+        let list = offered(word);
+        let mut once = list.clone();
+        once.sort();
+        once.dedup();
+        assert_eq!(once.len(), list.len(), "{word}");
+        assert!(!list.contains(&word.to_string()), "{word}");
+    }
+}
+
+#[test]
+fn a_word_longer_than_any_in_the_dictionary_is_offered_nothing() {
+    let long: String = std::iter::repeat_n('q', LONGEST + 1).collect();
+    assert!(offered(&long).is_empty());
+}
+
+#[test]
+fn a_long_word_inside_the_bound_is_searched_like_any_other() {
+    assert_eq!(best("responsibilites"), "responsibilities");
+}
+
+// ---- what a request costs -----------------------------------------
+
+#[test]
+fn a_check_does_not_build_the_fuzzy_dictionary() {
+    // The finite-state map is worth its cost to a search and to nothing
+    // else, so a session that only underlines words never pays for it.
+    let mut checker = SpellChecker::default();
+    checker.check("teh recieved");
+    assert!(checker.fuzzy.is_none());
+    checker.suggestions("teh");
+    assert!(checker.fuzzy.is_some());
+}
+
+#[test]
+fn a_word_with_nothing_to_correct_does_not_build_the_fuzzy_dictionary() {
+    let mut checker = SpellChecker::default();
+    assert!(checker.suggestions("received").is_empty());
+    assert!(checker.suggestions("API").is_empty());
+    assert!(checker.suggestions(&"q".repeat(LONGEST + 1)).is_empty());
+    assert!(checker.fuzzy.is_none());
+}
+
+#[test]
+fn a_replacement_takes_the_case_of_the_first_letter_of_the_word() {
+    let chars = |word: &str| word.chars().collect::<Vec<char>>();
+    assert_eq!(capitalised(&chars("Teh"), &chars("the")), "The");
+    assert_eq!(capitalised(&chars("teh"), &chars("the")), "the");
+    assert_eq!(capitalised(&chars("Teh"), &chars("TeX")), "TeX");
+    assert_eq!(capitalised(&chars("berlin"), &chars("Berlin")), "Berlin");
 }
