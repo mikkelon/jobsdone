@@ -335,6 +335,14 @@ The hint bar names the shortcut and briefly says "Note copied" after
 success, or explains a clipboard failure. The list's command palette
 also offers "copy note".
 
+Possible US English spelling mistakes are underlined in the open note body.
+The active word stays unmarked while the caret is in it or immediately at
+its end, so unfinished typing does not flash errors. The underline is a
+display annotation; copying and saving preserve the original plain text.
+Checking is local, enabled by default, and controlled by "Spell-check notes
+in US English" in settings. It offers no grammar advice or automatic
+corrections. URLs, email addresses and obvious code-like tokens are skipped.
+
 ## 10. Empty states name the key that fills them
 
 An empty list says what it is for and the one or two keys that put
@@ -344,10 +352,10 @@ shown at all.
 
 ## 11. Settings
 
-`,` opens a page of the thirteen settings of DOMAIN.md section 19, in
-five groups: the day, the work days, the review, the window and the
-looks. Every row is a label dotted across to its value, because a page of
-settings is read down the labels and across to the values. A toggle reads
+`,` opens a page of the fourteen settings of DOMAIN.md section 19, in
+six groups: the day, the work days, the review, the window, the
+looks and notes. Every row is a label dotted across to its value, because a
+page of settings is read down the labels and across to the values. A toggle reads
 `on` or `off`; a number carries its unit, and the number that means none
 of it is written as what none of it does: `on its day`, `every missed
 day`, `never`, `until the next key`. The value on the cursor row is in

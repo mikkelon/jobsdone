@@ -314,7 +314,7 @@ Rejected:
   would sit next to the data it is not.
 - **A configuration file in `~/.config/jobsdone/`.** The most familiar
   place to put settings, but a second file format to design, parse,
-  validate and keep in step with the database, for thirteen values that
+  validate and keep in step with the database, for fourteen values that
   several open windows already follow each other through `data_version`
   to pick up. In the database they are one backup, one writer and one
   reload path.
@@ -345,94 +345,55 @@ none of them waits for Enter.
 
 ## 10. Spell checking: harper-core
 
-`harper-core` checks the spelling of a note's body. It is the English
-checker Automattic wrote for editors and language servers, its dictionary
-is compiled into the binary, and it asks the network for nothing, which
-is what a program with no network and an instant start needs. American
-English only, and spelling only: `app` calls it, `src/app/spelling.rs` is
-the whole of the seam, and nothing else in the crate names it.
+`harper-core` provides the note spelling dictionary and word parser. Its
+bundled English dictionary works offline, with no runtime downloads or
+external service. Default features are disabled because this app does not
+need a thesaurus or concurrent dictionary storage.
 
-The module uses two pieces of the crate and no more. The `PlainEnglish`
-lexer splits text into words, numbers, punctuation, URLs, email addresses
-and hostnames, so a URL or an address is a token of its own and never a
-word to be judged. The curated dictionary, some 135,000 words, answers
-whether a word is a word and whether it is one an American writes, which
-is what makes `colour` wrong where `color` is right.
+The private `app::spelling` helper uses `PlainEnglish` to identify words,
+URLs and email addresses, then asks `MutableDictionary` for word metadata
+and American English membership. It normalizes a temporary checking copy
+to NFC so composed and decomposed accents receive the same verdict. The
+stored note stays unchanged; returned positions count grapheme clusters,
+the same unit the caret and renderer use.
 
-Three things the crate offers are deliberately left alone:
+The application caches results for the displayed note and hides the word
+under the editing caret. Drawing only reads these ranges. Empty notes and
+a session that never checks notes do not initialize the dictionary.
 
-- **`Document`.** Building one runs a part-of-speech tagger and a neural
-  chunker over every sentence, which is what the grammar rules need and
-  what underlining a misspelling does not. The module lexes and looks up
-  words itself.
-- **The `SpellCheck` linter.** It fuzzy-searches the dictionary for
-  corrections so it can offer them. Nothing shows a correction, so
-  nothing pays for one.
-- **`FstDictionary`.** The finite-state map exists to make that fuzzy
-  search fast. Building it costs as much again as the dictionary itself
-  and answers a plain lookup identically, so `MutableDictionary` is what
-  the module holds.
+The broader Harper pipeline is unnecessary for highlighting. Building a
+`Document` invokes grammatical analysis; the `SpellCheck` linter also
+computes correction suggestions. The FST dictionary accelerates suggestion
+searches but adds initialization cost. Plain dictionary lookups provide
+what this version displays.
 
-`unicode-normalization` comes with the decision. Harper's lexer ends a
-word at a combining mark, so a check works on a composed copy of the text
-when the text is not composed already, and a word typed as a letter and a
-combining accent reads as the word it is. Composing cannot move a
-grapheme cluster boundary, so the ranges still index the note as it is
-stored, and the note is never rewritten.
+Measured on this machine in release mode, dictionary initialization costs
+about 105–110 ms once per process; subsequent short-note checks take
+microseconds. The cold cost falls on the first nonempty note checked,
+including the first typed character of a new note. Checking remains on the
+main thread. These are local measurements, not timing guarantees.
 
-Measured in a release build on the author's machine: the dictionary is
-built once per process, on the first check of a note that has something
-in it, in 105 to 110 ms. Every check after that is 2.5 microseconds for a
-line and 14 for a screenful, and a check of text that has not changed is
-12 nanoseconds. A second checker in the same process costs a pointer. The
-tick is 250 ms (section 2), so only the one-time build is worth thinking
-about, and it falls on opening a note rather than on starting the
-program. Checking stays on the main thread; there is still no async
-runtime.
+Harper adds substantial build dependencies through `harper-brill` and its
+Burn-based tagger, even though the app does not invoke the tagger. The
+lockfile grows from 218 to 631 packages, including optional backends and
+other platforms. The engine agent counted 157 additional compiled build
+units on this target. The final integrated release binary is 6,470,248
+bytes, versus 4,775,880 before this feature: an increase of 1,694,368 bytes.
+Unused grammatical-analysis code can be removed by the linker, but its
+compile dependencies still affect clean builds.
 
-The price is the dependency tree. `harper-core` reaches `harper-brill`
-and `harper-pos-utils`, and those depend on `burn`, a machine-learning
-framework, for the tagger. The resolved `Cargo.lock` grows from 218
-packages to 631, most of them names that are only resolved and never
-built: `burn`'s optional backends and other targets' platform crates. Of
-those, 157 are compiled for this target, taking the count from 102 to
-259, with `burn`, `burn-ndarray`, `cubecl-common` and `ndarray` among
-them. The release binary grows from 4,775,880 to 6,459,208 bytes, which
-is the 787 KB dictionary and the code that reads it; the tagger's models,
-a megabyte and a half of them, are not in it, because nothing this
-program calls reaches the code that embeds them. Measure the binary with
-something that actually calls a check: with the module compiled but
-unreached, link-time optimisation drops the dictionary and the figure
-comes out a megabyte and a half short.
+Alternatives considered:
 
-Rejected:
+- **Hunspell or Nuspell:** can be bundled offline, but require native build
+  integration and separately selected dictionaries.
+- **Spellbook:** avoids a native toolchain and can embed Hunspell dictionary
+  files. Harper was selected for this English-only trial, accepting its
+  larger build dependency tree.
+- **Harper's full linter pipeline:** simpler to call, but performs grammar
+  analysis and suggestion work that the notes editor does not display.
 
-- **`hunspell` or `nuspell` through bindings.** The spell checker most
-  other programs use, and its dictionaries are freely redistributable, so
-  the objection is not that it cannot be shipped offline. It is the
-  packaging: a C or C++ library to build or to find on the machine, a
-  `build.rs` and a toolchain in CI to go with it, and `.dic` and `.aff`
-  files to embed and unpack or to install beside a binary that is
-  otherwise one file.
-- **`spellbook`, a pure-Rust Hunspell.** No C toolchain, which removes
-  half of that, and the dictionary files could be embedded with
-  `include_str!`. What is left is choosing, vendoring and updating a
-  dictionary by hand, with no dialect data on the words, and writing the
-  tokeniser that tells a URL from a sentence, which is most of what this
-  module gets for free.
-- **A word list of our own, embedded.** No dependency at all and a few
-  hundred kilobytes, but it is a dictionary to curate for ever, and the
-  same missing tokeniser.
-- **`harper-core` used the way it is meant to be,** with `Document` and
-  the `SpellCheck` linter. A few lines instead of a module, but it runs a
-  neural chunker over every keystroke's worth of text and computes
-  corrections that nothing displays.
-
-Known limitations, all of them deliberate:
-
-- A word with a capital letter anywhere but the first is not checked, so
-  `getUserName` and `SQLite` are left alone and so is a genuine typo
-  written in capitals.
-- A lowercase proper noun is a misspelling, because the dictionary holds
-  `Berlin` and not `berlin`. This is Harper's own rule.
-- Only the note body is checked. Task titles are not.
+Known limits: words with an uppercase letter after the first are skipped
+as identifiers or acronyms, including genuine typos written in capitals.
+Proper-noun capitalization follows Harper's dictionary. Paired backticks
+mark code-like text; this is not a full Markdown parser. Only note bodies
+are checked, and no corrections are applied automatically.

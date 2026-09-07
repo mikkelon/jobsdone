@@ -104,6 +104,9 @@ of a post-it block on the desk. A note is for things like "remember to
 mention X" or drafting a message before sending it.
 
 - A note is plain text. No formatting, no title, no attachments.
+- Spelling is checked locally against US English and potential mistakes are
+  underlined. Checking is on by default and can be disabled in settings.
+  It never changes the text or prevents writing in another language.
 - The entire note can be copied to the clipboard from the list or while
   editing, preserving its text and the editing position.
 - Notes are independent of tasks. They are not attached to or linked from
@@ -134,6 +137,7 @@ are kept with the tasks, so every open window picks a change up at once.
 | Hint bar messages stand for | 4 seconds              | How long "closed X · u undo" stays when no key follows. |
 | Date order                  | as the locale writes it | `Fri 5 Sep` or `Fri Sep 5`, everywhere a date is written. |
 | Confirm before delete       | off                    | On, `x` asks first instead of deleting and offering to undo. |
+| Spell-check notes in US English | on                  | Underline possible US English spelling mistakes in notes. Checking works offline. |
 
 Colour and font are not here: they come from the terminal, which Omarchy
 themes.

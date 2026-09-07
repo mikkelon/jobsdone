@@ -27,8 +27,6 @@ mod spelling;
 #[cfg(test)]
 mod tests;
 
-pub mod spelling;
-
 /// The most weeks apart the repeat card offers, which is a year.
 const WEEKS_APART: usize = 52;
 

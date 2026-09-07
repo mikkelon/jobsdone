@@ -30,7 +30,7 @@ through every wireframe and names the view it is drawn from.
 | review          | The two-step morning pass over the pile and the surfaced tasks.          |
 | note            | A plain-text scratchpad entry.                                           |
 | command         | One change to the model. Every command has an inverse.                   |
-| settings        | The thirteen values that change what the rules do. Section 19.           |
+| settings        | The fourteen values that change what the rules do. Section 19.           |
 
 ## 2. Time
 
@@ -669,7 +669,7 @@ Notes on the schema:
 - `settings` keys are the ones in section 19, every value text. A
   `PutSettings` writes the whole table: the rows are deleted and written
   again in one transaction, because the settings are one value in the
-  model rather than thirteen. Loading is the same in reverse, so a
+  model rather than fourteen. Loading is the same in reverse, so a
   missing key is that setting's default and a key this build does not
   know is ignored. The delete takes those unknown keys with it, which is
   the price of the value being whole: an older binary can read a newer
@@ -704,7 +704,7 @@ that becomes a command on Enter.
 
 ## 19. Settings
 
-Thirteen settings, held in the `settings` table and loaded into the model
+Fourteen settings, held in the `settings` table and loaded into the model
 as one typed value. The domain owns the type, its defaults, its
 validation and its codec; storage only moves the rows and the settings
 page only draws them.
@@ -724,6 +724,7 @@ page only draws them.
 | `message_seconds`    | seconds, 0..=60; 0 means until the next key | `4`   | Hint bar messages stand for | How long "closed X · u undo" stays when no key follows. 0 keeps it until the next key. |
 | `date_style`         | `locale`, `day_first`, `month_first`   | `locale`   | Date order            | `Fri 5 Sep` or `Fri Sep 5`, everywhere a date is written. `locale` follows the environment's locale (STACK.md section 8). |
 | `confirm_delete`     | `true`/`false`                         | `false`    | Confirm before delete | `x` asks first instead of deleting and offering `u`. Applies to tasks, notes and the review pile. |
+| `spell_check_notes`  | `true`/`false`                         | `true`     | Spell-check notes in US English | Underline possible US English spelling mistakes in notes. The application checks locally; note text is unchanged. |
 
 ### The window sizes
 

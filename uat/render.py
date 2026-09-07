@@ -6,7 +6,7 @@ in the current Omarchy theme would show it.
 
 The palette comes from the current theme's foot.ini, or from
 /usr/share/omarchy/themes/NAME/ when --theme is given. Only the SGR
-sequences the app uses are understood: reset, bold, dim, reverse, the
+sequences the app uses are understood: reset, bold, dim, underline, reverse, the
 sixteen colours as 30-37/90-97/40-47/100-107 and 38;5;n/48;5;n. The HTML
 is written next to the PNG and turned into an image with Playwright's
 Chromium, which is installed under mise.
@@ -66,7 +66,7 @@ def screen(ansi, cols, rows, slots, fg, bg):
     is what capture-pane -e produces. The result is the inside of a pre."""
     out = []
     for line in ansi.split("\n")[:rows]:
-        state = dict(bold=False, dim=False, rev=False, fg=None, bg=None)
+        state = dict(bold=False, dim=False, underline=False, rev=False, fg=None, bg=None)
         spans = []
         text = ""
         width = 0
@@ -84,6 +84,8 @@ def screen(ansi, cols, rows, slots, fg, bg):
                 style += ";font-weight:bold"
             if state["dim"]:
                 style += ";opacity:.55"
+            if state["underline"]:
+                style += ";text-decoration:underline"
             spans.append(f'<span style="{style}">{html.escape(text)}</span>')
             text = ""
 
@@ -97,15 +99,19 @@ def screen(ansi, cols, rows, slots, fg, bg):
                 while j < len(params):
                     p = params[j]
                     if p == 0:
-                        state.update(bold=False, dim=False, rev=False, fg=None, bg=None)
+                        state.update(bold=False, dim=False, underline=False, rev=False, fg=None, bg=None)
                     elif p == 1:
                         state["bold"] = True
                     elif p == 2:
                         state["dim"] = True
+                    elif p == 4:
+                        state["underline"] = True
                     elif p == 7:
                         state["rev"] = True
                     elif p == 22:
                         state["bold"] = state["dim"] = False
+                    elif p == 24:
+                        state["underline"] = False
                     elif p == 27:
                         state["rev"] = False
                     elif 30 <= p <= 37:

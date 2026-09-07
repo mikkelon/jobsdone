@@ -53,6 +53,12 @@ from either the list or the editor. Copying preserves the entire text and
 leaves the editor in place. This uses `wl-copy` (the `wl-clipboard` package)
 on Wayland, or `xclip` on X11.
 
+Notes underline possible US English spelling mistakes using Harper, entirely
+offline. Spell checking is on by default; turn off **Spell-check notes in US
+English** in settings (`,`). The word at the caret stays unmarked while
+editing. Checking never changes your text, and notes can still be written in
+any language.
+
 `,` opens the settings page: the hour the day starts, which days are work
 days, how far back the review pile reaches, whether the window floats and
 how big it is, and a few more. Each row says what it does and what it

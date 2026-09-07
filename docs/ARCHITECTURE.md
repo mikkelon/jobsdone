@@ -434,12 +434,16 @@ adds it here first, the way a new dependency is added to section 2 first.
   needs the name because a key means something different in each, and
   `ui` because a group is drawn under its own rule. The settings page is
   one group for all of its rows: every key on it means the same thing
-  wherever the cursor is, and the five labels it is drawn under are
+  wherever the cursor is, and the six labels it is drawn under are
   `setting_rows()`.
 
 ### `ui`
 
 - `draw(&App, &mut Frame) -> Layout`.
+- Note spelling underlines read `App::misspellings()`, ranges counted in
+  grapheme clusters. `app::spelling` privately owns Harper and its lazy
+  dictionary; the application caches results and filters the active caret
+  word. Rendering does not run the checker or change note text.
 
 ### `desktop`
 
