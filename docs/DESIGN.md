@@ -332,7 +332,7 @@ that makes another one instead.
 A note wider than the pane is wrapped at a space where there is one, and
 the rows it is wrapped into are the rows the caret moves through: `↑` and
 `↓` step one row of the screen, not one line of the file, and `Home` and
-`End` are the ends of the row the caret is on. A run of them keeps the
+`End` are the ends of the row the caret is on. A run of `↑` and `↓` keeps the
 column it started in across rows too short to reach it, so stepping down a
 ragged edge and back up comes out where it began. A click puts the caret in
 front of the character it landed on, and a click in the blank below the

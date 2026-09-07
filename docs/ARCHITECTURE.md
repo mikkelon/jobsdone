@@ -425,7 +425,7 @@ adds it here first, the way a new dependency is added to section 2 first.
 - `Draft` holds that geometry's share of the note being typed: the caret
   in clusters, its affinity, the cell a run of `↑` and `↓` is aiming at,
   and the first row on screen. Every other way of moving a caret goes
-  through `App::field`, which forgets the first two.
+  through `App::field`, which resets the affinity and preferred column.
 - Read access to the model and the application state for `ui`:
   `today`, `showing` and `shown`, the day the day pane is on and which
   side of today it is, `browsing`, `model`, the views `day`, `backlog`,
