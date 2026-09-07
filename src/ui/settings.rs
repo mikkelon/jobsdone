@@ -59,6 +59,7 @@ fn group_label(group: SettingGroup) -> &'static str {
         SettingGroup::Review => "Review",
         SettingGroup::Window => "Window",
         SettingGroup::Looks => "Looks",
+        SettingGroup::Notes => "Notes",
     }
 }
 
@@ -123,6 +124,7 @@ fn label(row: SettingRow) -> &'static str {
         SettingRow::DateOrder => "Date order",
         SettingRow::MessageSeconds => "Hint bar messages stand for",
         SettingRow::ConfirmDelete => "Confirm before delete",
+        SettingRow::SpellCheckNotes => "Spell-check notes in US English",
     }
 }
 
@@ -194,6 +196,7 @@ fn value(settings: &Settings, row: SettingRow) -> String {
             n => counted(n as usize, "second", "seconds"),
         },
         SettingRow::ConfirmDelete => on_off(settings.confirm_delete()),
+        SettingRow::SpellCheckNotes => on_off(settings.spell_check_notes()),
     }
 }
 
@@ -259,6 +262,10 @@ fn about(row: SettingRow) -> &'static str {
         SettingRow::ConfirmDelete => {
             "x asks first instead of deleting and offering u. Applies to tasks, notes and the \
              review pile."
+        }
+        SettingRow::SpellCheckNotes => {
+            "Whether a note being written is checked against a US English dictionary and the \
+             words it does not know are marked. Off, nothing in a note is marked."
         }
     }
 }

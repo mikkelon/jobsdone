@@ -3453,10 +3453,47 @@ fn every_kind_of_row_is_changed_by_the_same_two_keys() {
     app.update(Action::Right);
     assert_eq!(app.settings().due_ahead_days(), 1);
 
+    // The notes spell check, which is a toggle like any other.
+    cursor_to(&mut app, SettingRow::SpellCheckNotes);
+    app.update(Action::Left);
+    assert!(!app.settings().spell_check_notes());
+    app.update(Action::Right);
+    assert!(app.settings().spell_check_notes());
+    app.update(Action::Pick);
+    assert!(!app.settings().spell_check_notes());
+
     // The window size, which steps from one preset to the next.
     cursor_to(&mut app, SettingRow::WindowSize);
     app.update(Action::Right);
     assert_eq!(app.settings().window_size(), WindowSize::PRESETS[2]);
+}
+
+#[test]
+fn the_notes_spell_check_is_on_until_a_key_turns_it_off_and_stays_off() {
+    let store = MemStore::holding(reviewed(Model::empty()));
+    let mut app = app_at(store.clone(), NOW);
+    assert!(
+        app.settings().spell_check_notes(),
+        "a database with nothing to say about it spell-checks notes"
+    );
+
+    app.update(Action::SettingsPage);
+    cursor_to(&mut app, SettingRow::SpellCheckNotes);
+    app.update(Action::Pick);
+
+    assert!(!app.settings().spell_check_notes());
+    assert!(
+        !store
+            .load()
+            .expect("the model")
+            .settings
+            .spell_check_notes(),
+        "and the row is written, so the next launch opens with it off"
+    );
+
+    // A second window reads it back the way it reads any other setting.
+    let next = app_at(store.clone(), NOW);
+    assert!(!next.settings().spell_check_notes());
 }
 
 #[test]

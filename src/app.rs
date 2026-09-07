@@ -221,6 +221,7 @@ pub enum SettingRow {
     DateOrder,
     MessageSeconds,
     ConfirmDelete,
+    SpellCheckNotes,
 }
 
 impl SettingRow {
@@ -240,8 +241,8 @@ impl SettingRow {
 }
 
 /// The label a run of settings rows is drawn under. What a setting does
-/// decides which of the five it is in, so the grouping belongs with the
-/// page rather than with the drawing.
+/// decides which group it is in, so the grouping belongs with the page
+/// rather than with the drawing.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum SettingGroup {
     Day,
@@ -249,12 +250,13 @@ pub enum SettingGroup {
     Review,
     Window,
     Looks,
+    Notes,
 }
 
 /// The rows of the settings page, in the order they are drawn, each
 /// under its group. One list, so the cursor walks it the way it walks
 /// any other.
-const SETTINGS: [(SettingGroup, SettingRow); 19] = [
+const SETTINGS: [(SettingGroup, SettingRow); 20] = [
     (SettingGroup::Day, SettingRow::DayStartsAt),
     (SettingGroup::Day, SettingRow::WeekStartsOn),
     (SettingGroup::WorkDays, SettingRow::WorkDay(Weekday::Mon)),
@@ -274,6 +276,7 @@ const SETTINGS: [(SettingGroup, SettingRow); 19] = [
     (SettingGroup::Looks, SettingRow::DateOrder),
     (SettingGroup::Looks, SettingRow::MessageSeconds),
     (SettingGroup::Looks, SettingRow::ConfirmDelete),
+    (SettingGroup::Notes, SettingRow::SpellCheckNotes),
 ];
 
 /// The settings page as a list of rows. `ui` draws them in this order
@@ -3561,6 +3564,7 @@ fn stepped(settings: &Settings, row: SettingRow, forward: bool) -> Settings {
             next.set_message_seconds(step(u16::from(settings.message_seconds())));
         }
         SettingRow::ConfirmDelete => next.set_confirm_delete(forward),
+        SettingRow::SpellCheckNotes => next.set_spell_check_notes(forward),
     }
     next
 }
@@ -3586,6 +3590,9 @@ fn cycled(settings: &Settings, row: SettingRow) -> Settings {
             next.set_date_style(DATE_STYLES[at]);
         }
         SettingRow::ConfirmDelete => next.set_confirm_delete(!settings.confirm_delete()),
+        SettingRow::SpellCheckNotes => {
+            next.set_spell_check_notes(!settings.spell_check_notes());
+        }
         SettingRow::DayStartsAt
         | SettingRow::DueAheadDays
         | SettingRow::BackfillDays

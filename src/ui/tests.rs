@@ -2682,6 +2682,52 @@ fn the_longest_description_fits_beside_the_list() {
     );
 }
 
+/// The last group on the page, which at 120x36 is only reached by
+/// walking the cursor down to it.
+#[test]
+fn the_notes_spell_check_row_names_its_dictionary_and_reads_on_or_off() {
+    let mut app = app();
+    app.update(Action::SettingsPage);
+    for _ in 0..setting_rows().len() {
+        if app.cursor(List::Settings) == Some(RowId::Setting(SettingRow::SpellCheckNotes)) {
+            break;
+        }
+        app.update(Action::Down);
+    }
+
+    let drawn = look(&app, 120, 36);
+    let text = drawn.join("\n");
+    assert!(text.contains("NOTES"), "the group it is under:\n{text}");
+    assert_eq!(spell_check_row(&app), "on", "on to begin with");
+    assert!(
+        text.contains("US English") && text.contains("dictionary"),
+        "and the pane beside it says what it checks against:\n{text}"
+    );
+    assert!(
+        text.contains("Default: on"),
+        "and what it holds when nobody has changed it:\n{text}"
+    );
+
+    // The key under the cursor turns the row over, value and all.
+    app.update(Action::Pick);
+    assert_eq!(spell_check_row(&app), "off");
+}
+
+/// The value the spell-check row is drawn with, with the leader and the
+/// divider beside the list taken off it.
+fn spell_check_row(app: &App) -> String {
+    let line = look(app, 120, 36)
+        .into_iter()
+        .find(|line| line.starts_with("  Spell-check notes in US English"))
+        .expect("the spell-check row");
+    let list = line.split('\u{2502}').next().expect("the list column");
+    list.trim_end()
+        .rsplit(' ')
+        .next()
+        .expect("its value")
+        .to_owned()
+}
+
 #[test]
 fn a_narrow_settings_page_keeps_the_list_and_drops_the_description() {
     let mut app = app();
