@@ -166,6 +166,10 @@ pub struct Model {
     /// The `settings` table, read into one typed value (DOMAIN.md
     /// section 19).
     pub settings: Settings,
+    /// The personal dictionary: a canonical key to the word as it was
+    /// typed, so that a checker can ask about a word in any
+    /// capitalisation and the manager can show the one written here.
+    pub personal_dictionary: BTreeMap<String, String>,
 }
 
 impl Model {
@@ -245,6 +249,12 @@ impl Model {
                     self.meta.insert(key.clone(), value.clone());
                 }
                 Write::PutSettings(settings) => self.settings = settings.clone(),
+                Write::PutDictionaryWord { key, word } => {
+                    self.personal_dictionary.insert(key.clone(), word.clone());
+                }
+                Write::DeleteDictionaryWord { key } => {
+                    self.personal_dictionary.remove(key);
+                }
             }
         }
     }
@@ -283,6 +293,16 @@ pub enum Write {
     /// Every settings row at once: the table is one value, so a change
     /// to it is one write.
     PutSettings(Settings),
+    /// One personal dictionary entry, insert or replace. A row apiece,
+    /// unlike the settings, so that two windows adding two words keep
+    /// both.
+    PutDictionaryWord {
+        key: String,
+        word: String,
+    },
+    DeleteDictionaryWord {
+        key: String,
+    },
 }
 
 /// The writes that turn one model into another: whole rows, and in an
@@ -334,6 +354,19 @@ pub(super) fn diff(before: &Model, after: &Model) -> Vec<Write> {
     }
     if before.settings != after.settings {
         writes.push(Write::PutSettings(after.settings.clone()));
+    }
+    for (key, word) in &after.personal_dictionary {
+        if before.personal_dictionary.get(key) != Some(word) {
+            writes.push(Write::PutDictionaryWord {
+                key: key.clone(),
+                word: word.clone(),
+            });
+        }
+    }
+    for key in before.personal_dictionary.keys() {
+        if !after.personal_dictionary.contains_key(key) {
+            writes.push(Write::DeleteDictionaryWord { key: key.clone() });
+        }
     }
     writes
 }

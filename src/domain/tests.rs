@@ -156,6 +156,12 @@ impl World {
         }
     }
 
+    /// A word put in the personal dictionary, committed and loaded back.
+    fn learn(&mut self, word: &str) {
+        let change = add_dictionary_word(&self.model, word).expect("the word");
+        self.commit(&change);
+    }
+
     /// A setting changed the way the page changes it, committed and
     /// loaded back.
     fn change_setting(&mut self, change: impl FnOnce(&mut Settings)) {
@@ -2774,6 +2780,296 @@ fn a_week_with_no_work_day_in_it_is_refused() {
             "At least one day of the week must be a work day.".to_owned()
         ))
     );
+}
+
+// ---- the personal dictionary -----------------------------------------
+
+/// The sentence a word the dictionary will not take is refused with.
+fn refused(model: &Model, word: &str) -> String {
+    match add_dictionary_word(model, word) {
+        Ok(_) => panic!("{word:?} was allowed"),
+        Err(Rejected(why)) => why,
+    }
+}
+
+#[test]
+fn a_key_is_the_word_composed_and_lowercased() {
+    assert_eq!(dictionary_key("Ratatui"), "ratatui");
+    assert_eq!(dictionary_key("Cafe\u{301}"), "café");
+    assert_eq!(dictionary_key("STRA\u{1e9e}E"), "straße");
+    assert_eq!(dictionary_key(&dictionary_key("Café")), "café");
+}
+
+#[test]
+fn a_word_added_is_one_write_and_nothing_on_the_undo_stack() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.add("Ship the release", Place::Backlog);
+
+    let change = add_dictionary_word(&world.model, "Ratatui").expect("the word");
+    assert_eq!(
+        change.writes,
+        [Write::PutDictionaryWord {
+            key: "ratatui".to_owned(),
+            word: "Ratatui".to_owned(),
+        }]
+    );
+
+    world.commit(&change);
+    assert_eq!(
+        world.model.personal_dictionary.get("ratatui").cloned(),
+        Some("Ratatui".to_owned())
+    );
+    assert_eq!(world.model.undo.len(), 1, "the add, and nothing since");
+}
+
+#[test]
+fn a_word_is_kept_as_it_was_typed_under_a_key_that_is_not() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.learn("Kubernetes");
+    world.learn("jobsdone");
+
+    assert_eq!(
+        world.model.personal_dictionary,
+        [
+            ("jobsdone".to_owned(), "jobsdone".to_owned()),
+            ("kubernetes".to_owned(), "Kubernetes".to_owned()),
+        ]
+        .into_iter()
+        .collect()
+    );
+}
+
+#[test]
+fn the_outer_whitespace_of_a_word_is_not_part_of_it() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.learn("  Kubernetes\t");
+
+    assert_eq!(
+        world.model.personal_dictionary.get("kubernetes").cloned(),
+        Some("Kubernetes".to_owned())
+    );
+}
+
+#[test]
+fn a_word_is_kept_composed_however_it_was_typed() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.learn("Cafe\u{301}");
+
+    let word = world
+        .model
+        .personal_dictionary
+        .get("café")
+        .expect("the word");
+    assert_eq!(word, "Café");
+    assert_eq!(word.chars().count(), 4);
+}
+
+#[test]
+fn the_same_word_in_another_capitalisation_is_already_there() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.learn("Ratatui");
+
+    assert_eq!(
+        refused(&world.model, "RATATUI"),
+        "That word is already in your dictionary."
+    );
+    assert_eq!(world.model.personal_dictionary.len(), 1);
+}
+
+#[test]
+fn the_same_word_decomposed_is_already_there() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.learn("Café");
+
+    assert_eq!(
+        refused(&world.model, "cafe\u{301}"),
+        "That word is already in your dictionary."
+    );
+}
+
+#[test]
+fn a_capital_that_lowercases_to_two_characters_is_one_entry() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.learn("Straße");
+
+    assert_eq!(
+        refused(&world.model, "STRA\u{1e9e}E"),
+        "That word is already in your dictionary."
+    );
+}
+
+#[test]
+fn the_dictionary_takes_one_word_and_nothing_else() {
+    let world = World::at("2026-09-07T09:00:00");
+
+    assert_eq!(
+        refused(&world.model, "   "),
+        "A dictionary word cannot be blank."
+    );
+    assert_eq!(
+        refused(&world.model, "kubernetes cluster"),
+        "A dictionary word is one word."
+    );
+    assert_eq!(
+        refused(&world.model, "kubernetes\ncluster"),
+        "A dictionary word is one word."
+    );
+    assert_eq!(
+        refused(&world.model, "kuber\u{7}netes"),
+        "A word cannot have control characters in it."
+    );
+    assert_eq!(refused(&world.model, "42"), "A word needs a letter in it.");
+    assert_eq!(refused(&world.model, "---"), "A word needs a letter in it.");
+    assert_eq!(
+        refused(&world.model, &"a".repeat(129)),
+        "A word is at most 128 characters."
+    );
+    assert!(add_dictionary_word(&world.model, &"a".repeat(128)).is_ok());
+}
+
+#[test]
+fn renaming_a_word_moves_the_entry_to_its_new_key() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.learn("Kubernets");
+
+    let change =
+        edit_dictionary_word(&world.model, "kubernets", "Kubernetes").expect("the new word");
+    assert_eq!(
+        change.writes,
+        [
+            Write::PutDictionaryWord {
+                key: "kubernetes".to_owned(),
+                word: "Kubernetes".to_owned(),
+            },
+            Write::DeleteDictionaryWord {
+                key: "kubernets".to_owned(),
+            },
+        ]
+    );
+
+    world.commit(&change);
+    assert_eq!(
+        world.model.personal_dictionary,
+        [("kubernetes".to_owned(), "Kubernetes".to_owned())]
+            .into_iter()
+            .collect()
+    );
+}
+
+#[test]
+fn a_word_can_be_recapitalised_where_another_word_cannot_take_its_key() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.learn("ratatui");
+
+    let change = edit_dictionary_word(&world.model, "ratatui", "Ratatui").expect("the new word");
+    assert_eq!(
+        change.writes,
+        [Write::PutDictionaryWord {
+            key: "ratatui".to_owned(),
+            word: "Ratatui".to_owned(),
+        }]
+    );
+
+    world.commit(&change);
+    assert_eq!(
+        world.model.personal_dictionary.get("ratatui").cloned(),
+        Some("Ratatui".to_owned())
+    );
+}
+
+#[test]
+fn a_word_edited_into_one_the_dictionary_has_is_refused() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.learn("Ratatui");
+    world.learn("Kubernetes");
+
+    assert_eq!(
+        edit_dictionary_word(&world.model, "kubernetes", "RATATUI"),
+        Err(Rejected(
+            "That word is already in your dictionary.".to_owned()
+        ))
+    );
+}
+
+#[test]
+fn a_word_edited_into_something_that_is_not_a_word_is_refused() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.learn("Ratatui");
+
+    assert_eq!(
+        edit_dictionary_word(&world.model, "ratatui", "two words"),
+        Err(Rejected("A dictionary word is one word.".to_owned()))
+    );
+    assert_eq!(
+        world.model.personal_dictionary.get("ratatui").cloned(),
+        Some("Ratatui".to_owned())
+    );
+}
+
+#[test]
+fn a_word_that_has_not_changed_is_no_write_at_all() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.learn("Ratatui");
+
+    let change = edit_dictionary_word(&world.model, "ratatui", "Ratatui").expect("the same word");
+    assert!(change.writes.is_empty());
+}
+
+#[test]
+fn removing_a_word_leaves_the_rest_of_the_dictionary() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.learn("Ratatui");
+    world.learn("Kubernetes");
+
+    let change = remove_dictionary_word(&world.model, "ratatui").expect("the word");
+    assert_eq!(
+        change.writes,
+        [Write::DeleteDictionaryWord {
+            key: "ratatui".to_owned(),
+        }]
+    );
+
+    world.commit(&change);
+    assert_eq!(
+        world.model.personal_dictionary,
+        [("kubernetes".to_owned(), "Kubernetes".to_owned())]
+            .into_iter()
+            .collect()
+    );
+}
+
+#[test]
+fn a_word_the_dictionary_does_not_have_cannot_be_edited_or_removed() {
+    let world = World::at("2026-09-07T09:00:00");
+    let gone = Err(Rejected("That word is not in your dictionary.".to_owned()));
+
+    assert_eq!(
+        edit_dictionary_word(&world.model, "ratatui", "Ratatui"),
+        gone
+    );
+    assert_eq!(remove_dictionary_word(&world.model, "ratatui"), gone);
+}
+
+#[test]
+fn one_window_adding_a_word_leaves_another_windows_word_alone() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.learn("Ratatui");
+
+    // Both windows worked their change out from the dictionary as it was
+    // before either of them wrote.
+    let before = world.model.clone();
+    let mine = add_dictionary_word(&before, "Kubernetes").expect("the word");
+    let theirs = add_dictionary_word(&before, "Wayland").expect("the word");
+    world.commit(&mine);
+    world.commit(&theirs);
+
+    let words: Vec<&str> = world
+        .model
+        .personal_dictionary
+        .values()
+        .map(String::as_str)
+        .collect();
+    assert_eq!(words, ["Kubernetes", "Ratatui", "Wayland"]);
 }
 
 // ---- dates as words --------------------------------------------------

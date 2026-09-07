@@ -24,6 +24,10 @@ mod tests;
 const MIGRATIONS: &[(u32, &str)] = &[
     (1, include_str!("../migrations/0001_initial.sql")),
     (2, include_str!("../migrations/0002_settings.sql")),
+    (
+        3,
+        include_str!("../migrations/0003_personal_dictionary.sql"),
+    ),
 ];
 
 /// `placements.from_place` is `new`, `backlog`, or the date the task came
@@ -132,6 +136,14 @@ impl Store for Sqlite {
             })?
             .collect::<rusqlite::Result<Vec<(String, String)>>>()?;
         model.settings = Settings::from_pairs(rows);
+
+        let mut dictionary = self
+            .conn
+            .prepare("SELECT key, word FROM personal_dictionary")?;
+        for row in dictionary.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))? {
+            let (key, word) = row?;
+            model.personal_dictionary.insert(key, word);
+        }
 
         Ok(model)
     }
@@ -288,6 +300,19 @@ fn write_row(tx: &Transaction<'_>, write: &Write) -> Result<(), StoreError> {
                     params![key, value],
                 )?;
             }
+        }
+        Write::PutDictionaryWord { key, word } => {
+            tx.execute(
+                "INSERT INTO personal_dictionary (key, word) VALUES (?1, ?2)
+                 ON CONFLICT (key) DO UPDATE SET word = excluded.word",
+                params![key, word],
+            )?;
+        }
+        Write::DeleteDictionaryWord { key } => {
+            tx.execute(
+                "DELETE FROM personal_dictionary WHERE key = ?1",
+                params![key],
+            )?;
         }
     }
     Ok(())

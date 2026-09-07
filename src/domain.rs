@@ -11,6 +11,7 @@ use jiff::Zoned;
 
 mod command;
 mod date;
+mod dictionary;
 mod model;
 mod rule;
 mod settings;
@@ -22,6 +23,9 @@ pub(crate) mod tests;
 
 pub use self::command::{Command, Undone, apply, undo};
 pub use self::date::{day_label, parse_date, short_label, stamp_label};
+pub use self::dictionary::{
+    add_dictionary_word, dictionary_key, edit_dictionary_word, remove_dictionary_word,
+};
 pub use self::model::{
     Change, FromPlace, Id, Model, Note, Place, Placement, REVIEW_BEFORE, REVIEW_ON, Schedule, Task,
     UndoEntry, Write,

@@ -115,7 +115,7 @@ fn a_fresh_database_is_migrated_to_the_latest_schema() {
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user_version");
 
-    assert_eq!(user_version, 2);
+    assert_eq!(user_version, 3);
     assert_eq!(store.load().expect("load"), Model::empty());
 }
 
@@ -137,6 +137,7 @@ fn the_schema_of_domain_section_17_is_what_was_created() {
         [
             "meta",
             "notes",
+            "personal_dictionary",
             "placements",
             "schedules",
             "settings",
@@ -372,6 +373,149 @@ fn a_settings_key_this_build_does_not_know_is_ignored() {
 }
 
 // ---- one command, one transaction ------------------------------------
+
+// ---- the personal dictionary -----------------------------------------
+
+#[test]
+fn the_personal_dictionary_reads_back_as_what_was_committed() {
+    let mut world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
+
+    for word in ["Ratatui", "Kubernetes", "Café"] {
+        let change = domain::add_dictionary_word(&world.model, word).expect("the word");
+        world.commit(&change);
+    }
+    let change = domain::remove_dictionary_word(&world.model, "kubernetes").expect("the word");
+    world.commit(&change);
+
+    assert_eq!(
+        world.reopened().personal_dictionary,
+        world.model.personal_dictionary
+    );
+    assert_eq!(
+        world.reopened().personal_dictionary,
+        [
+            ("café".to_owned(), "Café".to_owned()),
+            ("ratatui".to_owned(), "Ratatui".to_owned()),
+        ]
+        .into_iter()
+        .collect()
+    );
+}
+
+/// The schema the dictionary arrived in is applied to a database written
+/// by a build that did not have it, and nothing that database held is
+/// lost on the way.
+#[test]
+fn a_database_without_the_dictionary_gains_it_and_keeps_what_it_had() {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let path = dir.path().join("jobsdone.db");
+
+    let conn = Connection::open(&path).expect("a database");
+    for (number, sql) in MIGRATIONS.iter().filter(|(number, _)| *number < 3) {
+        conn.execute_batch(&format!("BEGIN;\n{sql}\nCOMMIT;"))
+            .unwrap_or_else(|error| panic!("migration {number}: {error}"));
+    }
+    conn.execute(
+        "INSERT INTO meta (key, value) VALUES ('review_on', '2026-09-06')",
+        [],
+    )
+    .expect("a row written before the dictionary existed");
+    drop(conn);
+
+    let mut store = Sqlite::open(&path).expect("the same database again");
+    let user_version: u32 = store
+        .conn
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .expect("user_version");
+    assert_eq!(user_version, 3);
+
+    let model = store.load().expect("load");
+    assert_eq!(
+        model.meta.get("review_on").map(String::as_str),
+        Some("2026-09-06")
+    );
+    assert!(model.personal_dictionary.is_empty());
+
+    let change = domain::add_dictionary_word(&model, "Ratatui").expect("the word");
+    store.commit(&change).expect("the new table takes a word");
+    assert_eq!(
+        store
+            .load()
+            .expect("load")
+            .personal_dictionary
+            .get("ratatui")
+            .map(String::as_str),
+        Some("Ratatui")
+    );
+}
+
+#[test]
+fn a_database_at_the_latest_schema_is_opened_without_migrating_it_again() {
+    let mut world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
+    let change = domain::add_dictionary_word(&world.model, "Ratatui").expect("the word");
+    world.commit(&change);
+
+    let again = Sqlite::open(&world.path).expect("the same database again");
+    let user_version: u32 = again
+        .conn
+        .query_row("PRAGMA user_version", [], |row| row.get(0))
+        .expect("user_version");
+
+    assert_eq!(user_version, 3);
+    assert_eq!(
+        again.load().expect("load").personal_dictionary,
+        world.model.personal_dictionary
+    );
+}
+
+#[test]
+fn a_word_from_another_instance_is_not_lost_to_this_ones_word() {
+    let mut world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
+
+    // Both windows worked their change out from the dictionary as it was
+    // before either of them wrote.
+    let mine = domain::add_dictionary_word(&world.model, "Kubernetes").expect("the word");
+    let theirs = domain::add_dictionary_word(&world.model, "Wayland").expect("the word");
+    world.commit(&mine);
+
+    let mut elsewhere = Sqlite::open(&world.path).expect("a second instance");
+    elsewhere.commit(&theirs).expect("the other window's word");
+
+    let words: Vec<String> = world.reopened().personal_dictionary.into_values().collect();
+    assert_eq!(words, ["Kubernetes", "Wayland"]);
+}
+
+#[test]
+fn a_dictionary_change_that_cannot_be_written_writes_none_of_itself() {
+    let mut world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
+    let change = domain::add_dictionary_word(&world.model, "Ratatui").expect("the word");
+    world.commit(&change);
+
+    // A word, and then a placement for a task that is not there.
+    let broken = Change {
+        writes: vec![
+            Write::PutDictionaryWord {
+                key: "kubernetes".to_owned(),
+                word: "Kubernetes".to_owned(),
+            },
+            Write::DeleteDictionaryWord {
+                key: "ratatui".to_owned(),
+            },
+            Write::PutPlacement(Placement {
+                task_id: 404,
+                day: "2026-09-07".parse().expect("a date"),
+                placed_at: world.now.clone(),
+                from_place: FromPlace::New,
+            }),
+        ],
+    };
+
+    assert_eq!(world.store.commit(&broken), Err(StoreError::Conflict));
+    assert_eq!(
+        world.reopened().personal_dictionary,
+        world.model.personal_dictionary
+    );
+}
 
 #[test]
 fn a_change_that_cannot_be_written_writes_none_of_itself() {
