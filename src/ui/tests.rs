@@ -2797,3 +2797,176 @@ fn a_typed_row_becomes_a_field_where_its_value_was() {
         drawn[34]
     );
 }
+
+// ---- the spell check ----------------------------------------------
+
+/// The notes page with one note open and typed into, drawn on a terminal
+/// a test can read the cells of.
+fn note_on_screen(body: &str, keep_typing: bool) -> Terminal<TestBackend> {
+    let mut app = empty();
+    app.update(Action::NotesPage);
+    app.update(Action::Add);
+    for typed in body.chars() {
+        app.update(Action::Insert(typed));
+    }
+    if !keep_typing {
+        // Escape writes the note and puts the keyboard back on the list,
+        // which is a note being looked at rather than written.
+        app.update(Action::Cancel);
+    }
+    let mut terminal = Terminal::new(TestBackend::new(120, 36)).expect("a test terminal");
+    terminal
+        .draw(|frame| _ = draw(&app, frame))
+        .expect("a frame");
+    terminal
+}
+
+/// Where a run of characters was drawn in the open note: the row, and
+/// the cell each of its clusters starts in, so that a test can ask how
+/// each one was styled. The list beside the note shows the first line of
+/// every body, so the search starts at the divider between them. The
+/// cell a double-width character owns beside it is folded back into the
+/// character, the way `glyphs` folds it.
+fn drawn_at(buffer: &Buffer, wanted: &str) -> (u16, Vec<u16>) {
+    let area = buffer.area();
+    for y in 0..area.height {
+        let mut text = String::new();
+        let mut cells = Vec::new();
+        let mut x = NOTES_DIVIDER;
+        while x < area.width {
+            let symbol = buffer[(x, y)].symbol();
+            text.push_str(symbol);
+            cells.push(x);
+            x += count(symbol).max(1);
+        }
+        if let Some(byte) = text.find(wanted) {
+            let from = text[..byte].graphemes(true).count();
+            let long = wanted.graphemes(true).count();
+            return (y, cells[from..from + long].to_vec());
+        }
+    }
+    panic!("{wanted:?} was not drawn");
+}
+
+/// Whether every cell of a run is underlined.
+fn all_underlined(buffer: &Buffer, row: u16, cells: &[u16]) -> bool {
+    cells
+        .iter()
+        .all(|x| buffer[(*x, row)].modifier.contains(Modifier::UNDERLINED))
+}
+
+/// Whether any cell of a run is, which is what a test asks about the
+/// cells a word does not reach.
+fn any_underlined(buffer: &Buffer, row: u16, cells: &[u16]) -> bool {
+    cells
+        .iter()
+        .any(|x| buffer[(*x, row)].modifier.contains(Modifier::UNDERLINED))
+}
+
+#[test]
+fn a_word_the_checker_does_not_know_is_underlined_where_it_is_drawn() {
+    let terminal = note_on_screen("remember teh meeting", false);
+    let buffer = terminal.backend().buffer();
+
+    let (row, cells) = drawn_at(buffer, "teh");
+    assert!(all_underlined(buffer, row, &cells), "the word is under it");
+    assert_eq!(
+        cells.len(),
+        3,
+        "three cells, which is what the three letters take"
+    );
+
+    // The words beside it, and the spaces between them, are left alone.
+    let (_, before) = drawn_at(buffer, "remember");
+    assert!(!any_underlined(buffer, row, &before));
+    let (_, after) = drawn_at(buffer, "meeting");
+    assert!(!any_underlined(buffer, row, &after));
+    assert!(
+        !any_underlined(buffer, row, &[cells[2] + 1]),
+        "and the space after the word is not part of it"
+    );
+
+    // An underline is a weight, not a colour: the note keeps the
+    // terminal's own foreground (DESIGN.md section 3).
+    assert_eq!(buffer[(cells[0], row)].fg, Color::Reset);
+    assert_eq!(buffer[(cells[0], row)].bg, Color::Reset);
+}
+
+#[test]
+fn an_underline_follows_a_word_over_the_wrap_of_a_line() {
+    // Six of these fill the pane, so the word after them is drawn on the
+    // line under it and its underline has to go with it.
+    let body = format!("{}teh mistayk", "the meeting ".repeat(6));
+    let terminal = note_on_screen(&body, false);
+    let buffer = terminal.backend().buffer();
+
+    let (first, _) = drawn_at(buffer, "the meeting");
+    let (row, cells) = drawn_at(buffer, "teh");
+    assert_eq!(row, first + 1, "the word wrapped onto the next line");
+    assert_eq!(
+        cells[0],
+        drawn_at(buffer, "the meeting").1[0],
+        "and starts in the column every line of the body starts in"
+    );
+    assert!(all_underlined(buffer, row, &cells));
+
+    let (row, cells) = drawn_at(buffer, "mistayk");
+    assert!(all_underlined(buffer, row, &cells), "and so does the next");
+}
+
+#[test]
+fn a_wide_character_before_a_word_does_not_shift_its_underline() {
+    // Two cells each, so a word counted in characters rather than cells
+    // would be underlined five columns to the left of itself.
+    let terminal = note_on_screen("日本語です mistayk", false);
+    let buffer = terminal.backend().buffer();
+
+    let (row, cells) = drawn_at(buffer, "mistayk");
+    assert!(all_underlined(buffer, row, &cells), "the word, and only it");
+    assert!(
+        !any_underlined(buffer, row, &[cells[0] - 1]),
+        "the space in front of it is not underlined"
+    );
+    assert!(
+        !any_underlined(buffer, row, &[cells[6] + 1]),
+        "and neither is the cell after it"
+    );
+}
+
+#[test]
+fn the_caret_keeps_its_cell_beside_a_word_that_is_underlined() {
+    // The caret is left two characters into "meeting", so the word it is
+    // in is the one held back and the word before it is marked.
+    let mut app = empty();
+    app.update(Action::NotesPage);
+    app.update(Action::Add);
+    for typed in "remember teh meeting".chars() {
+        app.update(Action::Insert(typed));
+    }
+    for _ in 0..5 {
+        app.update(Action::Left);
+    }
+    let mut terminal = Terminal::new(TestBackend::new(120, 36)).expect("a test terminal");
+    terminal
+        .draw(|frame| _ = draw(&app, frame))
+        .expect("a frame");
+    let buffer = terminal.backend().buffer();
+
+    let row = glyphs(&app, 120, 36)
+        .into_iter()
+        .find(|row| row.contains("remember teh me▏eting"))
+        .expect("the caret between the two characters");
+    assert!(row.contains("remember teh me\u{258f}eting"));
+
+    let (at, cells) = drawn_at(buffer, "teh");
+    assert!(all_underlined(buffer, at, &cells), "the finished word");
+    let (_, caret) = drawn_at(buffer, "\u{258f}");
+    assert!(
+        !any_underlined(buffer, at, &caret),
+        "the caret is a cell of the field, not of the word"
+    );
+    assert!(
+        buffer[(caret[0], at)].modifier.contains(Modifier::BOLD),
+        "and keeps the weight it is drawn in"
+    );
+}

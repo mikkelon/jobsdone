@@ -10,6 +10,8 @@
 //! follows an Omarchy theme change live with no code of its own
 //! (DESIGN.md section 3).
 
+use std::ops::Range;
+
 use jiff::civil::Date;
 use ratatui::Frame;
 use ratatui::buffer::Buffer;
@@ -75,6 +77,14 @@ fn dim() -> Style {
 /// Omarchy's accent token, and it never marks task state.
 fn accent() -> Style {
     Style::new().fg(Color::Blue).add_modifier(Modifier::BOLD)
+}
+
+/// A word in an open note the spell checker did not know. An underline
+/// rather than a colour: every colour the app uses already means
+/// something about a task (DESIGN.md section 3), and a misspelling is
+/// not one of those things.
+fn misspelt() -> Style {
+    Style::new().add_modifier(Modifier::UNDERLINED)
 }
 
 /// The cursor row. A terminal does not tell an application what its
@@ -1786,22 +1796,64 @@ fn open_note(
     let height = column.height() as usize;
     let first = scroll_to(lines.len(), caret.map(|(row, _)| row), height);
 
-    for (at, (text, _)) in lines.iter().skip(first).take(height).enumerate() {
+    // The words to underline, worked out once by the application and
+    // counted in the same clusters the lines carry their starts in.
+    let misspellings = app.misspellings();
+
+    for (at, (text, start)) in lines.iter().skip(first).take(height).enumerate() {
         let y = column.top + at as u16;
-        // The caret is a cell of its own between two characters, the way
-        // it is in a field, so the character it is in front of is still
-        // drawn and a wide one is not cut in half.
-        match caret.filter(|(row, _)| *row == first + at) {
-            Some((_, glyph)) => {
-                let split = glyph_at(text, glyph);
-                let at = canvas.put(x + 2, y, &text[..split], plain());
-                let at = canvas.put(at, y, CARET, bold());
-                canvas.put(at, y, &text[split..], plain());
-            }
-            None => {
-                canvas.put(x + 2, y, text, plain());
-            }
+        let on_this_line = caret
+            .filter(|(row, _)| *row == first + at)
+            .map(|(_, glyph)| glyph);
+        note_line(canvas, x + 2, y, text, *start, misspellings, on_this_line);
+    }
+}
+
+/// One drawn line of a note: its characters, the words among them the
+/// checker did not know, and the caret where it falls on this line.
+///
+/// The caret is a cell of its own between two characters, the way it is
+/// in a field, so the character it is in front of is still drawn and a
+/// wide one is not cut in half. `start` is the cluster of the body the
+/// line begins at, which is what the words are counted from.
+///
+/// The words come in the order the body is drawn, so the line finds the
+/// first one that could reach it and then walks forward with the text: a
+/// long note full of misspellings costs its lines on screen and not the
+/// ones above them.
+fn note_line(
+    canvas: &mut Canvas,
+    x: u16,
+    y: u16,
+    text: &str,
+    start: usize,
+    misspellings: &[Range<usize>],
+    caret: Option<usize>,
+) {
+    let mut next = misspellings.partition_point(|word| word.end <= start);
+    let mut at = x;
+    let mut glyph = 0;
+    for cluster in text.graphemes(true) {
+        if caret == Some(glyph) {
+            at = canvas.put(at, y, CARET, bold());
         }
+        let cluster_at = start + glyph;
+        while misspellings
+            .get(next)
+            .is_some_and(|word| word.end <= cluster_at)
+        {
+            next += 1;
+        }
+        let style = match misspellings.get(next) {
+            Some(word) if word.start <= cluster_at => misspelt(),
+            _ => plain(),
+        };
+        at = canvas.put(at, y, cluster, style);
+        glyph += 1;
+    }
+    // A caret at the end of a line has no character to stand in front of.
+    if caret.is_some_and(|caret| caret >= glyph) {
+        canvas.put(at, y, CARET, bold());
     }
 }
 

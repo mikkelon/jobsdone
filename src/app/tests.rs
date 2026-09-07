@@ -3731,3 +3731,238 @@ fn copying_without_a_note_leaves_the_clipboard_alone() {
     assert_eq!(app.update(Action::CopyNote), Flow::Continue);
     assert_eq!(app.message().unwrap().text, "There is no note here yet.");
 }
+
+// ---- the spell check ----------------------------------------------
+
+/// The words the open note has marked, read back as the text they cover,
+/// so that a test names words rather than counting clusters.
+fn misspelt(app: &App) -> Vec<String> {
+    let note = note_cursor(app).expect("an open note");
+    let body = match app.draft().filter(|draft| draft.note == note) {
+        Some(draft) => draft.text.clone(),
+        None => app
+            .model()
+            .note(note)
+            .map_or_else(String::new, |note| note.body.clone()),
+    };
+    let glyphs: Vec<&str> = body.graphemes(true).collect();
+    app.misspellings()
+        .iter()
+        .map(|word| glyphs[word.clone()].concat())
+        .collect()
+}
+
+#[test]
+fn a_word_the_checker_does_not_know_is_marked_where_it_sits() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "remember teh meeting ");
+
+    assert_eq!(
+        app.misspellings().to_vec(),
+        vec![9..12],
+        "in clusters from the start of the body, as the caret is"
+    );
+    assert_eq!(misspelt(&app), ["teh"]);
+}
+
+#[test]
+fn the_word_the_caret_is_in_waits_until_the_caret_has_left_it() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "remember teh");
+
+    assert!(
+        app.misspellings().is_empty(),
+        "a word is not called wrong while it is still being typed, and \
+         the caret at its end is where a word spends its whole writing"
+    );
+
+    // The space finishes it, and the mark appears where it was typed.
+    app.update(Action::Insert(' '));
+    assert_eq!(misspelt(&app), ["teh"]);
+
+    // Going back to it takes the mark off again, for the same reason.
+    app.update(Action::Left);
+    assert!(app.misspellings().is_empty(), "the caret is at its end");
+    app.update(Action::Left);
+    assert!(app.misspellings().is_empty(), "and then inside it");
+    app.update(Action::LineEnd);
+    assert_eq!(misspelt(&app), ["teh"], "and off it again");
+}
+
+#[test]
+fn a_note_being_looked_at_shows_every_word_in_it() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "remember the mistayk");
+
+    assert!(
+        app.misspellings().is_empty(),
+        "the last word typed is still under the caret"
+    );
+
+    // Escape writes the body and puts the keyboard back on the list.
+    // Nothing is being typed any more, so nothing is held back.
+    app.update(Action::Cancel);
+    assert!(app.draft().is_none());
+    assert_eq!(misspelt(&app), ["mistayk"]);
+
+    // Enter answers `update` before the end of it, so the note it opens
+    // is checked all the same: the caret is at the end of the body.
+    app.update(Action::Confirm);
+    assert!(app.draft().is_some());
+    assert!(
+        app.misspellings().is_empty(),
+        "the caret is at the end of the word again"
+    );
+}
+
+#[test]
+fn the_body_is_read_once_and_a_caret_a_tick_and_a_save_reuse_it() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "remember teh meeting ");
+    let read = app.spelling.runs;
+
+    for _ in 0..4 {
+        app.update(Action::Left);
+    }
+    app.update(Action::Right);
+    // The first tick writes the body, which changes the model and not
+    // the text on screen; the second has nothing left to do.
+    app.update(Action::Tick);
+    app.update(Action::Tick);
+
+    assert_eq!(
+        app.spelling.runs, read,
+        "nothing was typed, so nothing was read again"
+    );
+    assert_eq!(misspelt(&app), ["teh"], "and the marks are still there");
+
+    app.update(Action::Insert('s'));
+    assert!(app.spelling.runs > read, "a keystroke is a new body");
+}
+
+#[test]
+fn nothing_is_read_until_there_is_a_note_with_something_in_it() {
+    let mut app = started();
+    assert!(
+        app.spelling.checker.is_none(),
+        "a program that only ever looks at tasks builds no dictionary"
+    );
+
+    app.update(Action::NotesPage);
+    app.update(Action::Add);
+    assert!(
+        app.spelling.checker.is_none(),
+        "and a note with nothing written in it has nothing to check"
+    );
+
+    type_in(&mut app, "teh ");
+    assert!(app.spelling.checker.is_some());
+    assert_eq!(misspelt(&app), ["teh"]);
+}
+
+#[test]
+fn turning_the_setting_off_takes_the_marks_away_and_on_brings_them_back() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "remember teh meeting");
+    assert_eq!(misspelt(&app), ["teh"]);
+
+    app.update(Action::SettingsPage);
+    cursor_to(&mut app, SettingRow::SpellCheckNotes);
+    app.update(Action::Pick);
+    assert!(!app.settings().spell_check_notes());
+
+    app.update(Action::SettingsPage);
+    assert_eq!(app.page(), Page::Notes);
+    assert!(
+        app.misspellings().is_empty(),
+        "a note nobody asked to have checked is not marked"
+    );
+
+    app.update(Action::SettingsPage);
+    cursor_to(&mut app, SettingRow::SpellCheckNotes);
+    app.update(Action::Pick);
+    app.update(Action::SettingsPage);
+    assert_eq!(misspelt(&app), ["teh"]);
+}
+
+#[test]
+fn the_setting_changed_without_a_key_takes_effect_at_once() {
+    // `change_settings` is a way into the application of its own, so
+    // what is on screen cannot wait for the next key to catch up.
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "remember teh meeting");
+    assert_eq!(misspelt(&app), ["teh"]);
+
+    let mut off = app.settings().clone();
+    off.set_spell_check_notes(false);
+    app.change_settings(off);
+    assert!(app.misspellings().is_empty());
+
+    let mut on = app.settings().clone();
+    on.set_spell_check_notes(true);
+    app.change_settings(on);
+    assert_eq!(misspelt(&app), ["teh"]);
+}
+
+#[test]
+fn the_marks_follow_the_cursor_from_one_note_to_another() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "remember teh meeting");
+    app.update(Action::Cancel);
+    app.update(Action::Add);
+    type_in(&mut app, "the mistayk");
+    app.update(Action::Cancel);
+
+    // The newest note is at the top of the list, and the cursor is on it.
+    assert_eq!(misspelt(&app), ["mistayk"]);
+    app.update(Action::Down);
+    assert_eq!(misspelt(&app), ["teh"]);
+}
+
+#[test]
+fn a_note_another_window_rewrote_is_read_again_on_the_tick() {
+    let store = MemStore::new();
+    let mut app = app_at(store.clone(), NOW);
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "remember teh meeting");
+    app.update(Action::Cancel);
+    assert_eq!(misspelt(&app), ["teh"]);
+
+    // Another window writes over the beginning of the same note.
+    let mut other = app_at(store, NOW);
+    other.update(Action::NotesPage);
+    other.update(Action::Confirm);
+    other.update(Action::LineStart);
+    type_in(&mut other, "a mistayk ");
+    other.update(Action::Tick);
+
+    app.update(Action::Tick);
+    assert_eq!(
+        misspelt(&app),
+        ["mistayk", "teh"],
+        "the body that came back, in the order it is drawn"
+    );
+}
+
+#[test]
+fn a_note_thrown_away_leaves_nothing_marked() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "remember teh meeting");
+    app.update(Action::Cancel);
+    assert_eq!(misspelt(&app), ["teh"]);
+
+    app.update(Action::Delete);
+    assert_eq!(app.notes().count, 0);
+    assert!(
+        app.misspellings().is_empty(),
+        "there is no note left to mark"
+    );
+}

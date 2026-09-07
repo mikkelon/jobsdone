@@ -1,6 +1,8 @@
 //! Application state, the launch sequence, reloading, turning actions
 //! into commands, and the screen layout.
 
+use std::ops::Range;
+
 use jiff::civil::Date;
 use jiff::{Span, Zoned};
 use tracing::warn;
@@ -19,6 +21,8 @@ pub use crate::domain::{DateOrder, WindowSize};
 use crate::input::{
     self, Action, Binding, Field, KeyContext, NotesPane, Pane, PopupKind, ReviewStep, Shown,
 };
+
+mod spelling;
 
 #[cfg(test)]
 mod tests;
@@ -463,6 +467,122 @@ pub struct Draft {
     pub caret: usize,
 }
 
+/// The misspellings of the open note, kept between redraws.
+///
+/// Drawing is a pure function of what the application holds
+/// (ARCHITECTURE.md rule 4), so the checker is run here. It is asked
+/// once per change to the body and at no other time: a redraw, a caret
+/// moving and a tick with nothing typed all read what it last found.
+///
+/// The dictionary the checker reads is built when the first note is
+/// checked rather than at launch, so a program that only ever looks at
+/// tasks never pays for one.
+#[derive(Default)]
+struct Spelling {
+    checker: Option<spelling::SpellChecker>,
+    /// The note the words are of, and the body they were read from,
+    /// which together are what a second run is spared by.
+    note: Option<Id>,
+    text: String,
+    /// Every word the checker did not know, in grapheme clusters from
+    /// the start of the body, which is what the caret and the drawing
+    /// both count in.
+    found: Vec<Range<usize>>,
+    /// The ones drawn: the word the caret is in is left alone while it
+    /// is being typed.
+    shown: Vec<Range<usize>>,
+    /// The caret `shown` was worked out for, and none while the note is
+    /// only being looked at, when every word found is drawn.
+    caret: Option<usize>,
+    /// How many times the checker was asked, which is what holds the
+    /// reuse honest: a redraw, a caret moving and a quiet tick may not
+    /// add to it.
+    #[cfg(test)]
+    runs: usize,
+}
+
+impl Spelling {
+    /// The misspellings of this body: from the checker when the body has
+    /// changed, and from the last run when it has not.
+    fn of(&mut self, note: Id, text: &str, caret: Option<usize>) {
+        let same = self.note == Some(note) && self.text == text;
+        if !same {
+            // A note with nothing written in it has nothing to check,
+            // and building a dictionary to say so is a poor way to spend
+            // the moment `a` opens one.
+            self.found = if text.trim().is_empty() {
+                Vec::new()
+            } else {
+                let mut found = self
+                    .checker
+                    .get_or_insert_with(spelling::SpellChecker::default)
+                    .check(text);
+                #[cfg(test)]
+                {
+                    self.runs += 1;
+                }
+                // In the order the body is drawn, and no two of them
+                // over the same character, so that a line being drawn
+                // can walk them alongside its text rather than reading
+                // the whole note for every character of it.
+                found.sort_by_key(|word| (word.start, word.end));
+                merged(found)
+            };
+            self.note = Some(note);
+            self.text.clear();
+            self.text.push_str(text);
+        }
+        // The caret moves far more often than the body changes, and what
+        // it changes is only which of the words found are drawn.
+        if !same || self.caret != caret {
+            self.caret = caret;
+            self.shown = self
+                .found
+                .iter()
+                .filter(|word| !being_typed(word, caret))
+                .cloned()
+                .collect();
+        }
+    }
+
+    /// Nothing to check: another page, the setting off, or no note open.
+    /// The checker itself stays, so a setting turned off and on again
+    /// does not build the dictionary a second time.
+    fn forget(&mut self) {
+        self.note = None;
+        self.text.clear();
+        self.found.clear();
+        self.shown.clear();
+        self.caret = None;
+    }
+}
+
+/// Words in the order they were sorted into, with any that lie over one
+/// another joined. Two underlines over one character are one underline,
+/// and a checker that answers with a word inside a word says nothing
+/// more than the outer one already does.
+fn merged(words: Vec<Range<usize>>) -> Vec<Range<usize>> {
+    let mut joined: Vec<Range<usize>> = Vec::with_capacity(words.len());
+    for word in words {
+        match joined.last_mut() {
+            // Touching is not overlapping: the caret between two words
+            // is in the one it is at the end of, and joining them would
+            // hold both back while one of them is being typed.
+            Some(last) if word.start < last.end => last.end = last.end.max(word.end),
+            _ => joined.push(word),
+        }
+    }
+    joined
+}
+
+/// Whether the caret is in a word, its far end included. A word is left
+/// alone until the caret has moved off it, so that what is being typed
+/// is not underlined before it is finished: the end-of-word caret is
+/// where every word spends its whole life being written.
+fn being_typed(word: &Range<usize>, caret: Option<usize>) -> bool {
+    caret.is_some_and(|at| word.start <= at && at <= word.end)
+}
+
 /// A popup over the page. What is typed into it is application state for
 /// the same reason a title being edited is.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -699,6 +819,9 @@ pub struct App {
     review: Option<Review>,
     /// The open note, while the keyboard is in it.
     draft: Option<Draft>,
+    /// The misspellings of the note on screen, worked out once per
+    /// change to it and read by every redraw until it changes again.
+    spelling: Spelling,
     /// The value being typed on a settings row, while one is.
     setting_draft: Option<SettingDraft>,
     message: Option<Message>,
@@ -755,6 +878,7 @@ impl App {
             editor: None,
             review: None,
             draft: None,
+            spelling: Spelling::default(),
             setting_draft: None,
             message: None,
             cursors: Cursors::default(),
@@ -802,7 +926,22 @@ impl App {
     }
 
     /// The single entry point for every event, ticks included.
+    ///
+    /// What an action leaves the open note saying is settled once, after
+    /// it, rather than in each arm: a note is reached by typing in it,
+    /// by the cursor moving to another one, by one being thrown away, by
+    /// a reload on a tick, and by the setting being turned off, and
+    /// several of the arms in front of that return early.
     pub fn update(&mut self, action: Action) -> Flow {
+        let flow = self.dispatch(action);
+        // A window being closed has no next redraw to check a note for.
+        if flow != Flow::Quit {
+            self.check_the_spelling();
+        }
+        flow
+    }
+
+    fn dispatch(&mut self, action: Action) -> Flow {
         // What the hint bar last said, and the mark on a row being
         // carried, stand until the next key.
         if !matches!(action, Action::Tick | Action::Resize | Action::FocusGained) {
@@ -989,6 +1128,16 @@ impl App {
     /// setting is the window manager's to keep, so it is owed to it from
     /// here and handed over on the next tick.
     pub fn change_settings(&mut self, settings: Settings) {
+        self.take_the_settings(settings);
+        // Whether a note is spell-checked is one of the settings, and
+        // the reload in front of the change may have moved the note
+        // besides. This is a way in of its own, so it settles the open
+        // note the way `update` does rather than leaving the last
+        // underlines on screen.
+        self.check_the_spelling();
+    }
+
+    fn take_the_settings(&mut self, settings: Settings) {
         self.reload_if_stale();
         let window = (settings.floating_window(), settings.window_size());
         let was = (
@@ -2591,6 +2740,37 @@ impl App {
         self.run(Command::EditNote { note, body });
     }
 
+    /// The words the open note is drawn with underlined, worked out
+    /// after every action so that drawing has only to read them.
+    ///
+    /// The body a note is checked from is the one it is drawn from: what
+    /// is being typed while the keyboard is in it, and the note as it
+    /// was last saved otherwise. A note only being looked at shows every
+    /// word found in it; one being typed into keeps the word the caret
+    /// is in to itself until the caret has left it.
+    fn check_the_spelling(&mut self) {
+        if self.page != Page::Notes || !self.model.settings.spell_check_notes() {
+            self.spelling.forget();
+            return;
+        }
+        let Some(note) = self.cursor(List::Notes).and_then(RowId::note) else {
+            self.spelling.forget();
+            return;
+        };
+        let draft = self.draft.as_ref().filter(|draft| draft.note == note);
+        let caret = draft.map(|draft| draft.caret);
+        let body = match draft {
+            Some(draft) => Some(draft.text.as_str()),
+            None => self.model.note(note).map(|note| note.body.as_str()),
+        };
+        match body {
+            Some(body) => self.spelling.of(note, body, caret),
+            // The note the cursor names is gone, which the next reload
+            // moves the cursor off.
+            None => self.spelling.forget(),
+        }
+    }
+
     // ---- the title being typed ---------------------------------------
 
     /// `a`: a new note on the notes page, and a field at the end of the
@@ -2870,6 +3050,18 @@ impl App {
     /// The open note, while the keyboard is in it.
     pub fn draft(&self) -> Option<&Draft> {
         self.draft.as_ref()
+    }
+
+    /// The words of the open note to underline, in grapheme clusters
+    /// from the start of its body, which is what the body is drawn and
+    /// the caret counted in.
+    ///
+    /// They come in the order the body is drawn and no two of them lie
+    /// over the same character, so a line being drawn walks them
+    /// alongside its own text. The word the caret is in is not among
+    /// them while the note is being typed into.
+    pub fn misspellings(&self) -> &[Range<usize>] {
+        &self.spelling.shown
     }
 
     /// What `u` would take back, for the palette to say beside the key.
