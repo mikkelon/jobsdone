@@ -1570,10 +1570,10 @@ fn the_open_note_is_a_text_area_beside_the_list() {
     for row in 5..=14 {
         assert_eq!(right(&drawn[row]), right(&wanted[row]), "row {row}");
     }
-    // Copying was added after the original scratchpad wireframe.
+    // Copying and spelling were added after the original scratchpad wireframe.
     assert_eq!(
         drawn[34],
-        " NOTE  alt-y copy note  type to edit  esc back to the list      in the list:   ⏎ open  a new  x delete  n back to today"
+        " NOTE  alt-y copy note  alt-s fix spelling…  type to edit  esc back to the list        a new  x delete  n back to today"
     );
 }
 
@@ -1594,7 +1594,10 @@ fn one_tab_stacks_the_list_and_the_note() {
         drawn[11]
     );
     assert_eq!(drawn[12], "  Mention to Anna:");
-    assert_eq!(drawn[42], " NOTE  alt-y copy note  type to edit  esc back");
+    assert_eq!(
+        drawn[42],
+        " NOTE  alt-y copy note  alt-s spelling  type to edit  esc back"
+    );
 }
 
 #[test]
@@ -3040,7 +3043,7 @@ fn the_spelling_card_names_the_word_and_lists_what_to_put_in_its_place() {
 fn top_of_the_card(drawn: &[String]) -> usize {
     drawn
         .iter()
-        .position(|row| row.contains("┌ Spelling"))
+        .position(|row| row.contains("┌─ Spelling"))
         .unwrap_or_else(|| panic!("the card was not drawn: {drawn:?}"))
 }
 
@@ -3053,7 +3056,7 @@ fn card_at(buffer: &Buffer) -> (u16, u16) {
     let rows = lines(buffer);
     let area = buffer.area();
     for y in 0..area.height {
-        if !rows[y as usize].contains("┌ Spelling") {
+        if !rows[y as usize].contains("┌─ Spelling") {
             continue;
         }
         for x in 0..area.width {

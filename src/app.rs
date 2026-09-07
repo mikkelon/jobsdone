@@ -546,10 +546,9 @@ impl Spelling {
     /// What the dictionary offers in place of a word, best first and at
     /// most a handful.
     ///
-    /// Asked for one word at a time, and only when somebody asks: by the
-    /// time a word is known to be misspelt the checker has already built
-    /// the dictionary this reads, so the answer costs the search and
-    /// nothing else.
+    /// Asked for one word at a time, and only when somebody asks. The
+    /// first request also builds Harper's fuzzy-search index; later
+    /// requests reuse it and pay only for the search.
     fn suggestions(&mut self, word: &str) -> Vec<String> {
         self.checker
             .get_or_insert_with(spelling::SpellChecker::default)

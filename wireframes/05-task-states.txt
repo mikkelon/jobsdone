@@ -3,7 +3,7 @@
 
  PLAN ─────────────────────────────────────────────────────────────────────────
  [ ] Review Anna's PR
-  +   Call the landlord about the leak▏
+  +   Call the landlord about the leak█
      ⏎ add & keep typing · esc stop · the text is the whole task
 
 
@@ -16,7 +16,7 @@
 
 
  PLAN ─────────────────────────────────────────────────────────────────────────
- [ ]  Fix the flaky migration test (CI only)▏
+ [ ]  Fix the flaky migration test (CI only)█
  [ ] Book dentist
 
      On a recurring copy, ⏎ asks:  1 this copy   2 this and future copies

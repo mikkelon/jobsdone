@@ -8,7 +8,7 @@
  FOCUS ─────────────────────────────────────────────────── │ [ ] Migrate CI to the new runners             [due 12 Sep]
  [ ] Ship invoice export         ┌─ Due by Write the Q4 planning doc alt-r remind on ─┐doc                 [due 30 Sep]
  [ ] Reply to the tender question│                                                    │
-                                 │  30 sep▏                      Tue 30 Sep           │                       [◷ 1 Oct]
+                                 │  30 sep█                      Tue 30 Sep           │                       [◷ 1 Oct]
  PLAN ───────────────────────────│                                                    │ayout
  [ ] Fix the flaky migration test│ alt-1 Tomorrow                           Sat 6 Sep │in docs
  [ ] Book dentist                │ alt-2 Next Monday                        Mon 8 Sep │tions

@@ -56,8 +56,10 @@ on Wayland, or `xclip` on X11.
 Notes underline possible US English spelling mistakes using Harper, entirely
 offline. Spell checking is on by default; turn off **Spell-check notes in US
 English** in settings (`,`). The word at the caret stays unmarked while
-editing. Checking never changes your text, and notes can still be written in
-any language.
+editing. To correct a word, move the caret into it and press `Alt+s`; use
+the arrow keys to choose a suggestion, `Enter` to replace, or `Escape` to
+cancel. Checking never changes your text automatically, and notes can still
+be written in any language.
 
 `,` opens the settings page: the hour the day starts, which days are work
 days, how far back the review pile reaches, whether the window floats and

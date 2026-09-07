@@ -363,9 +363,18 @@ a session that never checks notes do not initialize the dictionary.
 
 The broader Harper pipeline is unnecessary for highlighting. Building a
 `Document` invokes grammatical analysis; the `SpellCheck` linter also
-computes correction suggestions. The FST dictionary accelerates suggestion
-searches but adds initialization cost. Plain dictionary lookups provide
-what this version displays.
+computes correction suggestions. Plain dictionary lookups handle underlining.
+An explicit request for corrections calls Harper's suggestion API directly,
+using a lazily initialized FST dictionary. Results are ranked and filtered to
+US English, with at most eight replacements offered. Rendering and ordinary
+typing never trigger fuzzy searches.
+
+Suggestion searches try edit distances two and then three if needed. Distance
+four is excluded because its first automaton initialization measured about
+490 ms. Input beyond 28 characters cannot match this dictionary within three
+edits and returns no suggestions. The first requested search adds about
+200 ms of initialization; subsequent requests measured roughly 1–2 ms for
+common words and 3.5 ms for the slowest word in a small local sample.
 
 Measured on this machine in release mode, dictionary initialization costs
 about 105–110 ms once per process; subsequent short-note checks take
@@ -377,7 +386,7 @@ Harper adds substantial build dependencies through `harper-brill` and its
 Burn-based tagger, even though the app does not invoke the tagger. The
 lockfile grows from 218 to 631 packages, including optional backends and
 other platforms. The engine agent counted 157 additional compiled build
-units on this target. The final integrated release binary is 6,470,248
+units on this target. The initial highlighting release binary was 6,470,248
 bytes, versus 4,775,880 before this feature: an increase of 1,694,368 bytes.
 Unused grammatical-analysis code can be removed by the linker, but its
 compile dependencies still affect clean builds.
@@ -389,8 +398,8 @@ Alternatives considered:
 - **Spellbook:** avoids a native toolchain and can embed Hunspell dictionary
   files. Harper was selected for this English-only trial, accepting its
   larger build dependency tree.
-- **Harper's full linter pipeline:** simpler to call, but performs grammar
-  analysis and suggestion work that the notes editor does not display.
+- **Harper's full linter pipeline:** performs grammatical analysis unnecessary
+  for spelling highlights and on-demand corrections.
 
 Known limits: words with an uppercase letter after the first are skipped
 as identifiers or acronyms, including genuine typos written in capitals.

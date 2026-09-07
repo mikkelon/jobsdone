@@ -106,7 +106,8 @@ mention X" or drafting a message before sending it.
 - A note is plain text. No formatting, no title, no attachments.
 - Spelling is checked locally against US English and potential mistakes are
   underlined. Checking is on by default and can be disabled in settings.
-  It never changes the text or prevents writing in another language.
+  Suggestions are available on request; choosing one replaces that word.
+  Checking never changes text automatically or prevents writing in another language.
 - The entire note can be copied to the clipboard from the list or while
   editing, preserving its text and the editing position.
 - Notes are independent of tasks. They are not attached to or linked from

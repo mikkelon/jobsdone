@@ -196,7 +196,7 @@ def inp(g, x, y, w, text, ph=''):
     g.put(x, y, ' ' * w, 'i')
     if text:
         g.put(x + 1, y, text, 'i')
-        g.put(x + 1 + len(text), y, '▏', 'i b')
+        g.put(x + 1 + len(text), y, '█', 'i b')
     else:
         g.put(x + 1, y, ph, 'i d')
 
@@ -712,7 +712,7 @@ def p10():
              'Draft:', 'Hi Anna, two things before Friday. The CI runner budget needs a decision', 'this week, and I would like the demo slot after lunch rather than before.']
     for i, l in enumerate(lines):
         g.put(rx + 2, y + i, l)
-    g.put(rx + 2 + len(lines[-1]), y + len(lines) - 1, '▏', 'b')
+    g.put(rx + 2 + len(lines[-1]), y + len(lines) - 1, '█', 'b')
     g.callout(rx + rw - 2, y0, 4)
     hints(g, g.h - 1, 'Note', [('type', 'to edit'), ('esc', 'back to the list')], [('in the list:', ''), ('⏎', 'open'), ('a', 'new'), ('x', 'delete'), ('n', 'back to today')])
     page('10-scratchpad', 'Scratchpad', [('120×36 · floating window, notes page', g)], '''

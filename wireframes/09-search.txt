@@ -6,7 +6,7 @@
  Today Fri 5 Sep                 6 open · 2 done · 1 moved   Backlog                                     12 · 3 waiting
 ───────────────────────────────────────────────────────────┬────────────────────────────────────────────────────────────
  FOCUS ─────────────┌──────────────────────────────────────────────────────────────────────────────┐       [due 12 Sep]
- [ ] Ship invoice ex│ /  invoice▏                                                        9 matches │       [due 30 Sep]
+ [ ] Ship invoice ex│ /  invoice█                                                        9 matches │       [due 30 Sep]
  [ ] Reply to the te│──────────────────────────────────────────────────────────────────────────────│
                     │ OPEN                                                                         │          [◷ 1 Oct]
  PLAN ──────────────│ [ ] Ship invoice export                                        today · focus │

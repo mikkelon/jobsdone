@@ -4,8 +4,43 @@
 
 Introduce offline US English spell checking in notes using Harper. Enable it
 by default and provide a persistent settings toggle. Highlight spelling
-issues without changing note text. Suggestions, replacement actions, personal
-dictionaries, and additional languages are follow-up features.
+issues without changing note text automatically. Add on-demand suggestions and
+explicit replacement at the note caret. Personal dictionaries and additional
+languages remain follow-up features. Render every text-input caret as a full block.
+
+## Follow-up: suggestions and block caret
+
+- **Complete — Engine:** delegate an on-demand, bounded US English suggestion
+  API to an Opus 5 Claude agent in auto mode. Keep fuzzy work out of typing.
+- **Complete — Interaction:** delegate a discoverable Alt+s picker for the
+  misspelled word at the caret, arrows to choose, Enter to replace, Escape to
+  cancel. Preserve Unicode offsets, autosave, and guard stale replacements.
+  Change all slim text-input carets to a full terminal-cell block in the same UI task.
+- **Complete — Integration:** reviewed and combined `06edbe5` → `a19775a` and
+  `b409531` → `35a7d35`; updated user docs and all caret wireframe examples.
+- **Complete — Validation:** ran required checks and tmux-only UAT for selecting,
+  applying and cancelling corrections, persistence, and the block caret.
+
+Follow-up results:
+
+- `make check` passed: formatting, clippy with warnings denied, 505 library
+  tests and 7 binary tests; one pre-existing ignored test. Integration fixed
+  two stale hint expectations and the new popup test's border matcher.
+- Independent Opus review confirmed replacement offsets, autosave and popup
+  routing. Corrected its finding about a misleading first-search cost comment.
+  Its global-caret concern is explicitly requested scope; its range hardening
+  suggestion had no reachable failure under the current draft/cursor invariant.
+- Tmux scratch session `jobsdone-suggestions-uat`: `recieved` offered `received`;
+  Down/Escape preserved the original, Enter applied and autosaved, and corrections
+  survived restart. `teh` offered `the` at 80×44; correct-word feedback worked.
+- Captures verify full-block carets in notes, task entry, search, palette,
+  settings, and the go-to-date input. Picker screenshot inspected visually:
+  `uat/out/suggestions-picker.png`; narrow capture `suggestions-narrow.txt`.
+- Release build passed. No VM used. Scratch session stopped and previous harness
+  state restored. Generated HTML retains its existing fixed-grid whitespace.
+
+The original highlighting phase below is complete; this follow-up responds to
+the user's request for actionable corrections and a cursor matching its width.
 
 ## Orchestration
 
@@ -54,6 +89,8 @@ Claude Code agent with explicit `--permission-mode auto`, as requested.
 
 | Agent | Worktree / branch | Model | Status |
 |---|---|---|---|
+| `harper-suggest-engine` | `/tmp/jobsdone-harper-suggestions-engine` / `harper-suggestions-engine` | Opus 5, auto | Complete: `06edbe5`, on-demand suggestions API and engine tests |
+| `harper-suggest-ui` | `/tmp/jobsdone-harper-suggestions-ui` / `harper-suggestions-ui` | Opus 5, auto | Complete: `b409531`, correction picker and app-wide block caret |
 | `harper-engine` | `/tmp/jobsdone-harper-engine` / `harper-engine` | Opus 5, auto | Complete: `4d347c6` → `6b4b530`; 41 engine tests and full checks passed |
 | `harper-settings` | `/tmp/jobsdone-harper-settings` / `harper-settings` | Opus 5, auto | Settings `fa17739` → `5c7ff96`; wireframes `1e5d6b0` → `590abd3`; independent draft review complete |
 | `harper-editor` | `/tmp/jobsdone-harper-editor` / `harper-editor` | Opus 5, auto | Complete: `286fb9d` → `f99a282`; real-engine validation now running centrally |

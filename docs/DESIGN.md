@@ -343,6 +343,12 @@ Checking is local, enabled by default, and controlled by "Spell-check notes
 in US English" in settings. It offers no grammar advice or automatic
 corrections. URLs, email addresses and obvious code-like tokens are skipped.
 
+While editing a note, `Alt+s` opens spelling suggestions for the word at the
+caret (including its end). The picker uses arrow keys to select, `Enter` to
+replace that word, and `Escape` to cancel. Suggestions are computed only on
+request. Explicit replacements follow normal note autosave. All text-input
+carets use a full block, matching the terminal cell they occupy.
+
 ## 10. Empty states name the key that fills them
 
 An empty list says what it is for and the one or two keys that put
