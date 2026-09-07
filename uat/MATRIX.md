@@ -43,3 +43,14 @@ The settings page, the thirteen settings, and the install script's flags.
 | 9.23 | `jobsdone --help`, `jobsdone --version`, `jobsdone bogus` | Usage on stdout and exit 0; the version; usage on stderr and exit 2. |
 | 9.24 | `JOBSDONE_DATA_DIR=uat/out/data target/debug/jobsdone desktop --tiled --size 800x600`, `sql` | Stored `floating_window` = false, `window_size` = `800x600`; one line on stdout; off Hyprland the line says the settings are kept for when it is there, and the exit is 0 (STACK.md 9). |
 | 9.25 | `scripts/install --keybind "SUPER + T" --tiled` with a fake `HOME`/`XDG_CONFIG_HOME` and a scratch `bindings.lua` holding the old `-- jobsdone: begin` block | The old block is gone; a keybind block binds `SUPER + T`; the window block is bare markers; the modmask check reports a taken `SUPER + T` correctly when `hyprctl` is faked to say so. `scripts/uninstall` removes both blocks. On the clean VM, which has no Rust: `make install` refuses with the sentence that names the pacman command; after that command, `make install` (answer the keybind prompt, or run `scripts/install --keybind`), `uat/vm keys super-shift-j`, `hyprctl clients -j` shows class `org.omarchy.jobsdone` floating at 870x650. |
+
+## Notes: copy entire note
+
+| Id | Steps | Expected |
+|----|-------|----------|
+| N.01 | Open notes, create a multiline note with blank lines, indentation and Unicode; press `M-y`; read the clipboard with `wl-paste --no-newline` (Wayland) | Exact full note text, including trailing newlines; "Note copied" feedback; editor remains active. |
+| N.02 | Move the caret into the note, press `M-y`, then type `y` | Copy keeps caret and scroll position; plain `y` inserts at the caret. |
+| N.03 | `Escape`, `y`; repeat with `M-y`; open `:` and select "copy note" | Each copies the selected note and leaves the list active. |
+| N.04 | Repeat at 80×24 with a note longer than the viewport | Copy hints fit; the clipboard includes offscreen text. |
+| N.05 | Delete all scratch notes, then `y` | "There is no note here yet."; clipboard unchanged. |
+| N.06 | Run with the clipboard helper unavailable and copy a note | Failure feedback; app stays usable and the note stays intact. |

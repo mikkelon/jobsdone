@@ -383,8 +383,12 @@ adds it here first, the way a new dependency is added to section 2 first.
   no copies and opens no review, so running it never spends the day's
   review. What comes back is the line the command prints, or what the
   window manager said, the settings being saved either way.
-- `App::update(&mut self, Action) -> Flow`, `Flow` being `Continue` or
-  `Quit`. The single entry point for every event, ticks included.
+- `App::update(&mut self, Action) -> Flow`, `Flow` being `Continue`,
+  `Quit`, or `CopyNote(String)`. The single entry point for every event,
+  ticks included. Copying returns the live note text to `terminal`, which
+  writes it to the desktop clipboard through `wl-copy` on Wayland or
+  `xclip` on X11, then reports the result through `App::copied_note` for
+  hint-bar feedback.
 - `App::key_context() -> KeyContext`, and `App::page_context()` for the
   context of the page under an open popup, which is the one the palette
   lists the commands of.

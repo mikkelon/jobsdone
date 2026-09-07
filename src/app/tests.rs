@@ -3654,3 +3654,43 @@ fn a_tick_with_no_window_owed_says_nothing_to_the_window_manager() {
     assert!(desk.told().is_empty());
     assert!(desk.shown().is_empty());
 }
+
+#[test]
+fn copying_a_note_uses_unsaved_text_and_preserves_the_editor() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    let text = "First line\n\n  æøå 🦀\n";
+    let note = note_saying(&mut app, text);
+    app.update(Action::Left);
+    let caret = app.draft().unwrap().caret;
+    assert_eq!(app.model().note(note).unwrap().body, "");
+    assert_eq!(
+        app.update(Action::CopyNote),
+        Flow::CopyNote(text.to_owned())
+    );
+    assert_eq!(app.draft().unwrap().caret, caret);
+    assert_eq!(app.notes_pane(), NotesPane::Note);
+    assert!(app.message().is_none(), "wait for the clipboard result");
+    app.copied_note(Ok(()));
+    assert_eq!(app.message().unwrap().text, "Note copied");
+    app.update(Action::Cancel);
+    assert_eq!(
+        app.update(Action::CopyNote),
+        Flow::CopyNote(text.to_owned())
+    );
+    assert_eq!(app.notes_pane(), NotesPane::List);
+    app.copied_note(Err("Could not copy note: test failure".to_owned()));
+    assert_eq!(
+        app.message().unwrap().text,
+        "Could not copy note: test failure"
+    );
+}
+
+#[test]
+fn copying_without_a_note_leaves_the_clipboard_alone() {
+    let mut app = started();
+    assert_eq!(app.update(Action::CopyNote), Flow::Continue);
+    app.update(Action::NotesPage);
+    assert_eq!(app.update(Action::CopyNote), Flow::Continue);
+    assert_eq!(app.message().unwrap().text, "There is no note here yet.");
+}

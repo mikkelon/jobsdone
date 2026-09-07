@@ -635,3 +635,30 @@ fn keep_is_the_surfaced_steps_word_and_not_the_piles() {
     assert_eq!(action_for(&typing('k'), pile), None);
     assert_eq!(action_for(&typing('k'), surfaced), Some(Action::Keep));
 }
+
+#[test]
+fn notes_yank_without_intercepting_plain_y_in_the_editor() {
+    let list = KeyContext::Notes {
+        pane: NotesPane::List,
+        text_field: false,
+    };
+    let editor = KeyContext::Notes {
+        pane: NotesPane::Note,
+        text_field: true,
+    };
+    assert_eq!(action_for(&typing('y'), list), Some(Action::CopyNote));
+    assert_eq!(action_for(&typing('y'), editor), Some(Action::Insert('y')));
+    for context in [list, editor] {
+        assert_eq!(
+            action_for(&press_with(KeyCode::Char('y'), KeyModifiers::ALT), context),
+            Some(Action::CopyNote)
+        );
+    }
+    assert_eq!(
+        action_for(
+            &press_with(KeyCode::Char('y'), KeyModifiers::ALT),
+            home(Pane::Day)
+        ),
+        None
+    );
+}

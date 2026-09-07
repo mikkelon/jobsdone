@@ -328,6 +328,13 @@ long ago the note was made, which is the order the list is in. The number
 of notes is already in the status line, so the list header names the key
 that makes another one instead.
 
+`y` or `Alt+y` on the notes list copies the selected note's entire body.
+While editing, `Alt+y` copies the current text, including unsaved typing,
+without moving the caret or scroll position; plain `y` still types.
+The hint bar names the shortcut and briefly says "Note copied" after
+success, or explains a clipboard failure. The list's command palette
+also offers "copy note".
+
 ## 10. Empty states name the key that fills them
 
 An empty list says what it is for and the one or two keys that put

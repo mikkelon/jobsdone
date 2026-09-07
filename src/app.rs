@@ -62,11 +62,12 @@ pub struct Locale {
     pub dates: DateOrder,
 }
 
-/// Whether the event loop goes round again.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+/// What the event loop should do next.
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Flow {
     Continue,
     Quit,
+    CopyNote(String),
 }
 
 /// Which of the three pages the window is showing (DESIGN.md section 6).
@@ -880,6 +881,7 @@ impl App {
             Action::Close => self.close_or_reopen(),
             Action::Focus => self.turn_focus_over(),
             Action::Delete => self.delete(),
+            Action::CopyNote => return self.copy_note(),
             Action::MoveDown => self.reorder(true),
             Action::MoveUp => self.reorder(false),
             Action::ToToday => self.pull_onto_today(),
@@ -2485,6 +2487,30 @@ impl App {
     }
 
     // ---- the notes page ----------------------------------------------
+
+    /// Copy the live draft without moving its caret or waiting for a save.
+    fn copy_note(&mut self) -> Flow {
+        if self.page != Page::Notes {
+            return Flow::Continue;
+        }
+        if let Some(draft) = &self.draft {
+            return Flow::CopyNote(draft.text.clone());
+        }
+        let Some(note) = self.note_at_cursor() else {
+            return Flow::Continue;
+        };
+        self.model
+            .note(note)
+            .map_or(Flow::Continue, |note| Flow::CopyNote(note.body.clone()))
+    }
+
+    /// Clipboard failures stay in the app, just like storage failures.
+    pub fn copied_note(&mut self, result: Result<(), String>) {
+        match result {
+            Ok(()) => self.say("Note copied", false),
+            Err(message) => self.say(message, false),
+        }
+    }
 
     /// The note a key on the cursor row acts on, or nothing and a reason.
     fn note_at_cursor(&mut self) -> Option<Id> {

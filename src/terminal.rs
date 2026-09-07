@@ -4,8 +4,9 @@
 //! Events go in and frames come out. This module never sees time: a tick
 //! is an action like any other.
 
-use std::io::{self, Stdout};
+use std::io::{self, Stdout, Write};
 use std::panic;
+use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use crossterm::event::{
@@ -74,8 +75,10 @@ fn go_round(
         };
 
         if let Some(action) = action {
-            if app.update(action) == Flow::Quit {
-                return Ok(());
+            match app.update(action) {
+                Flow::Quit => return Ok(()),
+                Flow::CopyNote(text) => app.copied_note(copy_to_clipboard(&text)),
+                Flow::Continue => {}
             }
             // The setting takes effect at once, whether it was changed on
             // the settings page or by another window a tick picked up.
@@ -84,6 +87,37 @@ fn go_round(
                 take_the_mouse(*mouse)?;
             }
         }
+    }
+}
+
+/// Use the desktop clipboard, including when the app runs inside tmux.
+/// Text goes through stdin so prompts are never shell code or arguments.
+fn copy_to_clipboard(text: &str) -> Result<(), String> {
+    let (program, args): (&str, &[&str]) = if std::env::var_os("WAYLAND_DISPLAY").is_some() {
+        ("wl-copy", &["--type", "text/plain;charset=utf-8"])
+    } else if std::env::var_os("DISPLAY").is_some() {
+        ("xclip", &["-selection", "clipboard", "-in"])
+    } else {
+        return Err("Could not copy note: no desktop clipboard is available.".to_owned());
+    };
+    let mut child = Command::new(program)
+        .args(args)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| format!("Could not copy note: {program}: {error}"))?;
+    let written = child
+        .stdin
+        .take()
+        .expect("piped clipboard input")
+        .write_all(text.as_bytes());
+    let status = child.wait();
+    written.map_err(|error| format!("Could not copy note: {error}"))?;
+    match status {
+        Ok(status) if status.success() => Ok(()),
+        Ok(_) => Err(format!("Could not copy note: {program} failed.")),
+        Err(error) => Err(format!("Could not copy note: {error}")),
     }
 }
 

@@ -104,6 +104,8 @@ of a post-it block on the desk. A note is for things like "remember to
 mention X" or drafting a message before sending it.
 
 - A note is plain text. No formatting, no title, no attachments.
+- The entire note can be copied to the clipboard from the list or while
+  editing, preserving its text and the editing position.
 - Notes are independent of tasks. They are not attached to or linked from
   anything.
 - Notes are created and thrown away individually. A note stays until it is

@@ -159,6 +159,7 @@ pub enum Action {
     Add,
     Edit,
     Delete,
+    CopyNote,
     ToToday,
     ToBacklog,
     MoveToDay,
@@ -712,6 +713,13 @@ const HOME_DAYS: &[Binding] = home_table![
 
 const NOTES_LIST: &[Binding] = &[
     Binding {
+        keys: &[("y", Action::CopyNote), ("alt-y", Action::CopyNote)],
+        shown: "y/alt-y",
+        label: "copy note",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
         keys: &[("enter", Action::Confirm)],
         shown: "⏎",
         label: "open",
@@ -809,6 +817,13 @@ const NOTES_LIST: &[Binding] = &[
 ];
 
 const NOTES_NOTE: &[Binding] = &[
+    Binding {
+        keys: &[("alt-y", Action::CopyNote)],
+        shown: "alt-y",
+        label: "copy note",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
     Binding {
         keys: &[],
         shown: "type",
