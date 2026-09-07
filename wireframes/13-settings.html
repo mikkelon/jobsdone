@@ -43,14 +43,15 @@
 </div>
 <aside class="notes">
 <h2>Settings</h2>
-<p>Thirteen settings on one page, reached with <kbd>,</kbd> from either other page and left with <kbd>,</kbd> or <kbd>esc</kbd>. They are kept in the database beside the tasks, so a second window picks a change up the way it picks up any other.</p>
+<p>Fourteen settings on one page, reached with <kbd>,</kbd> from either other page and left with <kbd>,</kbd> or <kbd>esc</kbd>. They are kept in the database beside the tasks, so a second window picks a change up the way it picks up any other.</p>
 <ol>
 <li>The status line names the page and the two keys that leave it. There is no review count and no notes count here: the settings are about the program, not about a day.</li>
 <li>What the app does not hold, said where somebody looking for it would look: colour, font and size come from the terminal, which Omarchy themes.</li>
-<li>Every row is a label dotted across to its value, in five groups. A toggle reads <em>on</em> or <em>off</em>; a number carries its unit, and the number that means "none of it" is written as what none of it does: <em>on its day</em>, <em>every missed day</em>, <em>never</em>, <em>until the next key</em>. The cursor row's value is in the accent colour, because it is the one value a key would change.</li>
+<li>Every row is a label dotted across to its value, in six groups. A toggle reads <em>on</em> or <em>off</em>; a number carries its unit, and the number that means "none of it" is written as what none of it does: <em>on its day</em>, <em>every missed day</em>, <em>never</em>, <em>until the next key</em>. The cursor row's value is in the accent colour, because it is the one value a key would change.</li>
 <li>Beside the list, what the cursor row does, in the words DOMAIN.md gives it. Under 100 columns this pane goes and the list has the window, the way the review's panel does.</li>
 <li>What the setting holds when nobody has changed it, so a page that has been fiddled with can be read back to its defaults without a document.</li>
 </ol>
+<div class="flow"><b>Under the fold</b>The sixth group is <em>Notes</em>, and it holds one row: <em>Spell-check notes in US English</em>, which is on until it is turned off. A 120×36 window ends on <em>Confirm before delete</em>, so the row is reached by walking the cursor down onto it and letting the list scroll, a line at a time, the way every other list in the app scrolls. A taller window has the whole page at once.</div>
 <div class="flow"><b>Changing one</b><kbd>h</kbd> and <kbd>l</kbd> step the value; <kbd>space</kbd> and <kbd>⏎</kbd> change it. On a row holding a number or the window size, <kbd>⏎</kbd> opens a field in place of the value: type it, <kbd>⏎</kbd> saves, <kbd>esc</kbd> keeps what was there. Every change is written at once, like every other change in the app, and none of them is on the undo stack.</div>
 <div class="flow"><b>Refusals</b>A number outside its range is held to the range rather than refused. The one thing that is refused is a week with no work day in it, which says so in the hint bar and leaves the row as it was.</div>
 <div class="flow"><b>The window</b>Floating and the window size are Hyprland's to keep, so the app writes its own rule the moment either changes and says in the hint bar what came back — including, off Hyprland, that there is nothing there to tell.</div>
