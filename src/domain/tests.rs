@@ -1,6 +1,6 @@
 use super::*;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use jiff::civil::Date;
@@ -13,12 +13,16 @@ use jiff::civil::Date;
 #[derive(Clone, Default)]
 pub(crate) struct MemStore {
     shared: Rc<RefCell<Shared>>,
+    /// How many of the writes this handle made itself, which is what
+    /// takes them back out of the version it reports.
+    own: Cell<u64>,
 }
 
 #[derive(Default)]
 struct Shared {
     model: Model,
-    version: u64,
+    /// Every write, by whichever handle made it.
+    writes: u64,
 }
 
 impl MemStore {
@@ -29,7 +33,8 @@ impl MemStore {
     /// A store that already holds something, for a test of loading.
     pub(crate) fn holding(model: Model) -> Self {
         MemStore {
-            shared: Rc::new(RefCell::new(Shared { model, version: 0 })),
+            shared: Rc::new(RefCell::new(Shared { model, writes: 0 })),
+            own: Cell::new(0),
         }
     }
 }
@@ -42,16 +47,16 @@ impl Store for MemStore {
     fn commit(&mut self, change: &Change) -> Result<(), StoreError> {
         let mut shared = self.shared.borrow_mut();
         shared.model.apply(change);
-        // SQLite moves data_version only for a write from another
-        // connection; every handle here shares one counter, so a commit
-        // always moves it. The application re-reads the version after its
-        // own commit either way.
-        shared.version += 1;
+        shared.writes += 1;
+        self.own.set(self.own.get() + 1);
         Ok(())
     }
 
+    /// The writes this handle did not make, which moves for exactly what
+    /// `PRAGMA data_version` moves for: a write from another connection,
+    /// never one of this connection's own (ARCHITECTURE.md section 3).
     fn version(&self) -> Result<u64, StoreError> {
-        Ok(self.shared.borrow().version)
+        Ok(self.shared.borrow().writes - self.own.get())
     }
 }
 
@@ -123,6 +128,26 @@ impl World {
     fn refuse(&mut self, command: Command) -> String {
         match self.run(command.clone()) {
             Ok(()) => panic!("{command:?} was allowed"),
+            Err(Rejected(why)) => why,
+        }
+    }
+
+    /// One operation made of several commands, committed and loaded back.
+    fn run_many(&mut self, commands: Vec<Command>) -> Result<(), Rejected> {
+        let change = apply_many(&self.model, commands, &self.ctx())?;
+        self.commit(&change);
+        Ok(())
+    }
+
+    fn must_many(&mut self, commands: Vec<Command>) {
+        if let Err(Rejected(why)) = self.run_many(commands.clone()) {
+            panic!("{commands:?} was refused: {why}");
+        }
+    }
+
+    fn refuse_many(&mut self, commands: Vec<Command>) -> String {
+        match self.run_many(commands.clone()) {
+            Ok(()) => panic!("{commands:?} was allowed"),
             Err(Rejected(why)) => why,
         }
     }
@@ -305,7 +330,21 @@ fn the_model_takes_a_committed_change() {
         model.meta.get("review_on").map(String::as_str),
         Some("2026-09-05")
     );
-    assert_eq!(store.version().expect("version"), 1);
+    // The store stands in for one connection, and `data_version` does
+    // not move for a write that connection made itself. Another handle
+    // on the same data is another connection, and its write does move it.
+    let before = store.version().expect("version");
+    let mut elsewhere = store.clone();
+    elsewhere
+        .commit(&Change {
+            writes: vec![Write::SetMeta {
+                key: "review_before".into(),
+                value: "2026-09-04".into(),
+            }],
+        })
+        .expect("commit");
+    assert_ne!(store.version().expect("version"), before);
+    assert_eq!(elsewhere.version().expect("version"), before);
 }
 
 // ---- tasks -----------------------------------------------------------
@@ -2354,6 +2393,250 @@ fn the_undo_label_names_the_task_and_where_it_went() {
 
     world.must(Command::DeleteTask { task: id });
     assert_eq!(labels(&world), "Deleted \"Book dentist\"");
+}
+
+// ---- one operation, several commands ---------------------------------
+
+#[test]
+fn an_operation_of_several_commands_earns_one_entry() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let id = world.add("Book the venue", day("2026-09-07"));
+    let entries = world.model.undo.len();
+
+    world.must_many(vec![
+        Command::EditTitle {
+            task: id,
+            title: "Book the hall".to_owned(),
+        },
+        Command::SetDue {
+            task: id,
+            date: Some(on("2026-09-11")),
+        },
+        Command::SetFocus {
+            task: id,
+            focus: true,
+        },
+    ]);
+
+    assert_eq!(world.model.undo.len(), entries + 1);
+    assert_eq!(
+        world.model.undo.last().map(|entry| entry.label.as_str()),
+        Some("Renamed \"Book the hall\" and 2 more changes")
+    );
+}
+
+#[test]
+fn one_undo_takes_the_whole_operation_back() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let id = world.add("Book the venue", day("2026-09-07"));
+    let before = visible(&world.model);
+
+    world.must_many(vec![
+        Command::EditTitle {
+            task: id,
+            title: "Book the hall".to_owned(),
+        },
+        Command::SetDue {
+            task: id,
+            date: Some(on("2026-09-11")),
+        },
+        Command::SetFocus {
+            task: id,
+            focus: true,
+        },
+    ]);
+    world.undo();
+
+    assert_eq!(visible(&world.model), before);
+}
+
+#[test]
+fn an_operation_that_cannot_finish_writes_none_of_itself() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let id = world.add("Book the venue", day("2026-09-07"));
+    let before = world.model.clone();
+
+    let why = world.refuse_many(vec![
+        Command::EditTitle {
+            task: id,
+            title: "Book the hall".to_owned(),
+        },
+        Command::SetFocus {
+            task: 404,
+            focus: true,
+        },
+    ]);
+
+    assert_eq!(why, "That task is gone.");
+    assert_eq!(world.model, before, "not even the command that held");
+}
+
+/// The inverses run in the reverse of the order their commands did.
+/// Taken back the other way round, the reorder would be a reorder of the
+/// backlog the task had already gone back to.
+#[test]
+fn the_inverses_of_an_operation_undo_in_the_order_that_takes_it_back() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let id = world.add("Book the venue", Place::Backlog);
+    world.add("Chase the invoice", Place::Backlog);
+    world.add("Draft the notes", Place::Backlog);
+    world.add("Stand up", day("2026-09-07"));
+    world.add("Write the post", day("2026-09-07"));
+
+    world.must_many(vec![
+        Command::Move {
+            task: id,
+            place: day("2026-09-07"),
+        },
+        Command::Reorder {
+            task: id,
+            position: 0,
+        },
+    ]);
+    assert_eq!(
+        titles(&world.day("2026-09-07").plan),
+        ["Book the venue", "Stand up", "Write the post"]
+    );
+
+    world.undo();
+
+    assert_eq!(
+        titles(&world.backlog().ordinary),
+        ["Book the venue", "Chase the invoice", "Draft the notes"]
+    );
+}
+
+/// Half an operation taken back is worse than none of it, so an inverse
+/// another window has overtaken drops the entry whole, including the
+/// part of it that would still have applied.
+#[test]
+fn an_operation_whose_inverse_no_longer_holds_is_dropped_whole() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let venue = world.add("Book the venue", day("2026-09-07"));
+    let invoice = world.add("Chase the invoice", day("2026-09-07"));
+
+    world.must_many(vec![
+        Command::SetFocus {
+            task: invoice,
+            focus: true,
+        },
+        Command::SetDue {
+            task: venue,
+            date: Some(on("2026-09-11")),
+        },
+    ]);
+
+    // Another window took the invoice away, which the inverse of the
+    // focus needs and the inverse of the due date does not.
+    let mut gone = world.task(invoice).clone();
+    gone.deleted_at = Some(world.now.clone());
+    world.commit(&Change {
+        writes: vec![Write::PutTask(gone)],
+    });
+
+    let undone = world.undo();
+
+    assert_eq!(
+        undone.dropped,
+        Some(Rejected("That task is gone.".to_owned()))
+    );
+    assert_eq!(
+        world.task(venue).due_on,
+        Some(on("2026-09-11")),
+        "the half that could have been taken back was not"
+    );
+}
+
+#[test]
+fn an_operation_of_one_command_is_that_command() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let id = world.add("Book the venue", day("2026-09-07"));
+    let command = Command::SetDue {
+        task: id,
+        date: Some(on("2026-09-11")),
+    };
+
+    assert_eq!(
+        apply_many(&world.model, vec![command.clone()], &world.ctx()),
+        apply(&world.model, command, &world.ctx())
+    );
+}
+
+#[test]
+fn a_change_the_domain_makes_for_itself_is_not_one_anything_may_ask_for() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let id = world.add("Book the venue", day("2026-09-07"));
+
+    let why = world.refuse(Command::RestoreTask {
+        task: id,
+        position: 0,
+    });
+    assert_eq!(why, "That is not a change anything may ask for.");
+
+    let why = world.refuse_many(vec![Command::Sequence(vec![Command::DeleteTask {
+        task: id,
+    }])]);
+    assert_eq!(why, "That is not a change anything may ask for.");
+}
+
+#[test]
+fn a_repeat_is_renamed_without_a_copy_of_it_to_start_from() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let id = world.add("Write standup notes", day("2026-09-07"));
+    world.must(Command::CreateSchedule {
+        task: id,
+        rule: Rule::Daily,
+    });
+    let schedule = world.task(id).schedule_id.expect("the schedule");
+    world.must(Command::DeleteTask { task: id });
+
+    world.must(Command::EditScheduleTitle {
+        schedule,
+        title: "Write the standup notes".to_owned(),
+    });
+    assert_eq!(
+        world.model.schedule(schedule).map(|it| it.title.as_str()),
+        Some("Write the standup notes")
+    );
+
+    world.undo();
+    assert_eq!(
+        world.model.schedule(schedule).map(|it| it.title.as_str()),
+        Some("Write standup notes")
+    );
+}
+
+/// A body given whole is a decision; the keystrokes `EditNote` saves are
+/// not, and neither of them changes what the other does.
+#[test]
+fn a_note_replaced_whole_goes_back_to_the_body_and_the_instant_it_had() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    world.must(Command::CreateNote);
+    let note = *world.model.notes.keys().next().expect("the note");
+    world.must(Command::EditNote {
+        note,
+        body: "Milk\nBread".to_owned(),
+    });
+    let was = world.model.note(note).expect("the note").clone();
+    let entries = world.model.undo.len();
+
+    world.clock("2026-09-08T11:00:00");
+    world.must(Command::ReplaceNote {
+        note,
+        body: "Milk\nBread\nEggs".to_owned(),
+    });
+
+    let now = world.model.note(note).expect("the note");
+    assert_eq!(now.body, "Milk\nBread\nEggs");
+    assert_eq!(now.updated_at, world.now);
+    assert_eq!(world.model.undo.len(), entries + 1);
+    assert_eq!(
+        world.model.undo.last().map(|entry| entry.label.as_str()),
+        Some("Replaced a note")
+    );
+
+    world.undo();
+    assert_eq!(world.model.note(note), Some(&was));
 }
 
 // ---- notes -----------------------------------------------------------

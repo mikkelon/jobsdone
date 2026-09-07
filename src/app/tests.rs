@@ -1,12 +1,14 @@
 use super::*;
 
-use std::cell::RefCell;
+use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use jiff::civil::Date;
 
 use crate::domain::tests::MemStore;
-use crate::domain::{Change, Placement, Rule, Schedule, Task, WeekStart, Weekday, WorkDays, Write};
+use crate::domain::{
+    Change, Context, Placement, Rule, Schedule, Task, WeekStart, Weekday, WorkDays, Write,
+};
 
 /// A window manager a test can question: what it was told, what it was
 /// asked to show, and whether it was there to be told at all.
@@ -3192,6 +3194,395 @@ fn x_on_an_empty_notes_page_says_there_is_nothing_there() {
     app.update(Action::Delete);
 
     assert_eq!(hint(&app), "There is no note here yet.");
+}
+
+// ---- what another window did -----------------------------------------
+
+/// A change another window made, committed through a second handle on
+/// the same data, which is what makes it another connection.
+fn elsewhere(store: &MemStore, command: Command) -> Id {
+    let mut handle = store.clone();
+    let model = handle.load().expect("load");
+    let change = domain::apply(
+        &model,
+        command,
+        &Context {
+            now: at(NOW),
+            undo_cap: 50,
+            dates: DateOrder::DayFirst,
+        },
+    )
+    .expect("the other window's change");
+    handle.commit(&change).expect("the other window's change");
+    model.tasks.keys().next_back().copied().unwrap_or(0)
+}
+
+/// When the other window gets in: after this one has taken its model or
+/// committed its change, and before it has asked what the version is.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum Overtake {
+    Load,
+    Commit,
+}
+
+/// A store another window writes to at that one moment. A version read
+/// after it has already seen a write the model has not, so a window that
+/// records it then would mark as seen a change it has not got, and would
+/// go on showing rows nobody has any more until the next write moved the
+/// version again.
+struct Overtaken {
+    shared: MemStore,
+    when: Overtake,
+    done: Rc<Cell<bool>>,
+}
+
+impl Overtaken {
+    fn at(when: Overtake) -> (Overtaken, MemStore) {
+        let shared = MemStore::new();
+        (
+            Overtaken {
+                shared: shared.clone(),
+                when,
+                done: Rc::new(Cell::new(false)),
+            },
+            shared,
+        )
+    }
+
+    fn overtake(&self) {
+        if self.done.replace(true) {
+            return;
+        }
+        elsewhere(
+            &self.shared,
+            Command::AddTask {
+                title: "From the other window".to_owned(),
+                place: Place::Backlog,
+            },
+        );
+    }
+}
+
+impl Store for Overtaken {
+    fn load(&self) -> Result<Model, StoreError> {
+        let model = self.shared.load()?;
+        if self.when == Overtake::Load {
+            self.overtake();
+        }
+        Ok(model)
+    }
+
+    fn commit(&mut self, change: &Change) -> Result<(), StoreError> {
+        self.shared.commit(change)?;
+        if self.when == Overtake::Commit {
+            self.overtake();
+        }
+        Ok(())
+    }
+
+    fn version(&self) -> Result<u64, StoreError> {
+        self.shared.version()
+    }
+}
+
+fn app_over(store: Overtaken) -> App {
+    App::new(
+        Box::new(store),
+        Box::new(Desk::here()),
+        Locale::default(),
+        &at(NOW),
+    )
+    .expect("an app")
+}
+
+#[test]
+fn a_write_that_landed_while_the_model_was_being_read_is_still_picked_up() {
+    let (store, _shared) = Overtaken::at(Overtake::Load);
+    let mut app = app_over(store);
+
+    assert!(
+        !titles(&app, List::Backlog)
+            .iter()
+            .any(|it| it == "From the other window")
+    );
+
+    app.update(Action::Tick);
+
+    assert_eq!(
+        titles(&app, List::Backlog),
+        ["From the other window"],
+        "the version was read before the model, so it cannot have seen more than it"
+    );
+}
+
+#[test]
+fn a_write_that_landed_just_after_this_windows_commit_is_still_picked_up() {
+    let (store, _shared) = Overtaken::at(Overtake::Commit);
+    let mut app = app_over(store);
+
+    add(&mut app, "Mine");
+    assert!(
+        !titles(&app, List::Backlog)
+            .iter()
+            .any(|it| it == "From the other window")
+    );
+
+    app.update(Action::Tick);
+
+    assert_eq!(
+        titles(&app, List::Backlog),
+        ["From the other window"],
+        "a commit of this window's own does not move the version, so none is recorded"
+    );
+    assert_eq!(titles(&app, List::Day), ["Mine"]);
+}
+
+/// The hour a day starts at is a setting, so the day a tick lands on has
+/// to be worked out from the settings as they are after the reload and
+/// not as they were before it.
+#[test]
+fn the_day_a_tick_lands_on_follows_the_settings_another_window_changed() {
+    let store = MemStore::new();
+    let mut app = app_at(store.clone(), NOW);
+    assert_eq!(app.today().to_string(), NOW_DAY);
+
+    let mut handle = store.clone();
+    let model = handle.load().expect("load");
+    let mut settings = model.settings.clone();
+    // Nine in the morning is before a day that starts at ten, so today
+    // is still the day before.
+    settings.set_day_starts_at(10);
+    let change = domain::change_settings(&model, settings).expect("the settings");
+    handle.commit(&change).expect("the other window's settings");
+
+    app.update(Action::Tick);
+
+    assert_eq!(app.today().to_string(), "2025-09-04");
+}
+
+#[test]
+fn an_open_note_nobody_typed_in_follows_the_body_another_window_wrote() {
+    let store = MemStore::new();
+    let mut app = app_at(store.clone(), NOW);
+    app.update(Action::NotesPage);
+    let note = note_saying(&mut app, "the first line");
+    app.update(Action::Tick);
+
+    elsewhere(
+        &store,
+        Command::ReplaceNote {
+            note,
+            body: "what the command wrote".to_owned(),
+        },
+    );
+    app.update(Action::Tick);
+
+    assert_eq!(
+        app.draft().map(|draft| draft.text.as_str()),
+        Some("what the command wrote"),
+        "the open note follows the row"
+    );
+    assert_eq!(
+        app.model().note(note).map(|note| note.body.as_str()),
+        Some("what the command wrote"),
+        "and the body it was opened with is not written back over it"
+    );
+}
+
+/// Typed here and changed elsewhere: neither text is written over the
+/// other and neither is thrown away.
+#[test]
+fn a_note_typed_in_here_and_changed_elsewhere_keeps_both() {
+    let store = MemStore::new();
+    let mut app = app_at(store.clone(), NOW);
+    app.update(Action::NotesPage);
+    let note = note_saying(&mut app, "the first line");
+    app.update(Action::Tick);
+
+    elsewhere(
+        &store,
+        Command::ReplaceNote {
+            note,
+            body: "what the command wrote".to_owned(),
+        },
+    );
+    type_in(&mut app, " and more");
+    app.update(Action::Tick);
+
+    let draft = app.draft().expect("the note still being typed");
+    assert_ne!(draft.note, note, "into a note of its own");
+    assert_eq!(draft.text, "the first line and more");
+    assert_eq!(
+        app.model().note(draft.note).map(|note| note.body.as_str()),
+        Some("the first line and more"),
+        "what was typed here reached a row"
+    );
+    assert_eq!(
+        app.model().note(note).map(|note| note.body.as_str()),
+        Some("what the command wrote"),
+        "and the other window's words are as it left them"
+    );
+    assert_eq!(
+        hint(&app),
+        "Another window changed that note. What you typed is here, in a note of its own."
+    );
+    assert_eq!(note_cursor(&app), Some(draft.note));
+
+    // One operation, so one `u` takes the recovery note back off again.
+    let recovered = draft.note;
+    app.update(Action::Undo);
+    assert!(
+        app.model()
+            .note(recovered)
+            .is_none_or(|note| !note.is_live())
+    );
+}
+
+/// A note that reached no row at all keeps the keyboard where it is: the
+/// page does not turn and the window does not close on the first ask,
+/// so nothing is dropped without being said.
+#[test]
+fn what_could_not_be_written_anywhere_is_not_dropped_by_leaving() {
+    let store = MemStore::new();
+    let mut app = app_at(store.clone(), NOW);
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "the first line");
+    app.update(Action::Tick);
+
+    // The disk fills up under the window, and something is typed after.
+    let mut app = App::new(
+        Box::new(Broken(store.clone())),
+        Box::new(Desk::here()),
+        Locale::default(),
+        &at(NOW),
+    )
+    .expect("an app");
+    app.update(Action::NotesPage);
+    app.update(Action::Confirm);
+    type_in(&mut app, " and more");
+
+    app.update(Action::Cancel);
+    assert_eq!(
+        app.draft().map(|draft| draft.text.as_str()),
+        Some("the first line and more"),
+        "the keyboard stays where the text is"
+    );
+
+    app.update(Action::NotesPage);
+    assert_eq!(app.page(), Page::Notes, "and the page does not turn");
+
+    assert_eq!(app.update(Action::Quit), Flow::Continue);
+    assert_eq!(
+        hint(&app),
+        "What is typed in this note could not be saved. Quit again to leave it."
+    );
+    assert_eq!(
+        app.update(Action::Quit),
+        Flow::Quit,
+        "asked twice by somebody who has read that, the window closes"
+    );
+}
+
+/// The bodies of the live notes, which is how these tests count what
+/// survived.
+fn note_bodies(app: &App) -> Vec<String> {
+    let mut bodies: Vec<String> = app
+        .model()
+        .notes
+        .values()
+        .filter(|note| note.is_live())
+        .map(|note| note.body.clone())
+        .collect();
+    bodies.sort();
+    bodies
+}
+
+/// Escape reaches the save with no tick in front of it, so the reload
+/// belongs to the save rather than to the caller. Without it the body
+/// the note was opened with is compared with a row that has already
+/// moved, and the write that follows puts it back over the words the
+/// command wrote.
+#[test]
+fn leaving_a_note_with_no_tick_first_still_sees_what_another_window_wrote() {
+    let store = MemStore::new();
+    let mut app = app_at(store.clone(), NOW);
+    app.update(Action::NotesPage);
+    let note = note_saying(&mut app, "the first line");
+    app.update(Action::Tick);
+
+    elsewhere(
+        &store,
+        Command::ReplaceNote {
+            note,
+            body: "what the command wrote".to_owned(),
+        },
+    );
+    type_in(&mut app, " and more");
+
+    app.update(Action::Cancel);
+
+    assert!(app.draft().is_none(), "the note was left");
+    assert_eq!(
+        app.model().note(note).map(|note| note.body.as_str()),
+        Some("what the command wrote"),
+        "the words the command wrote are still the words in that note"
+    );
+    assert_eq!(
+        note_bodies(&app),
+        ["the first line and more", "what the command wrote"],
+        "and what was typed here is in a note of its own"
+    );
+}
+
+#[test]
+fn quitting_on_a_note_another_window_changed_writes_neither_over_the_other() {
+    let store = MemStore::new();
+    let mut app = app_at(store.clone(), NOW);
+    app.update(Action::NotesPage);
+    let note = note_saying(&mut app, "the first line");
+    app.update(Action::Tick);
+
+    elsewhere(
+        &store,
+        Command::ReplaceNote {
+            note,
+            body: "what the command wrote".to_owned(),
+        },
+    );
+    type_in(&mut app, " and more");
+
+    assert_eq!(
+        app.update(Action::Quit),
+        Flow::Quit,
+        "both texts reached a row, so there is nothing to hold the window open for"
+    );
+    assert_eq!(
+        note_bodies(&app),
+        ["the first line and more", "what the command wrote"]
+    );
+}
+
+/// The same window, nothing typed in it: leaving takes the other
+/// window's body rather than writing the opened one back.
+#[test]
+fn leaving_a_note_nobody_typed_in_writes_nothing_back_over_it() {
+    let store = MemStore::new();
+    let mut app = app_at(store.clone(), NOW);
+    app.update(Action::NotesPage);
+    let note = note_saying(&mut app, "the first line");
+    app.update(Action::Tick);
+
+    elsewhere(
+        &store,
+        Command::ReplaceNote {
+            note,
+            body: "what the command wrote".to_owned(),
+        },
+    );
+
+    app.update(Action::Cancel);
+
+    assert_eq!(note_bodies(&app), ["what the command wrote"]);
 }
 
 // ---- popups ----------------------------------------------------------

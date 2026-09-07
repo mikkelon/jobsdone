@@ -79,8 +79,27 @@ pub enum Command {
     StopSchedule {
         schedule: Id,
     },
+    /// The title future copies are made with, changed on the schedule
+    /// alone. `EditTitleAndFuture` renames a copy and its schedule
+    /// together, which needs a copy to start from; this needs only the
+    /// schedule, so a repeat whose copies have all been deleted can
+    /// still be renamed.
+    EditScheduleTitle {
+        schedule: Id,
+        title: String,
+    },
     CreateNote,
+    /// A note body as it is typed: the keystrokes of an open note, saved
+    /// on the tick. Not undoable, because a body between keystrokes is
+    /// not a decision anybody made (DOMAIN.md section 12).
     EditNote {
+        note: Id,
+        body: String,
+    },
+    /// A note body given whole, in one act, by somebody who wrote the
+    /// replacement before asking for it. That is a decision, so unlike
+    /// `EditNote` it can be taken back.
+    ReplaceNote {
         note: Id,
         body: String,
     },
@@ -125,6 +144,43 @@ pub enum Command {
     RestoreNote {
         note: Id,
     },
+    /// The inverse of ReplaceNote: the body the note had, and the
+    /// instant it was last changed before the replacement, so that a
+    /// note taken back is the note that was there rather than the old
+    /// words with a new date on them.
+    RestoreNoteBody {
+        note: Id,
+        body: String,
+        updated_at: Zoned,
+    },
+    /// The inverse of one operation made of several commands: the
+    /// inverses of those commands in the order they undo, which is the
+    /// reverse of the order they were applied in. It is serialised like
+    /// any other inverse, so an entry written before compound operations
+    /// existed names one of the variants above and reads back unchanged.
+    Sequence(Vec<Command>),
+}
+
+impl Command {
+    /// Whether this is one of the inverses the domain makes for itself.
+    ///
+    /// Nothing outside the program may ask for one: an inverse carries
+    /// the state a command is being taken back to, which only the
+    /// command that was applied can know, so accepting one as a request
+    /// would be accepting a rewrite of history rather than a change.
+    pub fn is_inverse(&self) -> bool {
+        matches!(
+            self,
+            Command::MoveBack { .. }
+                | Command::CloseAt { .. }
+                | Command::RestoreTask { .. }
+                | Command::UncreateSchedule { .. }
+                | Command::ResumeSchedule { .. }
+                | Command::RestoreNote { .. }
+                | Command::RestoreNoteBody { .. }
+                | Command::Sequence(_)
+        )
+    }
 }
 
 /// What `undo` did: the change to commit either way, the label of the
@@ -146,13 +202,48 @@ pub struct Undone {
 /// stack is held to and the order dates are written in; the domain
 /// chooses none of the three (DOMAIN.md section 11).
 pub fn apply(model: &Model, command: Command, ctx: &Context) -> Result<Change, Rejected> {
+    apply_many(model, vec![command], ctx)
+}
+
+/// One operation made of several commands: what the whole of it would
+/// change, or why it is refused.
+///
+/// The commands are applied in the order they are given, each to what
+/// the one before it left, and nothing is written unless every one of
+/// them holds: a command that is refused takes the whole operation with
+/// it, so a half-applied operation never reaches storage. The change is
+/// the difference between the model that went in and the model the last
+/// command left, which is one transaction (DOMAIN.md section 17).
+///
+/// The operation earns at most one undo entry, whatever it is made of.
+/// Its label is the label of the first command that earned one, said
+/// with the number of changes that followed it, and its inverse is the
+/// inverses of those commands in the order they undo. One command that
+/// earns an entry pushes that entry unchanged, so an operation of one is
+/// the command it is made of, down to the row written to `undo_log`.
+pub fn apply_many(
+    model: &Model,
+    commands: Vec<Command>,
+    ctx: &Context,
+) -> Result<Change, Rejected> {
     let now = &ctx.now;
     let today = model.settings.working_day(now);
     let mut after = model.clone();
-    let entry = run(&mut after, &command, now, today, ctx.dates)?;
+
+    let mut entries = Vec::new();
+    for command in &commands {
+        if command.is_inverse() {
+            return Err(Rejected(
+                "That is not a change anything may ask for.".to_owned(),
+            ));
+        }
+        if let Some(entry) = run(&mut after, command, now, today, ctx.dates)? {
+            entries.push(entry);
+        }
+    }
 
     let mut writes = diff(model, &after);
-    if let Some(Entry { label, inverse }) = entry {
+    if let Some(Entry { label, inverse }) = one_entry(entries) {
         writes.push(Write::PushUndo(UndoEntry {
             id: next_id(model.undo.iter().map(|entry| entry.id)),
             at: now.clone(),
@@ -162,6 +253,29 @@ pub fn apply(model: &Model, command: Command, ctx: &Context) -> Result<Change, R
         writes.push(Write::TruncateUndo(ctx.undo_cap));
     }
     Ok(Change { writes })
+}
+
+/// The one entry an operation earns, from the entries its commands
+/// earned. Several become a `Sequence` of their inverses in the order
+/// they undo, which is the reverse of the order they were applied in.
+fn one_entry(mut entries: Vec<Entry>) -> Option<Entry> {
+    match entries.len() {
+        0 => None,
+        1 => entries.pop(),
+        rest => {
+            let label = match rest {
+                2 => format!("{} and one more change", entries[0].label),
+                _ => format!("{} and {} more changes", entries[0].label, rest - 1),
+            };
+            let mut inverse: Vec<Command> =
+                entries.into_iter().map(|entry| entry.inverse).collect();
+            inverse.reverse();
+            Some(Entry {
+                label,
+                inverse: Command::Sequence(inverse),
+            })
+        }
+    }
 }
 
 /// Pops the top entry and returns its inverse's change, with nothing
@@ -222,11 +336,17 @@ fn task_of(command: &Command) -> Option<Id> {
         Command::AddTask { .. }
         | Command::SetRule { .. }
         | Command::StopSchedule { .. }
+        | Command::EditScheduleTitle { .. }
         | Command::CreateNote
         | Command::EditNote { .. }
+        | Command::ReplaceNote { .. }
         | Command::DeleteNote { .. }
         | Command::ResumeSchedule { .. }
-        | Command::RestoreNote { .. } => None,
+        | Command::RestoreNote { .. }
+        | Command::RestoreNoteBody { .. } => None,
+        // The task the operation as a whole was about, which is the one
+        // the first of its commands that was about a task named.
+        Command::Sequence(commands) => commands.iter().find_map(task_of),
     }
 }
 
@@ -595,6 +715,22 @@ fn run(
             ))
         }
 
+        Command::EditScheduleTitle { schedule, title } => {
+            let title = valid_title(title)?;
+            let Some(current) = model.schedules.get_mut(schedule) else {
+                return Err(Rejected("That repeat schedule is gone.".to_owned()));
+            };
+            let was = current.title.clone();
+            current.title = title.clone();
+            Ok(Entry::new(
+                format!("Renamed the repeat {}", named(&title)),
+                Command::EditScheduleTitle {
+                    schedule: *schedule,
+                    title: was,
+                },
+            ))
+        }
+
         Command::CreateNote => {
             let id = next_id(model.notes.keys().copied());
             model.notes.insert(
@@ -621,6 +757,23 @@ fn run(
             }
             // A note body is typed, not decided: it pushes nothing.
             Ok(None)
+        }
+
+        Command::ReplaceNote { note, body } => {
+            let current = live_note(model, *note)?;
+            let (was, was_at) = (current.body.clone(), current.updated_at.clone());
+            if let Some(note) = model.notes.get_mut(note) {
+                note.body = body.clone();
+                note.updated_at = now.clone();
+            }
+            Ok(Entry::new(
+                "Replaced a note".to_owned(),
+                Command::RestoreNoteBody {
+                    note: *note,
+                    body: was,
+                    updated_at: was_at,
+                },
+            ))
         }
 
         Command::DeleteNote { note } => {
@@ -723,6 +876,32 @@ fn run(
             if let Some(note) = model.notes.get_mut(note) {
                 note.deleted_at = None;
             }
+            Ok(None)
+        }
+
+        Command::RestoreNoteBody {
+            note,
+            body,
+            updated_at,
+        } => {
+            live_note(model, *note)?;
+            if let Some(note) = model.notes.get_mut(note) {
+                note.body = body.clone();
+                note.updated_at = updated_at.clone();
+            }
+            Ok(None)
+        }
+
+        // Every one of them, or none: the model is only written back
+        // once they have all held, so an inverse that has been overtaken
+        // half way through takes the whole entry with it rather than
+        // leaving the operation half taken back (DOMAIN.md section 11).
+        Command::Sequence(commands) => {
+            let mut working = model.clone();
+            for command in commands {
+                run(&mut working, command, now, today, dates)?;
+            }
+            *model = working;
             Ok(None)
         }
     }

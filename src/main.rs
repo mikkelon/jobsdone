@@ -1,16 +1,22 @@
 //! XDG paths, the command line, the locale, logging to the state
 //! directory, opening storage, building the desktop, running the
-//! terminal.
+//! terminal, and the one operation a noninteractive command is.
+//!
+//! The command line itself is read by `cli`, which touches nothing; what
+//! is left here is the reading of a file, the opening of the database, the
+//! clock and the clipboard, so that every shape of a command line is a
+//! test rather than a run.
 
 use std::fs;
 use std::io::{IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
-use std::process::ExitCode;
+use std::process::{ExitCode, Stdio};
 
 use jiff::Zoned;
 use tracing_subscriber::EnvFilter;
 
 use jobsdone::app::{self, App, DateOrder, Locale, WindowSize};
+use jobsdone::cli::{self, Failure, Format, Operation, Parsed, Plan, Source, Then};
 use jobsdone::desktop::Hyprland;
 use jobsdone::storage::Sqlite;
 use jobsdone::terminal;
@@ -35,149 +41,187 @@ const MONTH_FIRST: [&str; 11] = [
     "US", "PH", "FM", "MH", "PW", "GU", "PR", "VI", "AS", "MP", "UM",
 ];
 
-/// What `--help` prints, and what a command line nobody can read is
-/// answered with.
-const USAGE: &str = "\
-jobsdone, a keyboard-first daily task manager for the terminal
-
-    jobsdone                                open the app
-    jobsdone desktop [--floating | --tiled] [--size WxH]
-                                            write the window rule
-    jobsdone --help
-    jobsdone --version
-
-The desktop command puts the flags it is given in the settings, writes
-the window rule the window manager reads and reloads it. A flag left off
-keeps the setting as it is.
-";
-
-/// The exit code of a command line that could not be read, as distinct
-/// from the program having run and failed.
-const MISUSE: u8 = 2;
-
 fn main() -> ExitCode {
     let arguments: Vec<String> = std::env::args().skip(1).collect();
-    match invocation(arguments.iter().map(String::as_str)) {
-        Ok(Invocation::Run) => match start() {
+
+    // The format is read on its own first, so that a command line which
+    // cannot be parsed is still answered in the shape it asked for.
+    let asked = cli::parse::format_hint(&arguments);
+    let parsed = match cli::parse(&arguments) {
+        Ok(parsed) => parsed,
+        Err(failure) => return complain(&failure, asked),
+    };
+
+    match parsed.plan {
+        Plan::Run => match start(parsed.data_dir.as_deref()) {
             Ok(()) => ExitCode::SUCCESS,
             Err(message) => {
                 fail(&message);
                 ExitCode::FAILURE
             }
         },
-        Ok(Invocation::Window { floating, size }) => match window_rule(floating, size) {
-            Ok(said) => {
-                println!("{said}");
-                ExitCode::SUCCESS
+        Plan::Desktop { floating, size } => {
+            let size = size.map(|(width, height)| WindowSize::new(width, height));
+            match window_rule(parsed.data_dir.as_deref(), floating, size) {
+                Ok(said) => {
+                    print!("{}", cli::said("window_rule", &said, parsed.format));
+                    ExitCode::SUCCESS
+                }
+                Err(message) => {
+                    complain(&Failure::runtime("desktop_error", message), parsed.format)
+                }
             }
-            Err(message) => {
-                eprintln!("jobsdone: {message}");
-                ExitCode::FAILURE
-            }
-        },
-        Ok(Invocation::Help) => {
-            print!("{USAGE}");
+        }
+        Plan::Help(ref text) => {
+            print!("{text}");
             ExitCode::SUCCESS
         }
-        Ok(Invocation::Version) => {
+        Plan::Version => {
             println!("jobsdone {}", env!("CARGO_PKG_VERSION"));
             ExitCode::SUCCESS
         }
-        Err(message) => {
-            eprintln!("jobsdone: {message}\n");
-            eprint!("{USAGE}");
-            ExitCode::from(MISUSE)
+        // The skill is compiled in, so it is answered without a database,
+        // a directory that exists or anything written anywhere.
+        Plan::Skill => {
+            print!("{}", cli::SKILL);
+            ExitCode::SUCCESS
         }
+        Plan::Operate(ref operation) => match operate(operation.clone(), &parsed) {
+            Ok(said) => {
+                print!("{said}");
+                ExitCode::SUCCESS
+            }
+            Err(failure) => complain(&failure, parsed.format),
+        },
     }
 }
 
-/// What a command line asks the program to do.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Invocation {
-    Run,
-    /// `desktop`, with the window the flags asked for: `None` where a
-    /// flag was left off and the setting stands.
-    Window {
-        floating: Option<bool>,
-        size: Option<WindowSize>,
-    },
-    Help,
-    Version,
+/// The failure, on standard error, in the shape the command line asked
+/// for. Answers go to standard output and these do not, so a script may
+/// read one and log the other.
+fn complain(failure: &Failure, format: Format) -> ExitCode {
+    eprint!("{}", cli::report(failure, format));
+    ExitCode::from(failure.exit_code)
 }
 
-/// The command line, read. Nothing here touches the world, so every form
-/// of the command is a test rather than a run.
-fn invocation<'a>(arguments: impl IntoIterator<Item = &'a str>) -> Result<Invocation, String> {
-    let mut arguments = arguments.into_iter();
-    let Some(command) = arguments.next() else {
-        return Ok(Invocation::Run);
+/// One operation: whatever text it still wants, the database, the service,
+/// and the answer written out.
+fn operate(mut operation: Operation, parsed: &Parsed) -> Result<String, Failure> {
+    let body = match operation.body.as_ref().map(|body| body.source.clone()) {
+        Some(source) => Some(read(&source)?),
+        None => None,
     };
-    match command {
-        "--help" | "-h" => Ok(Invocation::Help),
-        "--version" | "-V" => Ok(Invocation::Version),
-        "desktop" => window(arguments),
-        _ => Err(format!("{command} is not a command")),
+    let input = match operation.input.clone() {
+        Some(source) => Some(read(&source)?),
+        None => None,
+    };
+    cli::complete(&mut operation, body, input)?;
+
+    let (_, mut store) = open_the_store(parsed.data_dir.as_deref())
+        .map_err(|message| Failure::runtime("storage_error", message))?;
+
+    let locale = locale();
+    let envelope = jobsdone::service::execute(
+        &mut store,
+        operation.request.clone(),
+        &Zoned::now(),
+        locale.dates,
+    )
+    .map_err(|error| Failure {
+        code: error.code,
+        message: error.message,
+        exit_code: error.exit_code,
+    })?;
+
+    let dates = cli::written_order(&envelope).unwrap_or(locale.dates);
+    let said = cli::present(&operation, &envelope, parsed.format, dates)?;
+
+    if operation.then == Then::CopyNote {
+        let body = cli::note_to_copy(&envelope).ok_or_else(|| {
+            Failure::runtime("unreadable_response", "the answer carried no note to copy")
+        })?;
+        copy_to_clipboard(body).map_err(|message| Failure::runtime("clipboard_error", message))?;
     }
+    Ok(said)
 }
 
-/// The flags of `jobsdone desktop`.
-fn window<'a>(arguments: impl IntoIterator<Item = &'a str>) -> Result<Invocation, String> {
-    let mut arguments = arguments.into_iter();
-    let mut floating: Option<bool> = None;
-    let mut size = None;
-
-    while let Some(argument) = arguments.next() {
-        match argument {
-            "--floating" | "--tiled" => {
-                let wanted = argument == "--floating";
-                if floating.is_some_and(|asked| asked != wanted) {
-                    return Err("--floating and --tiled ask for different windows".to_owned());
-                }
-                floating = Some(wanted);
-            }
-            "--size" => {
-                let value = arguments
-                    .next()
-                    .ok_or_else(|| "--size wants a size, as in --size 870x650".to_owned())?;
-                size = Some(
-                    pixels(value)
-                        .ok_or_else(|| format!("{value} is not a size, as in --size 870x650"))?,
-                );
-            }
-            "--help" | "-h" => return Ok(Invocation::Help),
-            _ => return Err(format!("{argument} is not a flag of the desktop command")),
+/// Text a request wants, read exactly: every newline and every byte of
+/// Unicode reaches the note as it was written.
+fn read(source: &Source) -> Result<String, Failure> {
+    match source {
+        Source::Stdin => {
+            let mut text = String::new();
+            std::io::stdin()
+                .read_to_string(&mut text)
+                .map_err(|error| {
+                    Failure::runtime(
+                        "input_error",
+                        format!("standard input could not be read: {error}"),
+                    )
+                })?;
+            Ok(text)
         }
+        Source::File(path) => fs::read_to_string(path).map_err(|error| {
+            Failure::runtime(
+                "input_error",
+                format!("{} could not be read: {error}", path.display()),
+            )
+        }),
     }
-    Ok(Invocation::Window { floating, size })
 }
 
-/// `870x650` in logical pixels. A number outside what a window may be is
-/// held to the range, the way the settings page holds one.
-fn pixels(text: &str) -> Option<WindowSize> {
-    let (width, height) = text.split_once('x')?;
-    Some(WindowSize::new(
-        width.trim().parse().ok()?,
-        height.trim().parse().ok()?,
-    ))
+/// The desktop clipboard, including when the program runs inside tmux.
+///
+/// The window has its own copy of this in `terminal`, which owns the loop
+/// that calls it; a command line is not in that loop and may not reach
+/// into it, so the two spawns stand apart.
+fn copy_to_clipboard(text: &str) -> Result<(), String> {
+    let (program, arguments): (&str, &[&str]) = if std::env::var_os("WAYLAND_DISPLAY").is_some() {
+        ("wl-copy", &["--type", "text/plain;charset=utf-8"])
+    } else if std::env::var_os("DISPLAY").is_some() {
+        ("xclip", &["-selection", "clipboard", "-in"])
+    } else {
+        return Err("there is no desktop clipboard here".to_owned());
+    };
+
+    let mut child = std::process::Command::new(program)
+        .args(arguments)
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .spawn()
+        .map_err(|error| format!("{program} could not be run: {error}"))?;
+    child
+        .stdin
+        .as_mut()
+        .ok_or_else(|| format!("{program} took no input"))?
+        .write_all(text.as_bytes())
+        .map_err(|error| format!("{program} could not be written to: {error}"))?;
+    match child.wait() {
+        Ok(status) if status.success() => Ok(()),
+        Ok(status) => Err(format!("{program} answered {status}")),
+        Err(error) => Err(format!("{program} could not be waited for: {error}")),
+    }
 }
 
 /// `jobsdone desktop`: the window settings the flags name, and the rule
 /// written from them.
-fn window_rule(floating: Option<bool>, size: Option<WindowSize>) -> Result<String, String> {
-    let dirs = xdg::BaseDirectories::with_prefix("jobsdone");
-    let (_, mut store) = open_the_store(&dirs)?;
+fn window_rule(
+    data_dir: Option<&Path>,
+    floating: Option<bool>,
+    size: Option<WindowSize>,
+) -> Result<String, String> {
+    let (_, mut store) = open_the_store(data_dir)?;
     app::set_window(&mut store, &Hyprland::here(), floating, size)
 }
 
-fn start() -> Result<(), String> {
-    let dirs = xdg::BaseDirectories::with_prefix("jobsdone");
-
-    let state = dirs
+fn start(data_dir: Option<&Path>) -> Result<(), String> {
+    let state = xdg::BaseDirectories::with_prefix("jobsdone")
         .create_state_directory("")
         .map_err(|error| format!("the state directory could not be made: {error}"))?;
     start_logging(&state.join("jobsdone.log"));
 
-    let (database, store) = open_the_store(&dirs)?;
+    let (database, store) = open_the_store(data_dir)?;
 
     let app = App::new(
         Box::new(store),
@@ -191,15 +235,21 @@ fn start() -> Result<(), String> {
 }
 
 /// The database, and where it was opened.
-fn open_the_store(dirs: &xdg::BaseDirectories) -> Result<(PathBuf, Sqlite), String> {
-    let data = match std::env::var_os(DATA_DIR) {
-        Some(overridden) => {
-            let path = PathBuf::from(overridden);
+///
+/// `--data-dir` stands in front of the environment override, which stands
+/// in front of the XDG directory: the more deliberate the choice, the
+/// further forward it is.
+fn open_the_store(chosen: Option<&Path>) -> Result<(PathBuf, Sqlite), String> {
+    let overridden = chosen
+        .map(Path::to_path_buf)
+        .or_else(|| std::env::var_os(DATA_DIR).map(PathBuf::from));
+    let data = match overridden {
+        Some(path) => {
             fs::create_dir_all(&path)
-                .map_err(|error| format!("{DATA_DIR} could not be made: {error}"))?;
+                .map_err(|error| format!("{} could not be made: {error}", path.display()))?;
             path
         }
-        None => dirs
+        None => xdg::BaseDirectories::with_prefix("jobsdone")
             .create_data_directory("")
             .map_err(|error| format!("the data directory could not be made: {error}"))?,
     };
@@ -276,90 +326,7 @@ fn fail(message: &str) {
     }
 }
 
-/// The command line is the only thing here worth a test, and it is read
-/// by a pure function so that it can have one. The tests are inline
-/// because a `src/main/tests.rs` would make `main` a second top-level
-/// module, which the table in ARCHITECTURE.md section 2 does not list.
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn read(arguments: &[&str]) -> Result<Invocation, String> {
-        invocation(arguments.iter().copied())
-    }
-
-    #[test]
-    fn nothing_on_the_command_line_opens_the_app() {
-        assert_eq!(read(&[]), Ok(Invocation::Run));
-    }
-
-    #[test]
-    fn the_desktop_command_carries_the_window_the_flags_asked_for() {
-        assert_eq!(
-            read(&["desktop"]),
-            Ok(Invocation::Window {
-                floating: None,
-                size: None
-            })
-        );
-        assert_eq!(
-            read(&["desktop", "--tiled"]),
-            Ok(Invocation::Window {
-                floating: Some(false),
-                size: None
-            })
-        );
-        assert_eq!(
-            read(&["desktop", "--floating", "--size", "1000x700"]),
-            Ok(Invocation::Window {
-                floating: Some(true),
-                size: Some(WindowSize::new(1000, 700))
-            })
-        );
-    }
-
-    #[test]
-    fn a_size_outside_what_a_window_may_be_is_held_to_the_range() {
-        assert_eq!(
-            read(&["desktop", "--size", "10x99999"]),
-            Ok(Invocation::Window {
-                floating: None,
-                size: Some(WindowSize {
-                    width: 200,
-                    height: 10_000
-                })
-            })
-        );
-    }
-
-    #[test]
-    fn a_floating_window_and_a_tiled_one_cannot_both_be_asked_for() {
-        assert!(read(&["desktop", "--floating", "--tiled"]).is_err());
-        // The same one twice is nobody contradicting themselves.
-        assert!(read(&["desktop", "--tiled", "--tiled"]).is_ok());
-    }
-
-    #[test]
-    fn a_size_that_is_not_one_is_refused() {
-        assert!(read(&["desktop", "--size", "roomy"]).is_err());
-        assert!(read(&["desktop", "--size", "1000"]).is_err());
-        assert!(read(&["desktop", "--size"]).is_err());
-    }
-
-    #[test]
-    fn help_and_version_are_asked_for_by_themselves_or_after_a_command() {
-        assert_eq!(read(&["--help"]), Ok(Invocation::Help));
-        assert_eq!(read(&["-h"]), Ok(Invocation::Help));
-        assert_eq!(read(&["--version"]), Ok(Invocation::Version));
-        assert_eq!(read(&["desktop", "--help"]), Ok(Invocation::Help));
-    }
-
-    #[test]
-    fn anything_else_is_refused_by_name() {
-        assert_eq!(read(&["fly"]), Err("fly is not a command".to_owned()));
-        assert_eq!(
-            read(&["desktop", "--quickly"]),
-            Err("--quickly is not a flag of the desktop command".to_owned())
-        );
-    }
-}
+// What the command line means is `cli`'s, and its tests are there; what is
+// left here is reading a file, opening a database and spawning the
+// clipboard, none of which a unit test can hold still. `tests/cli.rs`
+// drives the built program instead.

@@ -17,7 +17,7 @@ The terminal module owns the loop and the raw-mode side effects.
 
 ## 1. Modules
 
-One crate, `jobsdone`, with `lib.rs` declaring seven top-level modules and
+One crate, `jobsdone`, with `lib.rs` declaring nine top-level modules and
 a thin `main.rs`. Each module is `src/<module>.rs` plus, when it needs more
 than one file, `src/<module>/*.rs`.
 
@@ -30,6 +30,8 @@ than one file, `src/<module>/*.rs`.
 | `ui`       | Drawing: application state in, a ratatui frame out, plus the layout of what was drawn.                          |
 | `terminal` | Raw mode, alternate screen, mouse capture while the setting asks for it, the panic hook, and the event loop with its 250 ms tick. |
 | `desktop`  | The window rule the program keeps for itself: the block in Hyprland's configuration, the reload, and the resize that shows a size being chosen. |
+| `service`  | Validated headless requests, stable response objects, and compound application operations shared with the domain and persistence seam. |
+| `cli`      | Command parsing, JSON/file/stdin transport, help, output formatting, and noninteractive dispatch. |
 | `main.rs`  | The command line, XDG paths, the locale, logging to the state directory, opening storage, building the desktop, running the terminal. |
 
 Anything not on this list is not a top-level module. Helpers live inside
@@ -51,7 +53,9 @@ means none. Names are separated by commas.
 | `ui`       | domain, app, input    | ratatui, jiff, unicode_width, unicode_segmentation |
 | `terminal` | app, ui, input        | crossterm, ratatui, tracing    |
 | `desktop`  | app                   | xdg                            |
-| `main.rs`  | storage, app, terminal, desktop | jiff, tracing, tracing_subscriber, xdg |
+| `service`  | domain, app           | jiff, serde, serde_json, unicode_segmentation |
+| `cli`      | domain                | jiff, serde_json |
+| `main.rs`  | storage, app, terminal, desktop, cli, service | jiff, serde_json, tracing, tracing_subscriber, xdg |
 
 What the table says, read as a picture, arrows pointing at what is
 depended on:
@@ -60,6 +64,8 @@ depended on:
     main.rs -> terminal -> ui -> app -> domain
                          ui -> input
                          terminal -> input
+    main.rs -> cli -> service -> domain
+                              -> app
     main.rs -> app
     main.rs -> desktop -> app
 
@@ -67,8 +73,8 @@ Module names in the table may be wrapped in backticks; the test strips
 them, and normalises `-` to `_` so a crate is written the way a path writes
 it.
 
-`main.rs` reads the clock once, at startup, for the `now` that `App::new`
-takes; that is the only place outside `app` that names `jiff`.
+`main.rs` reads the clock once for UI startup or a headless request. The service
+receives that instant explicitly; date parsing uses its loaded settings.
 
 Three absences are deliberate:
 
@@ -137,9 +143,11 @@ fresh one per action.
 `commit` applies every write of a change in one transaction. `version` is
 `PRAGMA data_version`, which SQLite moves only for a write made on another
 connection, so it answers "did another instance change this" and never
-"did I". After its own commit the app re-reads it to keep the two in
-step. `Conflict` is a unique or primary key violation;
-everything else is `Other` with SQLite's message. `StoreError` implements
+"did I". The app samples it before loading a model and leaves it alone
+after its own commits, so an intervening external write cannot be marked as seen. `Conflict` includes a stale loaded snapshot or a unique/primary key violation;
+other persistence errors are `Other` with SQLite's message. SQLite loads a coherent
+snapshot and compares it inside a write transaction before applying a change, so
+whole-row puts cannot silently replace edits from another connection. `StoreError` implements
 `Display`, which is how `main.rs` reports a failed open without naming the
 type, and so without depending on `domain`. An in-memory `Store` for tests
 is a `Model` and `Model::apply`, and it lives in `domain/tests.rs` as
@@ -180,24 +188,24 @@ the rule.
    app reloads the model first.
 4. `domain::apply(&model, command, &context)` returns a `Change` or a
    `Rejected` with the sentence for the hint bar.
-5. `store.commit(&change)`. On success `model.apply(&change)` and the
-   version is re-read. On `Conflict` the change is dropped and the hint
-   bar says another window changed things; on `Other` it says the change
-   could not be saved and tracing gets the message. The model is not
-   touched on failure.
+5. The shared commit helper calls `store.commit(&change)` and updates the
+   in-memory model only on success. On `Conflict` the app reloads the model
+   and reports the conflict; on `Other` it reports that the change could
+   not be saved and tracing gets the message.
 6. `ui::draw(&app, frame)` returns a `Layout`; `terminal` passes it to
    `app.set_layout`.
 
 ### Ids
 
 New rows get ids from the domain: the largest id in the model plus one.
-Step 3 makes the window in which two instances could choose the same id a
-few microseconds wide, and step 5's `Conflict` handling makes it harmless
-when it happens.
+SQLite checks the loaded snapshot while holding the write transaction before it
+applies a change. If another connection has changed it, the command fails with
+`Conflict`; the caller reloads before constructing another change. The same
+protection covers existing rows, settings, notes, recurrence generation and undo.
 
 ### Where time comes from
 
-Only `app` reads the clock, once per action, with `jiff::Zoned::now()`.
+The terminal path reads the clock in `app`, once per action, with `jiff::Zoned::now()`.
 The domain receives an instant or a date and derives the working day
 itself, from the hour `settings.day_starts_at` names (DOMAIN.md section
 2). `terminal` never sees time at all; a tick is
@@ -279,6 +287,28 @@ adds it here first, the way a new dependency is added to section 2 first.
   `stamp_label(&Zoned, DateOrder)`: `Fri 5 Sep`, `5 Sep` and `Fri 5 Sep
   08:12`, or the same with the month first. Which way round a date is
   written is a rule, so nothing else in the program formats one.
+
+### `service`
+
+- `execute(store, request, now, dates)` validates a public request and returns a
+  versioned JSON-shaped success response or an error with a stable code and exit
+  status. Public requests never deserialize internal undo commands.
+- Read operations use domain views without generating recurrence copies or starting
+  a review. `refresh` and `review.start` make those state transitions explicitly.
+- Compound mutations validate fully before persistence and produce one undo entry
+  through `domain::apply_many`. Both interfaces use `app::operations::commit_change`
+  to apply a change to in-memory state only after it has been saved.
+- CLI positions are one-based among open tasks in a place. Relative ordering uses
+  task IDs; a full order must include exactly the open tasks in that place.
+
+### `cli`
+
+- Parses commands, reads explicit JSON request bodies or raw note text, renders
+  text or schema-versioned JSON, and maps errors to documented exit statuses.
+- Does not enter raw mode, start a review, or generate copies as an incidental
+  effect of reading. Help/version do not need an open database.
+- JSON is the only structured interchange format. See `docs/CLI.md` for the public
+  command and response contract.
 
 ### `storage`
 

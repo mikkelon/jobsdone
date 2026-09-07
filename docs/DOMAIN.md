@@ -338,7 +338,8 @@ simply the first copy. The repeat card previews `next_dates` after
 
 ### Generation
 
-`generate_copies(today)` runs on every launch, before the review. For
+`generate_copies(today)` runs on every terminal UI launch, before the review.
+The CLI invokes it explicitly through `refresh`; ordinary reads do not generate. For
 each live schedule with `stopped_on` none, for every scheduled date D in
 (`generated_through`, today] that is not before today − `backfill_days`:
 
@@ -395,8 +396,9 @@ every running instance and surviving restarts.
 - The stack is a LIFO capped at a length the application passes in;
   the oldest entry is discarded when the cap is exceeded. The domain
   does not choose the number.
-- Note body edits, copy generation, starting a review, and undo itself
-  push nothing.
+- UI note typing (`EditNote`), copy generation, starting a review, and undo
+  itself push nothing. A deliberate CLI note replacement (`ReplaceNote`) is one
+  undoable operation.
 - After a reload (another instance wrote), the stack is reloaded with
   everything else.
 
@@ -434,6 +436,7 @@ today", "Deleted …", and so on, each naming the task.
 |--------------------------------|-----------------------------|-------------------------------------------------------------------|---------------------------------------------|
 | CreateSchedule(task, rule)     | live, not a copy            | Section 10. The schedule row and the task's link.                 | Unlink the task and delete the schedule row |
 | SetRule(schedule, rule)        | live, not stopped           | Sets rule.                                                        | SetRule(old)                                |
+| EditScheduleTitle(schedule, title) | exists | Renames future copies without changing existing task titles. | EditScheduleTitle(old) |
 | StopSchedule(schedule)         | not stopped                 | `stopped_on` = today.                                             | `stopped_on` none                           |
 | GenerateCopies                 | system                      | Section 10. Not undoable.                                         | none                                        |
 
@@ -792,3 +795,23 @@ adding task undo entries. They never rewrite notes. The application reloads
 entries along with the model and invalidates its spelling caches when they
 change, including changes from another window. Removing an entry permits
 Harper to flag that word again; built-in dictionary words remain accepted.
+
+## 21. Compound command-line operations
+
+The CLI uses the same commands and views as the UI, with complete-intention
+operations layered over them. `apply_many` validates a sequence against an
+in-memory working model and returns one change only when every command succeeds.
+It combines the inverses in reverse order into one undo entry. Undoing a compound
+entry either applies every inverse or drops the invalid entry without applying
+any of it, following the existing stale-undo rule.
+
+A full note replacement is a deliberate CLI action (`ReplaceNote`) with an
+inverse restoring the previous body and update timestamp. UI typing continues
+using `EditNote`, which does not push an entry for each keystroke. Settings,
+dictionary and system operations keep their existing non-undoable semantics.
+
+Public reorder positions are one-based among open tasks in a place. They are
+translated into the internal sequence over all live tasks; completed task slots
+and historical placements remain intact. Complete ordering requires exactly the
+current open task IDs. CLI requests expose domain intentions, never serialized
+internal inverse commands.

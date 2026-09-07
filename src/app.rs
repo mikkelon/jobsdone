@@ -23,8 +23,13 @@ use crate::input::{
     self, Action, Binding, Field, KeyContext, NotesPane, Pane, PopupKind, ReviewStep, Shown,
 };
 
+pub mod operations;
 mod spelling;
 pub mod wrap;
+
+/// The spelling checker the notes are read by, so that anything checking
+/// a note outside the window checks it the same way.
+pub use self::spelling::SpellChecker;
 
 use wrap::{Affinity, Wrapping};
 
@@ -40,7 +45,7 @@ const PREVIEW: usize = 3;
 /// The length the undo stack is held to. The domain does not choose the
 /// number (DOMAIN.md section 11); a hundred is more than a day's work and
 /// small enough to load with everything else.
-const UNDO_CAP: usize = 100;
+pub(crate) const UNDO_CAP: usize = 100;
 
 /// What the window manager can be asked to do about the window the
 /// program is in. The application never names one: `main.rs` hands it
@@ -468,6 +473,12 @@ pub struct Draft {
     /// it into another one.
     pub note: Id,
     pub text: String,
+    /// The body the row held when this window last saw it: what the note
+    /// was opened with, or what this window last wrote to it. It is what
+    /// tells a draft nobody has typed in from one that has, and so a
+    /// body another window wrote that this one may follow from a body it
+    /// would be writing over.
+    pub saved: String,
     /// Where the caret is, in grapheme clusters from the start of the
     /// body: what a person calls a character, and what a terminal draws
     /// in one cell (or two).
@@ -1016,6 +1027,9 @@ pub struct App {
     /// that a key held down on the size row costs one reload rather than
     /// one per repeat.
     window_owed: bool,
+    /// Whether a quit has already been refused because what was typed in
+    /// the open note reached no row, so that the next one goes through.
+    quit_refused: bool,
     layout: Layout,
     /// Where the clock comes from. The application is the only module
     /// that reads it (ARCHITECTURE.md section 3), which is also what
@@ -1036,8 +1050,12 @@ impl App {
         locale: Locale,
         now: &Zoned,
     ) -> Result<App, StoreError> {
-        let model = store.load()?;
+        // The version first. `data_version` moving is how another
+        // connection's write is noticed, so a version read after the
+        // model would be a version that has already seen a write the
+        // model has not, and nothing would ever go looking for it.
         let version = store.version()?;
+        let model = store.load()?;
         let today = model.settings.working_day(now);
 
         let mut app = App {
@@ -1064,6 +1082,7 @@ impl App {
             moving: None,
             dragging: None,
             window_owed: false,
+            quit_refused: false,
             layout: Layout::default(),
             #[cfg(test)]
             clock: now.clone(),
@@ -1090,17 +1109,14 @@ impl App {
         if change.writes.is_empty() {
             return;
         }
-        match self.store.commit(&change) {
-            Ok(()) => self.model.apply(&change),
+        match operations::commit_change(self.store.as_mut(), &mut self.model, &change) {
+            Ok(()) => {}
             Err(StoreError::Conflict) => {
-                self.reload_if_stale();
+                self.reload_after_a_conflict();
             }
             Err(StoreError::Other(why)) => {
                 warn!(%why, "the recurring copies could not be made");
             }
-        }
-        if let Ok(version) = self.store.version() {
-            self.version = version;
         }
     }
 
@@ -1128,13 +1144,33 @@ impl App {
             self.message = None;
             self.moving = None;
         }
+        // A quit refused stands only until the next key that is not
+        // another quit, the way a row marked "moving" does.
+        if !matches!(
+            action,
+            Action::Quit | Action::Tick | Action::Resize | Action::FocusGained
+        ) {
+            self.quit_refused = false;
+        }
         if matches!(action, Action::Tick) {
             self.forget_an_old_message();
         }
 
         match action {
             Action::Quit => {
-                self.save_the_note();
+                // Text that reached no row is not thrown away by the
+                // window closing on it. The first quit says so and
+                // stays; the second is somebody who has read that and
+                // means it, and a window that will not close is worse
+                // than a note that could not be written.
+                if !self.save_the_note() && !self.quit_refused {
+                    self.quit_refused = true;
+                    self.say(
+                        "What is typed in this note could not be saved. Quit again to leave it.",
+                        false,
+                    );
+                    return Flow::Continue;
+                }
                 // The last quarter second of settings still has to
                 // reach the rule. Nothing is shown along with it: the
                 // window is closing.
@@ -1145,6 +1181,12 @@ impl App {
                 // The clock is read here and nowhere else, so the date
                 // rolling over while the window is open is just a tick.
                 let now = self.now();
+                // What another window has done first, because the hour a
+                // day starts at is a setting: the day this window is on
+                // is worked out from the settings as they are now, and
+                // the copies owed to it are made from the model as it is
+                // now.
+                let reloaded = self.reload_if_stale();
                 let today = self.model.settings.working_day(&now);
                 let rolled = today != self.today;
                 // A pane that was on today follows the day over; one
@@ -1159,7 +1201,7 @@ impl App {
                 if rolled {
                     self.generate(&now);
                 }
-                if self.reload_if_stale() || rolled {
+                if reloaded || rolled {
                     self.refresh();
                 }
                 // The pause between keystrokes is when a note body is
@@ -1661,11 +1703,20 @@ impl App {
 
     /// Commits a change and applies it to the model, or leaves the model
     /// as it was and says what went wrong (ARCHITECTURE.md rule 10).
+    ///
+    /// A conflict is another window having written the rows this change
+    /// was worked out from. The change is dropped rather than tried
+    /// again: the ids it made, the positions it renumbered and the entry
+    /// it takes off the undo stack are all true of the model it came
+    /// from, and that model is gone. What this window shows is brought
+    /// up to date instead, so the key that follows is answered from the
+    /// rows that are really there.
     fn commit(&mut self, change: &Change) -> Option<()> {
-        let committed = self.store.commit(change);
+        let committed = operations::commit_change(self.store.as_mut(), &mut self.model, change);
         if let Err(error) = committed {
             match error {
                 StoreError::Conflict => {
+                    self.reload_after_a_conflict();
                     self.say(
                         "Another window changed that first. Nothing was saved.",
                         false,
@@ -1678,12 +1729,43 @@ impl App {
             }
             return None;
         }
-        self.model.apply(change);
-        if let Ok(version) = self.store.version() {
-            self.version = version;
-        }
+        // The version is not re-read here. `data_version` does not move
+        // for a write made on this connection, so it still says what it
+        // said; reading it now would take in a write another connection
+        // made since, and mark as seen a change this model has not got.
         self.refresh();
         Some(())
+    }
+
+    /// The model, the version and the views after a commit was refused
+    /// because another window got there first.
+    ///
+    /// The reload is unconditional: the version says a write happened
+    /// elsewhere, and everything this window is holding was worked out
+    /// from before it. A load that fails leaves the model alone, which
+    /// is safe rather than merely tidy: storage compares the rows a
+    /// change writes with the ones it last handed out, so a change built
+    /// on a model this window could not refresh is refused in its turn
+    /// instead of being written over what is there.
+    fn reload_after_a_conflict(&mut self) {
+        // Read before the load, so that the version can only ever be
+        // older than the model and never newer: an older one costs one
+        // reload nobody needed, a newer one costs every reload there was
+        // going to be.
+        let version = self.store.version();
+        match self.store.load() {
+            Ok(model) => {
+                self.model = model;
+                if let Ok(version) = version {
+                    self.version = version;
+                }
+                self.refresh();
+                self.rest_the_cursors();
+            }
+            Err(error) => {
+                warn!(%error, "the model could not be reloaded after a conflict");
+            }
+        }
     }
 
     /// `u`: the top of the undo stack, applied as its inverse. An entry
@@ -1998,8 +2080,8 @@ impl App {
         // A note is left before it can be the row thrown away, so that
         // what was typed into it is written first (ARCHITECTURE.md rule
         // 8) and the keyboard is back on the list to answer.
-        if self.page == Page::Notes {
-            self.leave_the_note();
+        if self.page == Page::Notes && !self.leave_the_note() {
+            return;
         }
         let Some(row) = self.row_to_delete() else {
             return;
@@ -2745,7 +2827,9 @@ impl App {
             self.leave_the_settings();
             return;
         }
-        self.leave_the_note();
+        if !self.leave_the_note() {
+            return;
+        }
         self.editor = None;
         self.came_from = self.page;
         self.page = Page::Settings;
@@ -2879,7 +2963,9 @@ impl App {
     /// and ready to be typed into, because there is nothing else to do
     /// with an empty note.
     fn new_note(&mut self) {
-        self.leave_the_note();
+        if !self.leave_the_note() {
+            return;
+        }
         if let Some(change) = self.run(Command::CreateNote)
             && let Some(note) = added_note(&change)
         {
@@ -2900,6 +2986,7 @@ impl App {
         self.draft = Some(Draft {
             note,
             caret: glyphs(&body),
+            saved: body.clone(),
             text: body,
             affinity: Affinity::default(),
             wanted: None,
@@ -2913,34 +3000,174 @@ impl App {
     /// Leaving the note: what was typed is written and the keyboard goes
     /// back to the list. A note is left by `esc`, by `tab`, by the page
     /// turning, and by a click anywhere else.
-    fn leave_the_note(&mut self) {
+    /// Says whether it left. Text that reached no row keeps the keyboard
+    /// where it is, so that nothing is dropped without being said: the
+    /// message the failed write left is on screen, and the next tick
+    /// tries again.
+    fn leave_the_note(&mut self) -> bool {
         if self.draft.is_none() {
-            return;
+            return true;
         }
-        self.save_the_note();
+        if !self.save_the_note() {
+            return false;
+        }
         self.draft = None;
         self.notes_pane = NotesPane::List;
+        true
     }
 
     /// The note body as one command, when it differs from the row. This is
     /// the moment ARCHITECTURE.md rule 8 leaves to this phase: the first
     /// tick after a keystroke, and every leaving of the note.
-    fn save_the_note(&mut self) {
+    ///
+    /// It runs after the reload, so the row it compares the draft with is
+    /// the row as it is now, which another window or a command may have
+    /// written since the note was opened. Three things can be true of the
+    /// two of them, and each has one answer:
+    ///
+    /// - nothing typed here: the draft follows the row, because a body
+    ///   opened an hour ago is not an edit and writing it back would take
+    ///   the other window's words away;
+    /// - typed here and nowhere else: the ordinary save;
+    /// - typed in both: what is typed here goes into a note of its own
+    ///   and the keyboard follows it there, so that neither text is
+    ///   written over the other and neither is thrown away.
+    ///
+    /// What comes back is whether the draft is safe to let go of: false
+    /// is text that reached no row, which is the one case where leaving
+    /// the note has to wait.
+    fn save_the_note(&mut self) -> bool {
+        if self.draft.is_none() {
+            return true;
+        }
+        // The row this is decided against is the row as it is now.
+        // Leaving the note and quitting reach here with no tick in front
+        // of them, so the reload cannot be left to the caller, and it has
+        // to happen before the comparison rather than inside the write:
+        // a model that arrives after the decision turns "nothing was
+        // written elsewhere" into a body of this window's put back over
+        // one that was.
+        if self.reload_if_stale() {
+            self.refresh();
+        }
         let Some(draft) = &self.draft else {
-            return;
+            return true;
         };
-        let (note, body) = (draft.note, draft.text.clone());
+        let (note, body, saved) = (draft.note, draft.text.clone(), draft.saved.clone());
         let Some(held) = self.model.note(note).filter(|note| note.is_live()) else {
             // Another window threw it away while it was open. There is
             // nothing left to write it to.
             self.draft = None;
             self.notes_pane = NotesPane::List;
+            return true;
+        };
+        let held = held.body.clone();
+
+        if held == body {
+            // In step, whichever of them last moved.
+            if let Some(draft) = &mut self.draft {
+                draft.saved = held;
+            }
+            return true;
+        }
+        match (body != saved, held != saved) {
+            (false, _) => {
+                self.follow_the_note(held);
+                true
+            }
+            (true, false) => {
+                // Committed with nothing in between: the change is what
+                // the model just read says it is, and a write that lands
+                // in the gap is a conflict storage refuses rather than a
+                // body this window had already decided to write. The
+                // next tick decides again, against that write.
+                let Ok(change) = domain::apply(
+                    &self.model,
+                    Command::EditNote {
+                        note,
+                        body: body.clone(),
+                    },
+                    &self.context(),
+                ) else {
+                    return false;
+                };
+                let written = self.commit(&change).is_some();
+                if written && let Some(draft) = &mut self.draft {
+                    draft.saved = body;
+                }
+                written
+            }
+            (true, true) => self.keep_what_was_typed(body),
+        }
+    }
+
+    /// The open note and the row have both moved since they last agreed.
+    ///
+    /// Neither text may be written over the other and neither may be
+    /// dropped, so what was typed here becomes a note of its own and the
+    /// keyboard goes on typing into that one. The note the other window
+    /// changed is left exactly as it left it. It is one operation, so
+    /// `u` takes the whole of it back, and the recovery note is made and
+    /// filled in together or not at all.
+    ///
+    /// Making the note and writing the body are two commands, and the
+    /// second needs the id the first hands out. The domain hands it out
+    /// from the model, so asking it what `CreateNote` would do to this
+    /// model says which id the operation is about to use; nothing is
+    /// committed by the asking.
+    fn keep_what_was_typed(&mut self, body: String) -> bool {
+        let ctx = self.context();
+        let Ok(made) = domain::apply(&self.model, Command::CreateNote, &ctx) else {
+            return false;
+        };
+        let Some(recovery) = added_note(&made) else {
+            return false;
+        };
+        let Ok(change) = domain::apply_many(
+            &self.model,
+            vec![
+                Command::CreateNote,
+                Command::EditNote {
+                    note: recovery,
+                    body: body.clone(),
+                },
+            ],
+            &ctx,
+        ) else {
+            return false;
+        };
+        if self.commit(&change).is_none() {
+            // The message the failed commit left stands, and the draft
+            // stands with it: the next tick tries again, and until one of
+            // them works the note will not be left.
+            return false;
+        }
+        if let Some(draft) = &mut self.draft {
+            draft.note = recovery;
+            draft.saved = body;
+        }
+        self.set_cursor(List::Notes, RowId::Note(recovery));
+        self.say(
+            "Another window changed that note. What you typed is here, in a note of its own.",
+            true,
+        );
+        true
+    }
+
+    /// The open note taking the body another window wrote, nothing having
+    /// been typed into it here. The caret keeps its place in the new body
+    /// as far as there is one, and the ways of moving it that remember
+    /// anything forget it, because the rows under it are not the rows it
+    /// was moving through.
+    fn follow_the_note(&mut self, body: String) {
+        let Some(draft) = &mut self.draft else {
             return;
         };
-        if held.body == body {
-            return;
-        }
-        self.run(Command::EditNote { note, body });
+        draft.caret = draft.caret.min(glyphs(&body));
+        draft.affinity = Affinity::default();
+        draft.wanted = None;
+        draft.saved = body.clone();
+        draft.text = body;
     }
 
     /// The words the open note is drawn with underlined, worked out
@@ -3808,23 +4035,30 @@ impl App {
             (Page::Home, Pane::Day, _, false) if wrap => self.pane = Pane::Backlog,
 
             (Page::Notes, _, NotesPane::List, true) => self.open_the_note(),
-            (Page::Notes, _, NotesPane::Note, false) => self.leave_the_note(),
+            (Page::Notes, _, NotesPane::Note, false) => {
+                self.leave_the_note();
+            }
             (Page::Notes, _, NotesPane::List, false) if narrow => {
                 self.page = Page::Home;
                 self.pane = Pane::Backlog;
             }
             (Page::Notes, _, NotesPane::Note, true) if wrap && narrow => {
-                self.leave_the_note();
-                self.page = Page::Home;
-                self.pane = Pane::Day;
+                if self.leave_the_note() {
+                    self.page = Page::Home;
+                    self.pane = Pane::Day;
+                }
             }
-            (Page::Notes, _, NotesPane::Note, true) if wrap => self.leave_the_note(),
+            (Page::Notes, _, NotesPane::Note, true) if wrap => {
+                self.leave_the_note();
+            }
             _ => {}
         }
     }
 
     fn turn_the_page(&mut self) {
-        self.leave_the_note();
+        if !self.leave_the_note() {
+            return;
+        }
         self.page = match self.page {
             Page::Home => Page::Notes,
             Page::Notes => Page::Home,
@@ -3941,7 +4175,9 @@ impl App {
     }
 
     fn focus_on(&mut self, list: List) {
-        self.leave_the_note();
+        if !self.leave_the_note() {
+            return;
+        }
         match list {
             List::Day => {
                 self.page = Page::Home;
@@ -4672,8 +4908,7 @@ pub fn set_window(
 
     let change = domain::change_settings(&model, settings).map_err(|why| why.to_string())?;
     if !change.writes.is_empty() {
-        store.commit(&change).map_err(|error| error.to_string())?;
-        model.apply(&change);
+        operations::commit_change(store, &mut model, &change).map_err(|error| error.to_string())?;
     }
 
     let floating = model.settings.floating_window();

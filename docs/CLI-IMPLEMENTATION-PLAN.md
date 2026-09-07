@@ -1,108 +1,150 @@
-# CLI implementation plan
+# CLI implementation record
 
 ## Objective and decisions
 
-Implement a complete noninteractive interface to jobsdone's existing capabilities,
-using the same database, domain rules, and undo history as the terminal UI.
-`jobsdone` still opens the UI; `jobsdone desktop` remains supported. JSON only:
-TOON was explicitly dropped by the user. Human-readable output is the default;
-`--json` / `--format json` selects a versioned machine response.
+Implement a complete noninteractive CLI alongside the existing terminal UI, using
+its database, domain rules and undo history. The user selected JSON only and
+explicitly dropped TOON. No arguments still open the TUI; `desktop` is retained.
 
-Commands express completed intentions, including multi-property creation/updates,
-multi-task moves, relative/absolute reordering, and complete list ordering. One
-logical mutation commits atomically and creates at most one undo entry. Reject
-ambiguous scope, unknown fields, invalid IDs, duplicate IDs, and incomplete full
-orders. Positions are one-based within the open tasks in a place, not screen rows.
-Support explicit JSON request bodies from files/stdin as well as ordinary flags.
+- Human text by default; `--json` / `--format json` for versioned machine output.
+  Success goes to stdout, errors to stderr. Stable exit statuses: 0 success,
+  1 runtime/storage, 2 invalid request, 3 missing object, 4 domain rejection,
+  5 concurrent conflict. Help, version and skill are plain-text discovery commands.
+- JSON input through `--input FILE|-`; exact note text through `--stdin`/`--file`.
+  Reject unknown fields, conflicting flags/body fields and operation spoofing.
+- Commands express complete intentions: multi-property create/update, multi-ID
+  close/reopen/move/delete, direct reorder before/after/position and full order.
+  Validate atomically and create at most one undo entry per invocation.
+  Positions count open tasks in a place, starting at one; full order requires
+  exactly those IDs, preserving completed slots and history.
+- Reads do not generate recurring copies or consume the morning review gate.
+  `refresh` and `review start` are explicit. Resolve dates using the loaded
+  working-day setting; return date context and recurrence-pending state.
+- Shared guarded undo, strict settings validation, explicit deletion confirmation.
+  SQLite coherent loads and whole-model comparison inside the write transaction
+  reject stale changes, including changes to read dependencies and undo targets.
+- Embed `skills/jobsdone/SKILL.md` in every binary, advertise `--skill` in help,
+  and print it offline without a DB. No automatic installation or symlinks.
+  Users can explicitly export it into their agent's recognized skill directory.
+  The exported guide directs agents to the installed binary for current guidance.
 
-Reads do not generate copies or consume the review gate. Explicit refresh generates
-recurrences; review start advances the gate. Resolve today against the configured
-working-day boundary. Use ISO dates and stable IDs in machine output. Support
-guarded undo. CLI never unexpectedly prompts, opens an editor, or starts raw mode.
-Deletion obeys confirm_delete through an explicit --yes option. Strengthen SQLite
-concurrency for UI and CLI together so stale whole-row changes cannot overwrite
-another process. Keep settings and dictionary validation in the domain.
+## Environment and ownership
 
-## Execution environment
+Original checkout: `/home/movergaard/projects/personal/jobsdone`, branch `main`,
+initial HEAD `b659a2560cb3d213c4e6fb2a0d452a96ffb8d57d`.
+Pre-existing spelling, navigation, rendering, docs and tests were snapshotted with
+a temporary Git index without changing the original index or working files.
+Snapshot: `7c1d3b01019ccdeb921da7582a6d58092d9445c8`, branch
+`cli/implementation-base`. Delivery applies only the task delta to the original
+working tree; existing user changes are not committed on main.
 
-- Integration checkout: /home/movergaard/projects/personal/jobsdone, branch main.
-- Initial HEAD: b659a2560cb3d213c4e6fb2a0d452a96ffb8d57d.
-- Existing uncommitted spelling, word navigation, UI, documentation and test changes
-  must be preserved. Snapshot them into a separate integration base without changing
-  the original index or reverting any files; implementation commits stay separate.
-- Agent kind: Claude Code (`claude`). Exact model: `claude-opus-5` (recognized in
-  installed Claude Code 2.1.263). Permission mode: `auto`. No fallback authorized.
-- Herdr context: HERDR_ENV=1, workspace wJ, caller pane wJ:p3.
-- Installed executable verified directly; normal claude wrapper attempts a mise
-  update. Use installed executable through a task-owned PATH entry in new panes.
-- Repository guidance: docs/ARCHITECTURE.md has mechanically tested dependency
-  boundaries. Update the table for new modules. Required check: make check.
+Orchestration: herdr in workspace wJ, caller pane wJ:p3. All implementation agents
+used the user-selected **Claude Code + Opus 5**, exact model `claude-opus-5`,
+`--permission-mode auto`. Installed Claude Code 2.1.263 was verified and used
+through its installed executable PATH, avoiding the normal wrapper's mise update.
+No model substitution, publishing or unrelated configuration changes.
 
-## Public contract
+| Agent | Branch / task-owned checkout | Workspace / pane | Ownership | Status |
+|---|---|---|---|---|
+| jd-foundation | cli/foundation / /tmp/jobsdone-cli-foundation | w15 / w15:p1 | domain grouping, storage, shared app commit/reload and tests | Complete; removed |
+| jd-service | cli/service / /tmp/jobsdone-cli-service | w16 / w16:p1 | typed service requests, domain operations, DTOs and service tests | Complete; removed |
+| jd-adapter | cli/adapter / /tmp/jobsdone-cli-adapter | w17 / w17:p1 | CLI parsing/help/rendering, main transport, subprocess tests | Complete; removed |
+| Lead | cli/integration / /tmp/jobsdone-cli-integration | w18 / w18:p1 | contracts, module wiring, docs, bundled skill, review and validation | Complete; removed |
 
-CLI response: `{schema_version:1, ok:true, data:..., context:{today,...}}`.
-Errors: `{schema_version:1, ok:false, error:{code,message}}`; success on stdout,
-diagnostics/errors on stderr; JSON errors use the same schema. Exit codes: 0 success,
-2 usage/input, 3 missing object, 4 domain rejection, 5 conflict, 1 storage/runtime.
-No output-format autodetection. --input FILE (or - for stdin) supplies operation
-fields for the selected command; flags and body must not silently override each
-other. Raw note body has distinct --stdin/--file options.
+The lead supplied API and request contracts before dependent implementation.
+The service owns date resolution against one loaded snapshot. The shared app
+commit helper updates memory only after persistence. Domain `apply_many` builds a
+single compound inverse compatible with persisted undo records. Note replacement
+through the CLI is undoable; TUI autosave retains its existing undo semantics.
+The lead unified the UI/service undo cap rather than keeping duplicate constants.
 
-Service boundary (owned by service agent):
-`service::execute(store: &mut dyn Store, request: serde_json::Value,
-now: &jiff::Zoned, dates: domain::DateOrder) -> Result<serde_json::Value, service::Error>`.
-Error has public `code: String`, `message: String`, `exit_code: u8`.
-Requests use `op` strings (task.list, task.get, task.add, task.update, task.close,
-task.reopen, task.move, task.reorder, task.delete, day.reorder, day.get, backlog.get,
-history.list, search, review.get, review.start, refresh, schedule.list/get/create/
-update/stop/preview, note.list/get/create/update/delete/check, settings.get/set,
-dictionary.list/add/update/delete, undo.get/apply). Document exact fields before
-adapter implements dependent mappings. Service returns a complete success envelope.
+## Reviewed integrations
 
-Foundation boundary: domain::apply_many(&Model, Vec<Command>, &Context) produces
-one Change/undo entry; use a serializable composite inverse compatible with existing
-undo rows. Shared app::operations::commit_change(&mut dyn Store, &mut Model,
-&Change) -> Result<(), StoreError> used by UI and service. Sqlite Store preserves
-the existing trait API while atomically rejecting stale loaded snapshots on commit.
+| Source | Integrated result |
+|---|---|
+| Foundation 7508fe4 | 4ab59dd; dependency picks e3ad148 in service and 3c35d13 in adapter |
+| Foundation split 49eb620, 05b53b0, da9ccf1 and tests 13c73c4 | Merge 5e14ad1; verified split tree equals the initially shared 7508fe4 tree |
+| Service 1174d72 | 88ab8f9; adapter dependency 15322ad |
+| Service tests/fixes 5b75ba5 | afb56b6; adapter dependency 7b14684 |
+| Adapter 6922beb | a80b7f9 |
+| Foundation UI concurrency 25ae835 | Merged into cli/integration |
+| Foundation note save correction 978786b | Merge e3c0a61 |
+| Adapter subprocess tests/parser corrections 2adf36f | 757eeea |
 
-## Assignments and sequence
+Review strengthened row-level conflict detection to full snapshot equality,
+protecting ordering calculations, settings dependencies and guarded undo. UI
+`data_version` is sampled before loading, never advanced after an own commit,
+so external writes cannot be marked as seen without being loaded. Clean open
+note drafts follow external edits. Diverging unsaved text is saved as a recovery
+note, preserving the externally edited original. Save decides and commits against
+one model, including leave/quit without an intervening tick; a later competing
+write is refused by storage. Regression tests cover these paths.
 
-1. In progress: lead prepares snapshot, checks tools, establishes contracts and plan.
-2. Pending: foundation agent owns src/storage.rs, src/storage/tests.rs,
-   src/domain/command.rs, src/domain.rs, src/domain/tests.rs, src/app.rs and
-   src/app/operations.rs. Atomic grouped commands/undo, stale-write protection,
-   shared commit helper, focused concurrency and undo tests. No CLI/service edits.
-3. Pending: service agent owns src/service.rs and src/service/**. Complete reads,
-   typed validated requests, compound domain mutations, stable DTOs, settings,
-   dictionary, recurrence/review, notes/spelling, guarded undo. Depends on foundation
-   APIs above; may compile with temporary uncommitted module declaration until lead
-   supplies integration wiring. Sends exact request field schema early.
-4. Pending: adapter agent owns src/cli.rs, src/cli/**, src/main.rs, tests/cli.rs,
-   Cargo.toml/Cargo.lock if needed. Parser, help, text/JSON rendering, stdin/file
-   transport and subprocess acceptance tests. Depends on service request contract.
-5. Pending: lead owns src/lib.rs module wiring, docs/ARCHITECTURE.md, README CLI
-   documentation, docs/CLI.md, this plan, integration fixes and combined validation.
+Adapter review fixed a `history list` alias-precedence bug, let JSON bodies supply
+required fields, applied `--data-dir` to TUI launch, rejected commandless input
+flags, and supplied JSON results for desktop operations. Original main parser
+tests moved to the CLI module with the parser; executable behavior is covered
+separately by subprocess tests.
 
-Per-agent branches, worktree paths, workspace/pane IDs, source/integrated commit
-hashes and actual check results will be recorded at launch and handoff. Worktrees
-are based on an explicit snapshot. No agent may merge, push, publish or edit
-unrelated configuration. Each returns clean descriptive commits and test evidence.
+## Validation completed
 
-## Acceptance and validation
+Required repository check, on the combined implementation in a private target:
 
-- Full capabilities: tasks, schedules and previews, notes, planning/history/search,
-  review/refresh, settings/dictionary, undo; existing desktop behavior retained.
-- Atomic multi-field/multi-ID operations; failed validation saves nothing; one undo
-  restores the entire operation. Full order requires exact membership.
-- Read operations have no recurrence/review side effects. Help/version require no DB.
-- Notes preserve Unicode/newlines through file/stdin; JSON bodies reject unknowns.
-- JSON contains stable IDs, schema version and structured errors. No ANSI or chatter.
-- Concurrent connections cannot lose edits or collide silently on generated IDs;
-  bounded busy behavior. UI observes CLI changes through existing reload mechanism.
-- Focused domain/storage/service tests, fresh binary subprocess acceptance suite,
-  make check on integrated code, scratch database only. No production data touched.
+```
+env -u NO_COLOR CARGO_TARGET_DIR=/tmp/jobsdone-cli-integration/target make check
+```
 
-## Integration and cleanup record
+- `cargo fmt --check`: passed.
+- `cargo clippy --all-targets -- -D warnings`: passed.
+- `cargo test`: 765 library tests passed, one pre-existing ignored; all 26 CLI
+  subprocess tests passed; no failures. Doc tests passed (none present).
+- Independent acceptance: 48 JSON invocations against temporary SQLite databases
+  passed. Covers direct and full ordering with completed slots, multi-ID rollback,
+  one-step compound undo, byte-exact Unicode/multiline notes and note undo,
+  confirmation, settings rollback, schedules, recurrence/read separation, review,
+  history/search/dictionary, invalid fields, guarded undo and offline skill output.
+- Live TUI/CLI smoke: launched the freshly built binary in a private tmux session
+  with scratch data and isolated config/state. An open TUI displayed CLI task
+  creation and an externally replaced open note; quitting preserved CLI text.
+  Session and scratch directory removed afterward.
+- Bundled skill: skill-creator `quick_validate.py` passed using `/usr/bin/python`.
+- `git diff --check`: passed.
+- Before delivery, byte comparison confirmed every original snapshot file except
+  the task's living plan still matched the original working tree, including the
+  user's initially untracked files.
 
-No agents launched yet. No implementation commits integrated. Validation pending.
-No worktrees created yet. Preserve initial working-tree changes throughout.
+Earlier shared-target checks were not used as final evidence: concurrent agent
+builds replaced artifacts. The private target removed that ambiguity. The tool
+environment supplies `NO_COLOR=1`, which conflicts with an existing palette test;
+final checks unset it without changing the application or that test.
+
+Supporting agent checks included 68 new service tests, domain compound inverses,
+real two-connection SQLite conflicts and snapshot coherence, UI recovery, and
+CLI grammar tests. No production data or user agent directories were touched.
+Live desktop-rule application and real clipboard writes were not exercised;
+clipboard parsing and note lookup are covered, and desktop parsing is covered.
+
+Detailed logs and independent scratch harnesses are retained under
+`/tmp/jobsdone-cli-run/` for this session; committed subprocess and unit tests are
+the repeatable repository checks. Public docs: `docs/CLI.md`,
+`docs/CLI-REQUESTS.md`, README, and the bundled `skills/jobsdone/SKILL.md`.
+
+## Delivery and cleanup
+
+All three agents finished and exited. Their branches were checked for ancestry
+or cherry-pick equivalence; no unique source changes were discarded. Temporary
+module wiring and the adapter's local skill copy were backed up under
+`/tmp/jobsdone-cli-run/` before removing their task scaffolding. Clean worktrees
+w15, w16 and w17 were removed through herdr without force. Branches are retained
+for provenance. No unrelated workspace or server was stopped.
+
+Lead integration commit: `5c29ed2`. The reviewed delta was applied to main's
+working tree without changing its index. Byte comparison against cli/integration
+confirmed all delivered files match, including the preserved original user work.
+`cargo clean -p jobsdone` removed obsolete shared build artifacts, then `cargo
+build` succeeded in the original checkout. The fresh executable is
+`target/debug/jobsdone`. All implementation and validation work is complete.
+Final integration record commit: `76f29b5`. Clean integration workspace w18
+was removed through herdr without force. Final worktree inventory contains only
+the original main checkout; task branches remain for provenance. The rebuilt
+main-checkout binary prints a skill byte-identical to its source asset.

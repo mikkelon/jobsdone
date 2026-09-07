@@ -5,10 +5,12 @@
 //! it writes was decided by the domain, and every value it reads is
 //! turned back into the type the domain named.
 
+use std::cell::RefCell;
 use std::path::Path;
+use std::time::Duration;
 
 use rusqlite::types::Type;
-use rusqlite::{Connection, ErrorCode, Row, Transaction, params};
+use rusqlite::{Connection, ErrorCode, Row, Transaction, TransactionBehavior, params};
 
 use crate::domain::{
     Change, Command, FromPlace, Model, Note, Placement, Rule, Schedule, Settings, Store,
@@ -35,8 +37,25 @@ const MIGRATIONS: &[(u32, &str)] = &[
 const FROM_NEW: &str = "new";
 const FROM_BACKLOG: &str = "backlog";
 
+/// How long a connection waits for another one to let go of the database
+/// before giving up. Bounded, because a window that stops answering keys
+/// is worse than a change that says it could not be saved: every write
+/// here is one short transaction, so the wait is only ever a queue of
+/// those.
+const BUSY_TIMEOUT: Duration = Duration::from_secs(3);
+
 pub struct Sqlite {
     conn: Connection,
+    /// The model as this connection last saw it: what `load` gave out,
+    /// or what the last commit left. A change says what it says only of
+    /// the model it was worked out from, so `commit` refuses one whose
+    /// model has moved on rather than writing whole rows over rows
+    /// somebody else has since changed (DOMAIN.md section 16).
+    ///
+    /// `None` until something has been loaded or committed, which is a
+    /// caller that has made no claim about what was there; the current
+    /// rows become the snapshot and the change goes in.
+    snapshot: RefCell<Option<Model>>,
 }
 
 impl Sqlite {
@@ -44,10 +63,14 @@ impl Sqlite {
     /// migrations.
     pub fn open(path: &Path) -> Result<Sqlite, StoreError> {
         let conn = Connection::open(path)?;
+        conn.busy_timeout(BUSY_TIMEOUT)?;
         conn.pragma_update(None, "journal_mode", "WAL")?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
         migrate(&conn)?;
-        Ok(Sqlite { conn })
+        Ok(Sqlite {
+            conn,
+            snapshot: RefCell::new(None),
+        })
     }
 }
 
@@ -77,85 +100,69 @@ fn migrate(conn: &Connection) -> Result<(), StoreError> {
 }
 
 impl Store for Sqlite {
+    /// The whole model, read inside one transaction so that no part of
+    /// it is from before another process's commit and another part from
+    /// after it. What comes back is kept as this connection's snapshot:
+    /// the state every change committed from here is worked out against.
     fn load(&self) -> Result<Model, StoreError> {
-        let mut model = Model::empty();
-
-        let mut tasks = self.conn.prepare(
-            "SELECT id, title, day, position, focus, waiting, closed_at, due_on, remind_on,
-                    schedule_id, scheduled_on, created_at, deleted_at
-             FROM tasks",
-        )?;
-        for row in tasks.query_map([], read_task)? {
-            let task = row?;
-            model.tasks.insert(task.id, task);
-        }
-
-        let mut placements = self
-            .conn
-            .prepare("SELECT task_id, day, placed_at, from_place FROM placements")?;
-        for row in placements.query_map([], read_placement)? {
-            let placement = row?;
-            model
-                .placements
-                .insert((placement.task_id, placement.day), placement);
-        }
-
-        let mut schedules = self.conn.prepare(
-            "SELECT id, title, rule, generated_through, stopped_on, created_at FROM schedules",
-        )?;
-        for row in schedules.query_map([], read_schedule)? {
-            let schedule = row?;
-            model.schedules.insert(schedule.id, schedule);
-        }
-
-        let mut notes = self
-            .conn
-            .prepare("SELECT id, body, created_at, updated_at, deleted_at FROM notes")?;
-        for row in notes.query_map([], read_note)? {
-            let note = row?;
-            model.notes.insert(note.id, note);
-        }
-
-        let mut undo = self
-            .conn
-            .prepare("SELECT id, at, label, inverse FROM undo_log ORDER BY id")?;
-        for row in undo.query_map([], read_undo)? {
-            model.undo.push(row?);
-        }
-
-        let mut meta = self.conn.prepare("SELECT key, value FROM meta")?;
-        for row in meta.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))? {
-            let (key, value) = row?;
-            model.meta.insert(key, value);
-        }
-
-        let mut settings = self.conn.prepare("SELECT key, value FROM settings")?;
-        let rows = settings
-            .query_map([], |row| {
-                Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
-            })?
-            .collect::<rusqlite::Result<Vec<(String, String)>>>()?;
-        model.settings = Settings::from_pairs(rows);
-
-        let mut dictionary = self
-            .conn
-            .prepare("SELECT key, word FROM personal_dictionary")?;
-        for row in dictionary.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))? {
-            let (key, word) = row?;
-            model.personal_dictionary.insert(key, word);
-        }
-
+        let tx = self.conn.unchecked_transaction()?;
+        let model = read_model(&tx)?;
+        tx.commit()?;
+        *self.snapshot.borrow_mut() = Some(model.clone());
         Ok(model)
     }
 
     /// Every write of a change in one transaction, so a change is either
-    /// wholly there or not there at all after the process dies.
+    /// wholly there or not there at all after the process dies, and only
+    /// if the rows it writes are still as this connection last saw them.
+    ///
+    /// The transaction takes the write lock before it reads (`BEGIN
+    /// IMMEDIATE`), so the model compared is the model written to: no
+    /// other process can commit between the two.
+    ///
+    /// The whole model is compared, not the rows the change happens to
+    /// name. A change is worked out by reading the model, and what it
+    /// read is not written down anywhere: undo pops the entry that was
+    /// on top of the stack it saw, a position is the end of the place it
+    /// counted, a date is today under the settings it had, and an id is
+    /// the largest one it found plus one. Any of those can be wrong
+    /// after any write, so the honest question storage can answer is
+    /// whether anything at all has moved since the model went out. A
+    /// change made from a model that has is refused whole, as a
+    /// `Conflict`, with nothing written; the caller loads the model
+    /// again and decides afresh.
+    ///
+    /// It also keeps the two in step. A caller applies what it commits
+    /// to the model it holds, so after a commit that model and this
+    /// snapshot are the same value; a change committed elsewhere and
+    /// quietly accepted here would leave the caller holding rows it had
+    /// never seen, and `PRAGMA data_version` moving would be its only
+    /// hint.
     fn commit(&mut self, change: &Change) -> Result<(), StoreError> {
-        let tx = self.conn.transaction()?;
+        let tx = self
+            .conn
+            .transaction_with_behavior(TransactionBehavior::Immediate)?;
+        let current = read_model(&tx)?;
+
+        let stale = self
+            .snapshot
+            .borrow()
+            .as_ref()
+            .is_some_and(|snapshot| *snapshot != current);
+        if stale {
+            return Err(StoreError::Conflict);
+        }
+
         for write in &change.writes {
             write_row(&tx, write)?;
         }
+        // Read back inside the same transaction rather than replaying the
+        // writes onto the model in memory, so that the snapshot is what
+        // the database holds and not what this build believes a write
+        // does to it.
+        let after = read_model(&tx)?;
         tx.commit()?;
+        *self.snapshot.borrow_mut() = Some(after);
         Ok(())
     }
 
@@ -167,6 +174,72 @@ impl Store for Sqlite {
             .query_row("PRAGMA data_version", [], |row| row.get(0))?;
         Ok(version as u64)
     }
+}
+
+/// The whole model, from whatever connection or transaction is reading.
+fn read_model(conn: &Connection) -> Result<Model, StoreError> {
+    let mut model = Model::empty();
+
+    let mut tasks = conn.prepare(
+        "SELECT id, title, day, position, focus, waiting, closed_at, due_on, remind_on,
+                schedule_id, scheduled_on, created_at, deleted_at
+         FROM tasks",
+    )?;
+    for row in tasks.query_map([], read_task)? {
+        let task = row?;
+        model.tasks.insert(task.id, task);
+    }
+
+    let mut placements =
+        conn.prepare("SELECT task_id, day, placed_at, from_place FROM placements")?;
+    for row in placements.query_map([], read_placement)? {
+        let placement = row?;
+        model
+            .placements
+            .insert((placement.task_id, placement.day), placement);
+    }
+
+    let mut schedules = conn.prepare(
+        "SELECT id, title, rule, generated_through, stopped_on, created_at FROM schedules",
+    )?;
+    for row in schedules.query_map([], read_schedule)? {
+        let schedule = row?;
+        model.schedules.insert(schedule.id, schedule);
+    }
+
+    let mut notes =
+        conn.prepare("SELECT id, body, created_at, updated_at, deleted_at FROM notes")?;
+    for row in notes.query_map([], read_note)? {
+        let note = row?;
+        model.notes.insert(note.id, note);
+    }
+
+    let mut undo = conn.prepare("SELECT id, at, label, inverse FROM undo_log ORDER BY id")?;
+    for row in undo.query_map([], read_undo)? {
+        model.undo.push(row?);
+    }
+
+    let mut meta = conn.prepare("SELECT key, value FROM meta")?;
+    for row in meta.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))? {
+        let (key, value) = row?;
+        model.meta.insert(key, value);
+    }
+
+    let mut settings = conn.prepare("SELECT key, value FROM settings")?;
+    let rows = settings
+        .query_map([], |row| {
+            Ok((row.get::<_, String>(0)?, row.get::<_, String>(1)?))
+        })?
+        .collect::<rusqlite::Result<Vec<(String, String)>>>()?;
+    model.settings = Settings::from_pairs(rows);
+
+    let mut dictionary = conn.prepare("SELECT key, word FROM personal_dictionary")?;
+    for row in dictionary.query_map([], |row| Ok((row.get(0)?, row.get(1)?)))? {
+        let (key, word) = row?;
+        model.personal_dictionary.insert(key, word);
+    }
+
+    Ok(model)
 }
 
 /// One row write.
@@ -451,14 +524,21 @@ fn bad(column: usize, kind: Type, message: String) -> rusqlite::Error {
     rusqlite::Error::FromSqlConversionFailure(column, kind, message.into())
 }
 
+/// A constraint violation is another window having got there first, and
+/// so is a lock this connection waited `BUSY_TIMEOUT` for and did not
+/// get: both mean nothing of this change was written and the model is
+/// still whatever the other window left, which is the one thing the
+/// caller has to know.
 impl From<rusqlite::Error> for StoreError {
     fn from(error: rusqlite::Error) -> Self {
-        let constraint = matches!(
+        let conflict = matches!(
             &error,
             rusqlite::Error::SqliteFailure(failure, _)
                 if failure.code == ErrorCode::ConstraintViolation
+                    || failure.code == ErrorCode::DatabaseBusy
+                    || failure.code == ErrorCode::DatabaseLocked
         );
-        if constraint {
+        if conflict {
             StoreError::Conflict
         } else {
             StoreError::Other(error.to_string())

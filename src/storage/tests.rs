@@ -612,6 +612,336 @@ fn undoing_a_repeat_takes_the_schedule_row_with_it() {
     assert_eq!(reopened, world.model);
 }
 
+// ---- two connections -------------------------------------------------
+
+/// A second connection that has loaded, which is what makes it a window
+/// with a model of its own rather than a caller that has claimed nothing.
+fn another(path: &std::path::Path) -> Sqlite {
+    let store = Sqlite::open(path).expect("a second instance");
+    store.load().expect("load");
+    store
+}
+
+fn ctx(now: &Zoned) -> Context {
+    Context {
+        now: now.clone(),
+        undo_cap: UNDO_CAP,
+        dates: DateOrder::DayFirst,
+    }
+}
+
+/// Both windows read the same task and each set a different field on it.
+/// A task is written as a whole row, so the second write carries the
+/// first's field back to what it was; it is refused instead.
+#[test]
+fn two_windows_setting_two_fields_of_one_task_do_not_lose_one() {
+    let mut world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
+    let id = world.add("Book the venue", day("2026-09-07"));
+    let mut mine = another(&world.path);
+    let mut theirs = another(&world.path);
+    let model = mine.load().expect("load");
+
+    let due = domain::apply(
+        &model,
+        Command::SetDue {
+            task: id,
+            date: Some("2026-09-11".parse().expect("a date")),
+        },
+        &ctx(&world.now),
+    )
+    .expect("the due date");
+    let focus = domain::apply(
+        &model,
+        Command::SetFocus {
+            task: id,
+            focus: true,
+        },
+        &ctx(&world.now),
+    )
+    .expect("the focus");
+
+    mine.commit(&due).expect("the first window's change");
+    assert_eq!(theirs.commit(&focus), Err(StoreError::Conflict));
+
+    let task = world.reopened().task(id).expect("the task").clone();
+    assert_eq!(task.due_on, Some("2026-09-11".parse().expect("a date")));
+    assert!(!task.focus, "the second window wrote nothing at all");
+}
+
+/// New ids are the largest in the model plus one, so two windows adding
+/// a task at the same moment choose the same one and the upsert would
+/// quietly make their two tasks one row.
+#[test]
+fn two_windows_adding_a_task_do_not_land_on_one_row() {
+    let world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
+    let mut mine = another(&world.path);
+    let mut theirs = another(&world.path);
+    let model = mine.load().expect("load");
+
+    let add = |title: &str| {
+        domain::apply(
+            &model,
+            Command::AddTask {
+                title: title.to_owned(),
+                place: day("2026-09-07"),
+            },
+            &ctx(&world.now),
+        )
+        .expect("the task")
+    };
+    let ours = add("Book the venue");
+    let others = add("Chase the invoice");
+
+    mine.commit(&ours).expect("the first window's task");
+    assert_eq!(theirs.commit(&others), Err(StoreError::Conflict));
+
+    // Asked again from the model as it now is, the second task is its own
+    // row beside the first.
+    let model = theirs.load().expect("load");
+    let again = domain::apply(
+        &model,
+        Command::AddTask {
+            title: "Chase the invoice".to_owned(),
+            place: day("2026-09-07"),
+        },
+        &ctx(&world.now),
+    )
+    .expect("the task");
+    theirs.commit(&again).expect("the second window's task");
+
+    let titles: Vec<String> = world
+        .reopened()
+        .tasks
+        .values()
+        .map(|task| task.title.clone())
+        .collect();
+    assert_eq!(titles, ["Book the venue", "Chase the invoice"]);
+}
+
+#[test]
+fn a_note_saved_elsewhere_is_not_written_over_by_an_older_body() {
+    let mut world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
+    world.run(Command::CreateNote);
+    let note = *world.model.notes.keys().next().expect("the note");
+    let mut mine = another(&world.path);
+    let mut theirs = another(&world.path);
+    let model = mine.load().expect("load");
+
+    let body = |text: &str| {
+        domain::apply(
+            &model,
+            Command::EditNote {
+                note,
+                body: text.to_owned(),
+            },
+            &ctx(&world.now),
+        )
+        .expect("the body")
+    };
+
+    mine.commit(&body("Milk\nBread")).expect("the first body");
+    assert_eq!(theirs.commit(&body("Eggs")), Err(StoreError::Conflict));
+
+    assert_eq!(
+        world.reopened().note(note).map(|note| note.body.as_str()),
+        Some("Milk\nBread")
+    );
+}
+
+/// The settings are one value and they decide what today is, so a
+/// command worked out under the old ones is worked out under a rule that
+/// has changed, whatever rows it happens to name.
+#[test]
+fn a_settings_change_elsewhere_refuses_a_command_worked_out_before_it() {
+    let world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
+    let mut mine = another(&world.path);
+    let mut theirs = another(&world.path);
+    let model = mine.load().expect("load");
+
+    let mut settings = model.settings.clone();
+    settings.set_day_starts_at(8);
+    let moved = domain::change_settings(&model, settings).expect("the settings");
+    let added = domain::apply(
+        &model,
+        Command::AddTask {
+            title: "Book the venue".to_owned(),
+            place: day("2026-09-07"),
+        },
+        &ctx(&world.now),
+    )
+    .expect("the task");
+
+    mine.commit(&moved).expect("the settings");
+    assert_eq!(theirs.commit(&added), Err(StoreError::Conflict));
+
+    let reopened = world.reopened();
+    assert_eq!(reopened.settings.day_starts_at(), 8);
+    assert!(reopened.tasks.is_empty());
+}
+
+/// The undo stack is shared, and `u` takes back the entry that was on
+/// top of the stack the window loaded. Another window having pushed a
+/// newer one means the entry on top is no longer the one this undo was
+/// worked out from, so the change is refused rather than reaching past
+/// somebody else's work.
+#[test]
+fn an_undo_worked_out_before_a_newer_entry_arrived_is_refused() {
+    let mut world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
+    world.add("Book the venue", day("2026-09-07"));
+    let mut mine = another(&world.path);
+    let mut theirs = another(&world.path);
+
+    let undone =
+        domain::undo(&theirs.load().expect("load"), &ctx(&world.now)).expect("something to undo");
+
+    // The other window added a task, which is the entry on top now.
+    let model = mine.load().expect("load");
+    let added = domain::apply(
+        &model,
+        Command::AddTask {
+            title: "Chase the invoice".to_owned(),
+            place: day("2026-09-07"),
+        },
+        &ctx(&world.now),
+    )
+    .expect("the task");
+    mine.commit(&added).expect("the other window's task");
+
+    assert_eq!(theirs.commit(&undone.change), Err(StoreError::Conflict));
+
+    let reopened = world.reopened();
+    assert_eq!(reopened.undo.len(), 2, "neither entry was taken off");
+    assert_eq!(reopened.tasks.len(), 2);
+}
+
+/// A refused change writes nothing, not even the writes in front of the
+/// one that made the change stale.
+#[test]
+fn a_change_refused_as_stale_leaves_the_database_as_it_was() {
+    let mut world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
+    let id = world.add("Book the venue", day("2026-09-07"));
+    let mut mine = another(&world.path);
+    let mut theirs = another(&world.path);
+    let before = theirs.load().expect("load");
+
+    mine.commit(&set_meta("review_on", "2026-09-07"))
+        .expect("the other window's write");
+
+    let change = Change {
+        writes: vec![
+            Write::SetMeta {
+                key: "review_before".to_owned(),
+                value: "2026-09-06".to_owned(),
+            },
+            Write::PutDictionaryWord {
+                key: "kubernetes".to_owned(),
+                word: "Kubernetes".to_owned(),
+            },
+        ],
+    };
+    assert_eq!(theirs.commit(&change), Err(StoreError::Conflict));
+
+    let reopened = world.reopened();
+    assert!(!reopened.meta.contains_key("review_before"));
+    assert!(reopened.personal_dictionary.is_empty());
+    assert_eq!(
+        reopened.task(id).map(|task| task.id),
+        before.task(id).map(|task| task.id)
+    );
+}
+
+/// A change committed by this connection is the model this connection
+/// now holds, so the next change made from it goes in. Without that, one
+/// window on its own would refuse its own second change.
+#[test]
+fn a_window_can_commit_twice_running_without_loading_in_between() {
+    let world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
+    let mut store = another(&world.path);
+    let mut model = store.load().expect("load");
+
+    for title in ["Book the venue", "Chase the invoice", "Draft the notes"] {
+        let change = domain::apply(
+            &model,
+            Command::AddTask {
+                title: title.to_owned(),
+                place: day("2026-09-07"),
+            },
+            &ctx(&world.now),
+        )
+        .expect("the task");
+        store
+            .commit(&change)
+            .expect("a change of this window's own");
+        model.apply(&change);
+    }
+
+    assert_eq!(world.reopened().tasks.len(), 3);
+}
+
+/// Every table is read at one moment. Read a statement at a time, a load
+/// could take the tasks from after another process's commit and the meta
+/// table from before it, and the count the writer keeps beside the tasks
+/// would not be the number of tasks.
+#[test]
+fn a_load_reads_one_moment_of_the_database() {
+    let world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
+    let path = world.path.clone();
+    let now = world.now.clone();
+
+    let writer = std::thread::spawn(move || {
+        let mut store = Sqlite::open(&path).expect("the writer");
+        let mut model = store.load().expect("load");
+        for number in 0..WRITES {
+            let mut change = domain::apply(
+                &model,
+                Command::AddTask {
+                    title: format!("Task {number}"),
+                    place: Place::Backlog,
+                },
+                &ctx(&now),
+            )
+            .expect("the task");
+            // A row in another table, written in the same transaction,
+            // saying how many tasks there are once this one is in.
+            change.writes.push(Write::SetMeta {
+                key: TASK_COUNT.to_owned(),
+                value: (number + 1).to_string(),
+            });
+            store.commit(&change).expect("the writer's change");
+            model.apply(&change);
+        }
+    });
+
+    let reader = Sqlite::open(&world.path).expect("the reader");
+    let mut seen = 0;
+    while !writer.is_finished() {
+        let model = reader.load().expect("load");
+        let counted = model
+            .meta
+            .get(TASK_COUNT)
+            .map_or(0, |count| count.parse().expect("a count"));
+        assert_eq!(
+            model.tasks.len(),
+            counted,
+            "a model from two moments of the database"
+        );
+        seen = seen.max(model.tasks.len());
+    }
+    writer.join().expect("the writer");
+
+    let model = reader.load().expect("load");
+    assert_eq!(model.tasks.len(), WRITES);
+    assert!(seen > 0, "the reader never saw the writer at work");
+}
+
+/// The `meta` key the coherence test keeps its count under. Storage does
+/// not care what a key means, and no build reads this one.
+const TASK_COUNT: &str = "tasks_written";
+
+/// Enough changes for the reader to land between two of them, and few
+/// enough that the test is over in well under a second.
+const WRITES: usize = 300;
+
 // ---- killed at any moment --------------------------------------------
 
 /// A change is either wholly there or not there at all after the process

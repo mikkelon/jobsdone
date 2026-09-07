@@ -78,6 +78,26 @@ holds when nobody has changed it.
 `docs/PRODUCT.md` says what the program does and why, `docs/DESIGN.md`
 how it looks and behaves, and `wireframes/index.html` shows every screen.
 
+## Command line and agents
+
+Subcommands use the same database as the terminal app and exit after completing
+an operation. `jobsdone --help` lists them; add `--json` for structured output.
+
+    jobsdone task list --day today --json
+    jobsdone task add "Prepare demo" --day today --focus
+    jobsdone task move 42 17 --day today
+    jobsdone task reorder 42 --before 17
+
+Commands support complete changes in one invocation, including multiple task IDs
+and properties, with atomic saving and one undo entry. Reads leave recurrence and
+the morning review gate alone; `jobsdone refresh` catches up recurring copies.
+[The CLI guide](docs/CLI.md) explains JSON input, dates, ordering, undo, and errors.
+
+Every release embeds an agent skill: `jobsdone --skill` prints the version that
+matches the binary, without opening the database. Agents discover it through
+`--help`. Skill installation into an agent's project or personal directory is an
+explicit export; installation never automatically copies or symlinks it there.
+
 ## Files
 
 The database is at `~/.local/share/jobsdone/jobsdone.db` and is the
