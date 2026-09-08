@@ -10,7 +10,8 @@ use std::process::{Command, Stdio};
 use std::time::Duration;
 
 use crossterm::event::{
-    self, DisableFocusChange, DisableMouseCapture, EnableFocusChange, EnableMouseCapture, Event,
+    self, DisableBracketedPaste, DisableFocusChange, DisableMouseCapture, EnableBracketedPaste,
+    EnableFocusChange, EnableMouseCapture, Event,
 };
 use crossterm::execute;
 use crossterm::terminal::{
@@ -66,7 +67,10 @@ fn go_round(
             // A terminal the mouse has been handed back to sends no mouse
             // events. One that sends them anyway, a test driver writing
             // them straight into the pane, is answered the same way.
-            if !*mouse && matches!(event, Event::Mouse(_)) {
+            if let Event::Paste(text) = event {
+                app.paste(Ok(text));
+                None
+            } else if !*mouse && matches!(event, Event::Mouse(_)) {
                 None
             } else {
                 input::action_for(&event, app.key_context())
@@ -79,6 +83,9 @@ fn go_round(
             match app.update(action) {
                 Flow::Quit => return Ok(()),
                 Flow::CopyNote(text) => app.copied_note(copy_to_clipboard(&text)),
+                Flow::CopySelection(text) => app.copied_selection(false, copy_to_clipboard(&text)),
+                Flow::CutSelection(text) => app.copied_selection(true, copy_to_clipboard(&text)),
+                Flow::ReadClipboard => app.paste(read_from_clipboard()),
                 Flow::Continue => {}
             }
             // The setting takes effect at once, whether it was changed on
@@ -99,7 +106,7 @@ fn copy_to_clipboard(text: &str) -> Result<(), String> {
     } else if std::env::var_os("DISPLAY").is_some() {
         ("xclip", &["-selection", "clipboard", "-in"])
     } else {
-        return Err("Could not copy note: no desktop clipboard is available.".to_owned());
+        return Err("Could not copy: no desktop clipboard is available.".to_owned());
     };
     let mut child = Command::new(program)
         .args(args)
@@ -107,25 +114,60 @@ fn copy_to_clipboard(text: &str) -> Result<(), String> {
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .spawn()
-        .map_err(|error| format!("Could not copy note: {program}: {error}"))?;
+        .map_err(|error| format!("Could not copy: {program}: {error}"))?;
     let written = child
         .stdin
         .take()
         .expect("piped clipboard input")
         .write_all(text.as_bytes());
     let status = child.wait();
-    written.map_err(|error| format!("Could not copy note: {error}"))?;
+    written.map_err(|error| format!("Could not copy: {error}"))?;
     match status {
         Ok(status) if status.success() => Ok(()),
-        Ok(_) => Err(format!("Could not copy note: {program} failed.")),
-        Err(error) => Err(format!("Could not copy note: {error}")),
+        Ok(_) => Err(format!("Could not copy: {program} failed.")),
+        Err(error) => Err(format!("Could not copy: {error}")),
     }
+}
+
+fn read_from_clipboard() -> Result<String, String> {
+    let (program, args): (&str, &[&str]) = if std::env::var_os("WAYLAND_DISPLAY").is_some() {
+        ("wl-paste", &["--no-newline"])
+    } else if std::env::var_os("DISPLAY").is_some() {
+        ("xclip", &["-selection", "clipboard", "-out"])
+    } else {
+        return Err("Could not paste: no desktop clipboard is available.".to_owned());
+    };
+    let output = Command::new(program)
+        .args(args)
+        .output()
+        .map_err(|error| format!("Could not paste: {program}: {error}"))?;
+    if !output.status.success() {
+        return Err(format!("Could not paste: {program} failed."));
+    }
+    String::from_utf8(output.stdout).map_err(|error| format!("Could not paste: {error}"))
 }
 
 fn enter(mouse: bool) -> io::Result<()> {
     enable_raw_mode()?;
-    execute!(io::stdout(), EnterAlternateScreen, EnableFocusChange)?;
-    take_the_mouse(mouse)
+    if let Err(error) = enter_screen(&mut io::stdout()) {
+        let _ = disable_raw_mode();
+        return Err(error);
+    }
+    if let Err(error) = take_the_mouse(mouse) {
+        let _ = leave_screen(&mut io::stdout());
+        let _ = disable_raw_mode();
+        return Err(error);
+    }
+    Ok(())
+}
+
+fn enter_screen(writer: &mut impl Write) -> io::Result<()> {
+    execute!(
+        writer,
+        EnterAlternateScreen,
+        EnableFocusChange,
+        EnableBracketedPaste
+    )
 }
 
 /// Whether the terminal hands its mouse events to the program. With them
@@ -140,13 +182,19 @@ fn take_the_mouse(taking: bool) -> io::Result<()> {
 }
 
 fn leave() -> io::Result<()> {
+    let screen = leave_screen(&mut io::stdout());
+    let raw = disable_raw_mode();
+    screen.and(raw)
+}
+
+fn leave_screen(writer: &mut impl Write) -> io::Result<()> {
     execute!(
-        io::stdout(),
+        writer,
         DisableFocusChange,
         DisableMouseCapture,
+        DisableBracketedPaste,
         LeaveAlternateScreen
-    )?;
-    disable_raw_mode()
+    )
 }
 
 /// A crash must never leave the terminal in raw mode, or the shell it
@@ -157,4 +205,20 @@ fn install_panic_hook() {
         let _ = leave();
         previous(info);
     }));
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn screen_entry_and_exit_frame_terminal_paste() {
+        let mut entered = Vec::new();
+        enter_screen(&mut entered).unwrap();
+        assert!(entered.windows(8).any(|bytes| bytes == b"\x1b[?2004h"));
+
+        let mut left = Vec::new();
+        leave_screen(&mut left).unwrap();
+        assert!(left.windows(8).any(|bytes| bytes == b"\x1b[?2004l"));
+    }
 }

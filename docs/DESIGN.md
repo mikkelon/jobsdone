@@ -176,7 +176,16 @@ edge, and Ctrl+A selects the whole field. In notes, vertical selection
 follows the wrapped rows and scrolls with the caret. Selected characters
 use reverse video. Typing or pasting replaces the selection; Backspace
 and Delete remove it. Left/Right collapses it to the corresponding edge.
+Ctrl+Shift+C/X/V copies, cuts, and pastes in every text field. Ctrl+Insert
+copies, Ctrl+X cuts, and Shift+Insert or Ctrl+V pastes. Copy and cut require
+a selection; cut deletes only after the clipboard write succeeds. Failed
+clipboard operations and empty pastes preserve the selection and text.
+Multiline paste preserves note line breaks and replaces them with spaces in
+single-line fields. Pasted text never invokes list or dialog commands.
 Alt+y copies selected text from any field. Ctrl+C retains its quit action.
+The installed terminal launcher routes these chords to the app in Foot,
+Kitty, Alacritty, and Ghostty. An ordinary terminal may consume copy chords
+for its own selection before the app can see them.
 
 ## 5. The day is home; the review is a mode, not a place
 

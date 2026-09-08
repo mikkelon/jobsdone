@@ -178,23 +178,36 @@ Everywhere:
   `~/.cargo/bin`, least of all on a machine where Rust was installed for
   this program alone.
 - A launcher entry at `~/.local/share/applications/jobsdone.desktop`
-  with the icon from `assets/`. Off Omarchy it is a `Terminal=true`
-  entry, which any desktop opens in its own terminal emulator.
+  with the icon from `assets/`. Its `Terminal=false` entry runs
+  `~/.local/bin/jobsdone-terminal`, which opens the terminal window.
+- `scripts/install --binary PATH` installs an already built executable;
+  without this option the installer builds with Cargo.
+- The launcher selects `JOBSDONE_TERMINAL`, the terminal reported by
+  `xdg-terminal-exec`, a bare executable in `$TERMINAL`, or an installed
+  supported terminal.
+  Foot, Kitty, Alacritty, and Ghostty get app-specific profiles under
+  `~/.config/jobsdone/`, including their normal user configuration when
+  present at installation. The profiles forward copy/cut chords to the app
+  and use the terminal's bracketed paste. Alacritty 0.13 and earlier use
+  top-level imports; later versions use `general.import`. Ordinary terminal
+  configurations are not edited. Reinstall after adding a user terminal
+  configuration so its include is added to the generated profile.
 
 On Omarchy, recognised by `/usr/share/omarchy` and `omarchy-launch-tui`:
 
-- The launcher entry has the shape `omarchy-tui-install` writes:
-  `xdg-terminal-exec --app-id=org.omarchy.jobsdone -e jobsdone`, so the
-  user's default terminal opens it under an app id the window rule can
-  match. `org.omarchy.<name>` is the id Omarchy gives every TUI it
-  launches, and the same id is what `o.bind` with `{ tui = "jobsdone" }`
-  produces.
+- The launcher gives supported terminals the app id
+  `org.omarchy.jobsdone`, which Omarchy recognizes as a terminal. Its
+  universal Super+C/X/V bindings therefore reach the terminal's
+  Ctrl+Insert, Ctrl+X, and Shift+Insert paths. The Jobsdone profiles route
+  copy and cut to the app's selection; paste delivers a bracketed string.
+  Unrecognized terminal choices use `xdg-terminal-exec` when available and
+  retain that terminal's own clipboard behavior.
 - The keybind, in the install script's own block in
   `~/.config/hypr/bindings.lua`, the file Omarchy keeps for personal
   bindings, between `-- jobsdone: keybind (begin)` and
   `-- jobsdone: keybind (end)`:
 
-      o.bind("SUPER + SHIFT + J", "Jobsdone", { tui = "jobsdone" })
+      o.bind("SUPER + SHIFT + J", "Jobsdone", o.shell_quote(os.getenv("HOME") .. "/.local/bin/jobsdone-terminal"))
 
   The line is written only when the keys are free, as `hyprctl binds`
   reports them (or the bindings file, when Hyprland is not running), and
@@ -237,10 +250,9 @@ Some machines have one block instead, `-- jobsdone: begin` to
 keeping the keys it bound, and writes the two blocks in its place;
 `scripts/uninstall` removes all three.
 
-foot is the reference terminal. alacritty, ghostty and kitty are reached
-through the same `xdg-terminal-exec`, each installed and made the default
-with `omarchy-install-terminal`, and all four float the app at 870 by
-650 on a clean install. The grid differs with the font metrics:
+Foot is the reference terminal. Alacritty, Ghostty, and Kitty are also
+supported by the launcher, and all four float the app at 870 by 650 on a
+clean install. The grid differs with the font metrics:
 
 | Terminal  | Cells at 870 by 650 |
 |-----------|---------------------|
@@ -251,9 +263,9 @@ with `omarchy-install-terminal`, and all four float the app at 870 by
 
 The app lays itself out for whatever grid it gets, so the last two lose a
 column or two of the 120 the wireframes are drawn at and gain two rows.
-The app id reaches alacritty only through Omarchy's own desktop entry for
-it, which maps the flag to `--class=`; the stock entry has no mapping and
-the window then keeps the class `Alacritty` and tiles.
+The launcher passes `--class` directly to Alacritty so its window uses
+the Jobsdone app id even when the distro's terminal desktop entry lacks
+an app-id flag mapping.
 
 Rejected:
 

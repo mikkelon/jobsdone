@@ -2,11 +2,12 @@
 # Install jobsdone for the current user: the binary, a launcher entry, and
 # on Omarchy the keybind and the window the app asks Hyprland for.
 #
-#   scripts/install [--keybind [KEYS] | --no-keybind] [--floating | --tiled] [--size WxH]
+#   scripts/install [--binary PATH] [--keybind [KEYS] | --no-keybind] [--floating | --tiled] [--size WxH]
 #
 # --keybind binds KEYS, or SUPER + SHIFT + J when none are given, if the
 # keys are free; --no-keybind binds nothing. With neither, the keybind is
 # offered at the prompt when a terminal is attached and skipped otherwise.
+# --binary copies an executable built elsewhere instead of running Cargo.
 # --floating, --tiled and --size are the window the app opens in: they are
 # settings, and the app writes the Hyprland rule for them itself. A window
 # flag left off keeps the setting as it is. Running the script again
@@ -21,9 +22,15 @@ CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 APP_ID="org.omarchy.jobsdone"       # Omarchy's app-id convention for TUIs
 BIND_NAME="Jobsdone"                # what the keybind calls itself in Hyprland
 BINARY="$HOME/.local/bin/jobsdone"
+LAUNCHER="$HOME/.local/bin/jobsdone-terminal"
 DESKTOP_FILE="$DATA_HOME/applications/jobsdone.desktop"
 ICON_FILE="$DATA_HOME/icons/hicolor/scalable/apps/jobsdone.svg"
 BINDINGS="$CONFIG_HOME/hypr/bindings.lua"
+FOOT_CONFIG="$CONFIG_HOME/jobsdone/foot.ini"
+KITTY_CONFIG="$CONFIG_HOME/jobsdone/kitty.conf"
+ALACRITTY_CONFIG="$CONFIG_HOME/jobsdone/alacritty.toml"
+ALACRITTY_013_CONFIG="$CONFIG_HOME/jobsdone/alacritty-0.13.toml"
+GHOSTTY_CONFIG="$CONFIG_HOME/jobsdone/ghostty.conf"
 
 # The keybind is the script's; the window rule is the program's, in a
 # block of its own that `jobsdone desktop` writes. Some machines have a
@@ -35,6 +42,7 @@ BOTH_END="-- jobsdone: end"
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'install: %s\n' "$*" >&2; exit 1; }
+quoted_string() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
 # The header above, which is the usage message.
 usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; }
 
@@ -47,9 +55,16 @@ KEYBIND="SUPER + SHIFT + J"
 keys_given=no
 keybind_choice=""        # yes, no, or empty for "ask"
 window=()                # the flags `jobsdone desktop` is given
+source_binary=""
 
 while [ $# -gt 0 ]; do
     case "$1" in
+        --binary)
+            case "${2:-}" in
+                "" | -*) usage >&2; exit 2 ;;
+                *) source_binary="$2"; shift ;;
+            esac
+            ;;
         --keybind)
             keybind_choice=yes
             case "${2:-}" in
@@ -76,10 +91,19 @@ done
 # ~/.local/bin rather than cargo's own ~/.cargo/bin: the desktop session
 # that runs the keybind and the launcher entry has the former on its PATH
 # and, on a machine where Rust was installed for this alone, not the latter.
-command -v cargo >/dev/null || die "cargo was not found. Install Rust first: on Arch 'sudo pacman -S rustup && rustup default stable', elsewhere https://rustup.rs"
-say "building and installing the binary with cargo..."
-(cd "$ROOT" && cargo install --path . --root "$HOME/.local" --quiet)
+if [ -n "$source_binary" ]; then
+    [ -x "$source_binary" ] || die "--binary must name an executable file"
+    if ! [ -e "$BINARY" ] || ! [ "$source_binary" -ef "$BINARY" ]; then
+        install -Dm755 "$source_binary" "$BINARY"
+    fi
+else
+    command -v cargo >/dev/null || die "cargo was not found. Install Rust first: on Arch 'sudo pacman -S rustup && rustup default stable', elsewhere https://rustup.rs"
+    say "building and installing the binary with cargo..."
+    (cd "$ROOT" && cargo install --path . --root "$HOME/.local" --quiet --force)
+fi
 say "installed $BINARY"
+install -Dm755 "$ROOT/scripts/launch-terminal" "$LAUNCHER"
+say "installed $LAUNCHER"
 case ":$PATH:" in
     *":$HOME/.local/bin:"*) ;;
     *) say "note: $HOME/.local/bin is not on your PATH in this shell" ;;
@@ -87,20 +111,84 @@ esac
 
 # --- the launcher entry ------------------------------------------------------
 
-mkdir -p "$(dirname "$ICON_FILE")" "$(dirname "$DESKTOP_FILE")"
+mkdir -p "$(dirname "$ICON_FILE")" "$(dirname "$DESKTOP_FILE")" "$(dirname "$FOOT_CONFIG")"
 cp "$ROOT/assets/jobsdone.svg" "$ICON_FILE"
 
-if on_omarchy; then
-    # The same shape omarchy-tui-install writes, with the app's own id so the
-    # window rule below can find it.
-    exec_line="xdg-terminal-exec --app-id=$APP_ID -e jobsdone"
-    terminal=false
-else
-    # Any desktop with a launcher runs a Terminal=true entry in its own
-    # terminal emulator.
-    exec_line="jobsdone"
-    terminal=true
-fi
+{
+    if [ -f "$CONFIG_HOME/foot/foot.ini" ]; then
+        printf 'include=%s\n' "$CONFIG_HOME/foot/foot.ini"
+    fi
+    cat <<'EOF'
+[key-bindings]
+clipboard-copy=none
+prompt-next=none
+clipboard-paste=Shift+Insert Control+Shift+v
+
+[text-bindings]
+\x1b[99;6u=Control+Insert Control+Shift+c
+\x1b[120;6u=Control+x Control+Shift+x
+EOF
+} > "$FOOT_CONFIG"
+say "installed $FOOT_CONFIG"
+
+{
+    if [ -f "$CONFIG_HOME/kitty/kitty.conf" ]; then
+        printf 'include %s\n' "$CONFIG_HOME/kitty/kitty.conf"
+    fi
+    cat <<'EOF'
+map ctrl+insert send_text all \x1b[99;6u
+map ctrl+shift+c send_text all \x1b[99;6u
+map ctrl+x send_text all \x1b[120;6u
+map ctrl+shift+x send_text all \x1b[120;6u
+map shift+insert paste_from_clipboard
+map ctrl+shift+v paste_from_clipboard
+EOF
+} > "$KITTY_CONFIG"
+say "installed $KITTY_CONFIG"
+
+{
+    if [ -f "$CONFIG_HOME/alacritty/alacritty.toml" ]; then
+        alacritty_import="$(quoted_string "$CONFIG_HOME/alacritty/alacritty.toml")"
+        printf 'general.import = [ "%s" ]\n' "$alacritty_import"
+    fi
+    cat <<'EOF'
+[keyboard]
+bindings = [
+{ key = "Insert", mods = "Control", chars = "\u001B[99;6u" },
+{ key = "C", mods = "Control|Shift", chars = "\u001B[99;6u" },
+{ key = "X", mods = "Control", chars = "\u001B[120;6u" },
+{ key = "X", mods = "Control|Shift", chars = "\u001B[120;6u" },
+{ key = "Insert", mods = "Shift", action = "Paste" },
+{ key = "V", mods = "Control|Shift", action = "Paste" }
+]
+EOF
+} > "$ALACRITTY_CONFIG"
+say "installed $ALACRITTY_CONFIG"
+
+sed 's/^general\.import = /import = /' "$ALACRITTY_CONFIG" > "$ALACRITTY_013_CONFIG"
+say "installed $ALACRITTY_013_CONFIG"
+
+{
+    if [ -f "$CONFIG_HOME/ghostty/config" ]; then
+        printf 'config-file = %s\n' "$CONFIG_HOME/ghostty/config"
+    fi
+    cat <<'EOF'
+keybind = ctrl+insert=text:\x1b[99;6u
+keybind = ctrl+shift+c=text:\x1b[99;6u
+keybind = ctrl+x=text:\x1b[120;6u
+keybind = ctrl+shift+x=text:\x1b[120;6u
+keybind = shift+insert=paste_from_clipboard
+keybind = ctrl+shift+v=paste_from_clipboard
+EOF
+} > "$GHOSTTY_CONFIG"
+say "installed $GHOSTTY_CONFIG"
+
+exec_line="$LAUNCHER"
+exec_line="$(quoted_string "$exec_line")"
+exec_line="${exec_line//\`/\\\`}"
+exec_line="${exec_line//\$/\\\$}"
+exec_line="\"$exec_line\""
+terminal=false
 cat > "$DESKTOP_FILE" <<EOF
 [Desktop Entry]
 Version=1.0
@@ -235,6 +323,7 @@ fi
 [ "$keys_given" = yes ] || [ -z "$ours" ] || KEYBIND="$ours"
 
 want_keybind=no
+lua_launcher="$(quoted_string "$LAUNCHER")"
 if [ "$keybind_choice" = no ]; then
     want_keybind=no
 elif [ -n "$ours" ] && same_keys "$ours" "$KEYBIND"; then
@@ -243,7 +332,7 @@ else
     taken="$(keybind_taken_by)"
     if [ -n "$taken" ]; then
         say "$KEYBIND is already bound to '$taken', so no keybind is added. Bind one yourself with"
-        say "    o.bind(\"<keys>\", \"$BIND_NAME\", { tui = \"jobsdone\" })"
+        say "    o.bind(\"<keys>\", \"$BIND_NAME\", o.shell_quote(\"$lua_launcher\"))"
         say "in $BINDINGS."
     elif [ -n "$keybind_choice" ]; then
         want_keybind="$keybind_choice"
@@ -258,7 +347,7 @@ fi
 
 if [ "$want_keybind" = yes ]; then
     write_block "$KEYBIND_BEGIN" "$KEYBIND_END" "$KEYBIND_BEGIN
-o.bind(\"$KEYBIND\", \"$BIND_NAME\", { tui = \"jobsdone\" })
+o.bind(\"$KEYBIND\", \"$BIND_NAME\", o.shell_quote(\"$lua_launcher\"))
 $KEYBIND_END"
     say "wrote the $KEYBIND keybind to $BINDINGS"
 else

@@ -325,7 +325,7 @@ fn a_key_means_what_its_context_says() {
     );
     assert_eq!(
         action_for(
-            &typing('d'),
+            &press(KeyCode::Char(' ')),
             KeyContext::Review {
                 step: ReviewStep::Pile,
                 asks: true,
@@ -617,6 +617,63 @@ fn ctrl_c_quits_from_every_context() {
             Some(Action::Quit),
             "{context:?}"
         );
+    }
+}
+
+#[test]
+fn clipboard_keys_edit_text_without_turning_shifted_copy_into_quit() {
+    for context in every_context() {
+        let expected = context.text_field();
+        for (code, modifiers, action) in [
+            (
+                KeyCode::Char('c'),
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                Action::CopySelection,
+            ),
+            (
+                KeyCode::Char('C'),
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                Action::CopySelection,
+            ),
+            (
+                KeyCode::Insert,
+                KeyModifiers::CONTROL,
+                Action::CopySelection,
+            ),
+            (
+                KeyCode::Char('x'),
+                KeyModifiers::CONTROL,
+                Action::CutSelection,
+            ),
+            (
+                KeyCode::Char('X'),
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                Action::CutSelection,
+            ),
+            (
+                KeyCode::Char('x'),
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                Action::CutSelection,
+            ),
+            (KeyCode::Char('v'), KeyModifiers::CONTROL, Action::Paste),
+            (
+                KeyCode::Char('v'),
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                Action::Paste,
+            ),
+            (
+                KeyCode::Char('V'),
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+                Action::Paste,
+            ),
+            (KeyCode::Insert, KeyModifiers::SHIFT, Action::Paste),
+        ] {
+            assert_eq!(
+                action_for(&press_with(code, modifiers), context),
+                expected.then_some(action),
+                "{context:?} {code:?} {modifiers:?}"
+            );
+        }
     }
 }
 

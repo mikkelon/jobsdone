@@ -415,12 +415,18 @@ adds it here first, the way a new dependency is added to section 2 first.
   no copies and opens no review, so running it never spends the day's
   review. What comes back is the line the command prints, or what the
   window manager said, the settings being saved either way.
-- `App::update(&mut self, Action) -> Flow`, `Flow` being `Continue`,
-  `Quit`, or `CopyNote(String)`. The single entry point for every event,
-  ticks included. Copying returns the live note text to `terminal`, which
-  writes it to the desktop clipboard through `wl-copy` on Wayland or
-  `xclip` on X11, then reports the result through `App::copied_note` for
-  hint-bar feedback.
+- `App::update(&mut self, Action) -> Flow`: dispatches keys and ticks and
+  returns continuation, quit, or a clipboard request. `CopyNote`,
+  `CopySelection`, and `CutSelection` carry the text to write;
+  `ReadClipboard` requests text to paste. The terminal adapter uses
+  `wl-copy`/`wl-paste` on Wayland or `xclip` on X11 and reports the result
+  through `App::copied_note`, `App::copied_selection`, or `App::paste`.
+  Clipboard operations complete synchronously before the next input event;
+  a cut deletes its selection only after the write succeeds.
+- The terminal enables bracketed paste and restores it on exit. Paste events
+  go directly to `App::paste` as complete strings, bypassing command-key
+  dispatch. The app ignores paste outside text fields, replaces a selection
+  atomically, and normalizes line endings for multiline or single-line text.
 - `App::key_context() -> KeyContext`, and `App::page_context()` for the
   context of the page under an open popup, which is the one the palette
   lists the commands of.

@@ -4,6 +4,12 @@ Tools for driving the built program the way a person would, in a terminal
 of a fixed size, and recording what it showed. `MATRIX.md` is the list of
 things to check; this file is how to check them.
 
+## Distribution and terminal coverage
+
+[Testing across Linux distributions](CONTAINERS.md) explains how to run real
+clipboard shortcut tests in Kitty, Alacritty, and Ghostty inside isolated Arch
+and Ubuntu containers, using Xvfb and the `clipboard-x11.py` harness.
+
 ## The driver
 
 `uat/tui` runs the app in a detached tmux session of a chosen size, with
@@ -97,6 +103,10 @@ half a minute and leaves its frames under `uat/out/demo/`.
   A doc that contradicts another doc is a finding too.
 
 ## The clean machine
+
+Run Omarchy desktop acceptance only inside this VM. Use `uat/vm keys` and
+guest clipboard commands; do not drive the developer's host keyboard,
+window focus, or clipboard.
 
 `uat/vm` is a clean Omarchy in QEMU, for the questions this machine
 cannot answer: does the install work from nothing, and does the keybind

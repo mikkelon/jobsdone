@@ -167,6 +167,9 @@ pub enum Action {
     Edit,
     Delete,
     CopyNote,
+    CopySelection,
+    CutSelection,
+    Paste,
     /// The misspelt word the caret of an open note is in, and what the
     /// dictionary offers in place of it. It acts on a word rather than
     /// on a row, which is why it is the note's key and no list's.
@@ -1188,7 +1191,7 @@ pub struct Decision {
 /// day".
 const PILE_DECISIONS: &[Decision] = &[
     Decision {
-        key: "d",
+        key: "space",
         action: Action::Close,
         label: "Done",
         note: "was finished",
@@ -2137,7 +2140,7 @@ pub const CTRL_C: Binding = Binding {
 };
 
 fn key_action(key: &KeyEvent, context: KeyContext) -> Option<Action> {
-    if key.modifiers.contains(KeyModifiers::CONTROL) && key.code == KeyCode::Char('c') {
+    if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('c') {
         return Some(Action::Quit);
     }
     if !context.text_field() {
@@ -2201,6 +2204,19 @@ fn editing(key: &KeyEvent) -> Option<Action> {
     if key.modifiers.contains(KeyModifiers::ALT) {
         return None;
     }
+    if key.modifiers == KeyModifiers::CONTROL | KeyModifiers::SHIFT
+        && let Some(action) = match key.code {
+            KeyCode::Char('c' | 'C') | KeyCode::Insert => Some(Action::CopySelection),
+            KeyCode::Char('x' | 'X') => Some(Action::CutSelection),
+            KeyCode::Char('v' | 'V') => Some(Action::Paste),
+            _ => None,
+        }
+    {
+        return Some(action);
+    }
+    if key.modifiers == KeyModifiers::SHIFT && key.code == KeyCode::Insert {
+        return Some(Action::Paste);
+    }
     if key.modifiers.contains(KeyModifiers::SHIFT) {
         return match (key.code, key.modifiers.contains(KeyModifiers::CONTROL)) {
             (KeyCode::Left, true) => Some(Action::SelectWordLeft),
@@ -2217,6 +2233,9 @@ fn editing(key: &KeyEvent) -> Option<Action> {
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         return match key.code {
             KeyCode::Char('a') => Some(Action::SelectAll),
+            KeyCode::Char('x') => Some(Action::CutSelection),
+            KeyCode::Char('v') => Some(Action::Paste),
+            KeyCode::Insert => Some(Action::CopySelection),
             KeyCode::Left => Some(Action::WordLeft),
             KeyCode::Right => Some(Action::WordRight),
             _ => None,

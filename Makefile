@@ -8,12 +8,14 @@ check:
 	cargo fmt --check
 	cargo clippy --all-targets -- -D warnings
 	cargo test
+	bash tests/launcher.sh
 
 fmt:
 	cargo fmt
 
 test:
 	cargo test
+	bash tests/launcher.sh
 
 # Runs against a scratch database in .dev, never the real one in
 # $XDG_DATA_HOME/jobsdone.

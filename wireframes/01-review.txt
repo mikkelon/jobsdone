@@ -5,7 +5,7 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
                                                                                  FIX THE FLAKY MIGRATION TEST
 ───────────────────────────────────────────────────────────────────────────────┬────────────────────────────────────────
- YESTERDAY · THU 4 SEP 3 ───────────────────────────────────────────────────── │  d     Done              was finished
+ YESTERDAY · THU 4 SEP 3 ───────────────────────────────────────────────────── │  space Done              was finished
  [x] Send the invoice to Nordic Ltd                                   ✓ closed │  t     Move to today      end of plan
  [x] Prepare slides for Monday                                         → today │  b     Back to backlog
  [ ] Fix the flaky migration test                                    was focus │  m     Move to a day…
@@ -34,5 +34,5 @@
                                                                                │ │ Continue, 5 left on the pile ⏎     │
                                                                                │ └────────────────────────────────────┘
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- REVIEW  d done  t today  b backlog  m move…  x delete  u undo  e edit                            ⏎ next step  esc skip
+ REVIEW  space done  t today  b backlog  m move…  x delete  u undo  e edit                        ⏎ next step  esc skip
 

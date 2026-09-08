@@ -4575,6 +4575,114 @@ fn copying_without_a_note_leaves_the_clipboard_alone() {
 }
 
 #[test]
+fn selection_copy_and_cut_preserve_whole_graphemes_and_failed_cuts() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "Ae\u{301}界Z");
+    app.update(Action::SelectLeft);
+    app.update(Action::SelectLeft);
+
+    assert_eq!(
+        app.update(Action::CopySelection),
+        Flow::CopySelection("界Z".to_owned())
+    );
+    app.copied_selection(false, Ok(()));
+    assert_eq!(app.draft().unwrap().text, "Ae\u{301}界Z");
+    assert_eq!(app.message().unwrap().text, "Selection copied");
+
+    assert_eq!(
+        app.update(Action::CutSelection),
+        Flow::CutSelection("界Z".to_owned())
+    );
+    app.copied_selection(true, Err("clipboard refused".to_owned()));
+    assert_eq!(app.draft().unwrap().text, "Ae\u{301}界Z");
+    assert_eq!(app.selection(), Some(2..4));
+
+    app.copied_selection(true, Ok(()));
+    assert_eq!(app.draft().unwrap().text, "Ae\u{301}");
+    assert_eq!(app.selection(), None);
+    assert_eq!(app.message().unwrap().text, "Selection cut");
+}
+
+#[test]
+fn a_successful_cut_settles_spelling_before_the_next_frame() {
+    let mut app = spell_started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "teh ");
+    assert_eq!(misspelt(&app), ["teh"]);
+    for _ in 0..4 {
+        app.update(Action::SelectLeft);
+    }
+
+    assert_eq!(
+        app.update(Action::CutSelection),
+        Flow::CutSelection("teh ".to_owned())
+    );
+    app.copied_selection(true, Ok(()));
+
+    assert!(app.misspellings().is_empty());
+    assert!(app.draft().unwrap().text.is_empty());
+}
+
+#[test]
+fn paste_is_one_edit_that_replaces_selection_and_preserves_note_lines() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "one XX three");
+    for _ in 0..8 {
+        app.update(Action::Left);
+    }
+    app.update(Action::SelectRight);
+    app.update(Action::SelectRight);
+
+    assert_eq!(app.update(Action::Paste), Flow::ReadClipboard);
+    app.paste(Ok("界\r\nline".to_owned()));
+    assert_eq!(app.draft().unwrap().text, "one 界\nline three");
+    assert_eq!(app.selection(), None);
+}
+
+#[test]
+fn an_empty_paste_keeps_the_selection_and_text() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "keep this");
+    app.update(Action::SelectLeft);
+
+    app.paste(Ok(String::new()));
+
+    assert_eq!(app.draft().unwrap().text, "keep this");
+    assert_eq!(app.selection(), Some(8..9));
+}
+
+#[test]
+fn a_failed_paste_keeps_the_selection_and_text() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "keep this");
+    app.update(Action::SelectLeft);
+
+    app.paste(Err("clipboard unavailable".to_owned()));
+
+    assert_eq!(app.draft().unwrap().text, "keep this");
+    assert_eq!(app.selection(), Some(8..9));
+    assert_eq!(app.message().unwrap().text, "clipboard unavailable");
+}
+
+#[test]
+fn paste_flattens_lines_in_single_line_fields_and_ignores_lists() {
+    let mut app = started();
+    app.paste(Ok("q\nquit".to_owned()));
+    assert!(app.active_text().is_none());
+
+    app.update(Action::Search);
+    app.paste(Ok("one\r\ntwo\nthree".to_owned()));
+    assert_eq!(
+        app.popup().map(|popup| popup.text.as_str()),
+        Some("one two three")
+    );
+}
+
+#[test]
 fn default_off_does_not_load_a_dictionary_or_mark_a_note() {
     let mut app = started();
     app.update(Action::NotesPage);

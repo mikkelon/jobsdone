@@ -51,10 +51,23 @@ hint bar at the bottom always names the ones that matter most.
 In any text field, `Ctrl+Left` and `Ctrl+Right` move by word. This includes
 task titles, notes, dates, search, and settings fields.
 
-On the notes page (`n`), `y` copies the selected note; `Alt+y` copies it
-from either the list or the editor. Copying preserves the entire text and
-leaves the editor in place. This uses `wl-copy` (the `wl-clipboard` package)
-on Wayland, or `xclip` on X11.
+Mouse dragging and Shift+arrow select text in every editable field. Ctrl+A
+selects the whole field. Ctrl+Shift+C/X/V copies, cuts, and pastes; Ctrl+C
+still quits. Cut removes text only after it reaches the clipboard. Pasting
+preserves note line breaks and flattens them in single-line fields.
+
+Use the installed Jobsdone launcher (`jobsdone-terminal`) for these shortcuts
+in Foot, Kitty, Alacritty, or Ghostty. Its app-specific terminal profiles also
+support Omarchy's Super+C/X/V shortcuts without changing normal terminal
+bindings. `JOBSDONE_TERMINAL=kitty jobsdone-terminal` selects a terminal
+explicitly. When running `jobsdone` directly in an ordinary terminal, that
+terminal may intercept copy shortcuts for its own selection; Alt+y copies the
+app's selection instead.
+
+On the notes page (`n`), `y` copies the selected note from the list. Alt+y
+copies the text selection while editing, or the whole note if nothing is
+selected. Clipboard access uses `wl-copy`/`wl-paste` (the `wl-clipboard`
+package) on Wayland, or `xclip` on X11.
 
 Notes mark possible US English spelling mistakes using Harper, entirely
 offline, with red squiggly underlines (straight underlines on terminals without

@@ -81,6 +81,9 @@ pub enum Flow {
     Continue,
     Quit,
     CopyNote(String),
+    CopySelection(String),
+    CutSelection(String),
+    ReadClipboard,
 }
 
 /// Which of the three pages the window is showing (DESIGN.md section 6).
@@ -1126,7 +1129,7 @@ impl App {
         }
     }
 
-    /// The single entry point for every event, ticks included.
+    /// Dispatches actions, including ticks. Paste payloads enter through `paste`.
     ///
     /// What an action leaves the open note saying is settled once, after
     /// it, rather than in each arm: a note is reached by typing in it,
@@ -1175,6 +1178,9 @@ impl App {
                     | Action::MouseDrag { .. }
                     | Action::MouseUp { .. }
                     | Action::CopyNote
+                    | Action::CopySelection
+                    | Action::CutSelection
+                    | Action::Paste
             )
         {
             self.selection_anchor = None;
@@ -1299,6 +1305,9 @@ impl App {
             Action::Focus => self.turn_focus_over(),
             Action::Delete => self.delete(),
             Action::CopyNote => return self.copy_note(),
+            Action::CopySelection => return self.copy_selection(false),
+            Action::CutSelection => return self.copy_selection(true),
+            Action::Paste => return Flow::ReadClipboard,
             Action::FixSpelling => self.offer_a_spelling(),
             Action::MoveDown => self.reorder(true),
             Action::MoveUp => self.reorder(false),
@@ -3028,6 +3037,68 @@ impl App {
             Ok(()) => self.say("Note copied", false),
             Err(message) => self.say(message, false),
         }
+    }
+
+    fn copy_selection(&self, cut: bool) -> Flow {
+        let Some(range) = self.selection() else {
+            return Flow::Continue;
+        };
+        let Some((text, _)) = self.active_text() else {
+            return Flow::Continue;
+        };
+        let selected = text[byte_at(text, range.start)..byte_at(text, range.end)].to_owned();
+        if cut {
+            Flow::CutSelection(selected)
+        } else {
+            Flow::CopySelection(selected)
+        }
+    }
+
+    pub fn copied_selection(&mut self, cut: bool, result: Result<(), String>) {
+        match result {
+            Ok(()) => {
+                if cut {
+                    self.erase_selection();
+                    self.check_the_spelling();
+                    self.follow_the_caret();
+                    self.say("Selection cut", false);
+                } else {
+                    self.say("Selection copied", false);
+                }
+            }
+            Err(message) => self.say(message, false),
+        }
+    }
+
+    pub fn paste(&mut self, result: Result<String, String>) {
+        let Ok(pasted) = result else {
+            self.say(result.unwrap_err(), false);
+            return;
+        };
+        if self.active_text().is_none() {
+            return;
+        }
+        let pasted = if self.draft.is_some()
+            && self.popup.is_none()
+            && self.editor.is_none()
+            && self.setting_draft.is_none()
+        {
+            pasted.replace("\r\n", "\n").replace('\r', "\n")
+        } else {
+            pasted.replace("\r\n", " ").replace(['\r', '\n'], " ")
+        };
+        if pasted.is_empty() {
+            return;
+        }
+        self.erase_selection();
+        if let Some((text, caret)) = self.field() {
+            let at = byte_at(text, *caret);
+            text.insert_str(at, &pasted);
+            *caret = glyphs(&text[..at + pasted.len()]);
+        }
+        self.after_typing();
+        self.check_the_spelling();
+        self.follow_the_caret();
     }
 
     /// The note a key on the cursor row acts on, or nothing and a reason.

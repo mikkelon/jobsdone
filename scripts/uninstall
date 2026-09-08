@@ -11,6 +11,12 @@ STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
 DESKTOP_FILE="$DATA_HOME/applications/jobsdone.desktop"
 ICON_FILE="$DATA_HOME/icons/hicolor/scalable/apps/jobsdone.svg"
 BINDINGS="$CONFIG_HOME/hypr/bindings.lua"
+LAUNCHER="$HOME/.local/bin/jobsdone-terminal"
+FOOT_CONFIG="$CONFIG_HOME/jobsdone/foot.ini"
+KITTY_CONFIG="$CONFIG_HOME/jobsdone/kitty.conf"
+ALACRITTY_CONFIG="$CONFIG_HOME/jobsdone/alacritty.toml"
+ALACRITTY_013_CONFIG="$CONFIG_HOME/jobsdone/alacritty-0.13.toml"
+GHOSTTY_CONFIG="$CONFIG_HOME/jobsdone/ghostty.conf"
 
 # The keybind is the install script's block and the window rule is the
 # program's own; some machines have a single block holding both.
@@ -49,6 +55,10 @@ fi
 rm -f "$DESKTOP_FILE" "$ICON_FILE"
 command -v update-desktop-database >/dev/null && update-desktop-database "$(dirname "$DESKTOP_FILE")" 2>/dev/null || true
 say "removed the launcher entry"
+
+rm -f "$LAUNCHER" "$FOOT_CONFIG" "$KITTY_CONFIG" "$ALACRITTY_CONFIG" "$ALACRITTY_013_CONFIG" "$GHOSTTY_CONFIG"
+rmdir "$(dirname "$FOOT_CONFIG")" 2>/dev/null || true
+say "removed the terminal launcher"
 
 if [ -f "$BINDINGS" ]; then
     removed=no
