@@ -51,13 +51,7 @@ const NOTES_DIVIDER: u16 = 44;
 /// is a fixed column beside it, the way the review's panel is.
 const ABOUT_SETTING: u16 = 40;
 
-/// The caret of a text field, which is a cell of its own rather than a
-/// terminal cursor, so that it sits where the text does.
-///
-/// A full block rather than a bar, because the cell is the caret's and
-/// nothing else is drawn in it: a bar leaves the rest of the cell empty,
-/// which reads as a gap in the line with a thin mark in it rather than
-/// as a caret sitting where the next character goes.
+/// A block for the caret when there is no character beneath it.
 const CARET: &str = "█";
 
 // ---- the meanings, as terminal colours -------------------------------
@@ -1781,9 +1775,8 @@ fn caret_line(canvas: &mut Canvas, x: u16, y: u16, width: u16, text: &str, caret
     let before = &text[..split];
     let after = &text[split..];
 
-    // The caret has a cell of its own, so the text before it has one
-    // fewer than the line.
-    let mut over = (count(before) + 1).saturating_sub(width);
+    let caret_width = after.graphemes(true).next().map_or(1, cells).max(1);
+    let mut over = (count(before) + caret_width).saturating_sub(width);
     let mut from = 0;
     for glyph in before.graphemes(true) {
         if over == 0 {
@@ -1794,8 +1787,17 @@ fn caret_line(canvas: &mut Canvas, x: u16, y: u16, width: u16, text: &str, caret
     }
 
     let at = canvas.put(x, y, &before[from..], plain());
-    let at = canvas.put(at, y, CARET, bold());
-    canvas.put(at, y, clip(after, (x + width).saturating_sub(at)), plain());
+    if after.is_empty() {
+        canvas.put(at, y, CARET, plain());
+    } else {
+        canvas.put(at, y, clip(after, (x + width).saturating_sub(at)), plain());
+        canvas.restyle(
+            at,
+            y,
+            caret_width.min(width),
+            Style::new().add_modifier(Modifier::REVERSED),
+        );
+    }
 }
 
 /// ` ↻  Write standup notes                     every work day`
@@ -1979,10 +1981,9 @@ fn open_note(
 /// One drawn line of a note: its characters, the words among them the
 /// checker did not know, and the caret where it falls on this line.
 ///
-/// The caret is a cell of its own between two characters, the way it is
-/// in a field, so the character it is in front of is still drawn and a
-/// wide one is not cut in half. `start` is the cluster of the body the
-/// line begins at, which is what the words are counted from.
+/// The caret reverses the character beneath it, including every cell of
+/// a wide cluster. `start` is the cluster of the body the line begins at,
+/// which is what the words are counted from.
 ///
 /// The words come in the order the body is drawn, so the line finds the
 /// first one that could reach it and then walks forward with the text: a
@@ -2001,9 +2002,6 @@ fn note_line(
     let mut at = x;
     let mut glyph = 0;
     for cluster in text.graphemes(true) {
-        if caret == Some(glyph) {
-            at = canvas.put(at, y, CARET, bold());
-        }
         let cluster_at = start + glyph;
         while misspellings
             .get(next)
@@ -2015,12 +2013,21 @@ fn note_line(
             Some(word) if word.start <= cluster_at => misspelt(),
             _ => plain(),
         };
-        at = canvas.put(at, y, cluster, style);
+        let style = if caret == Some(glyph) {
+            style.add_modifier(Modifier::REVERSED)
+        } else {
+            style
+        };
+        let end = canvas.put(at, y, cluster, style);
+        if caret == Some(glyph) {
+            canvas.restyle(at, y, cells(cluster), style);
+        }
+        at = end;
         glyph += 1;
     }
-    // A caret at the end of a line has no character to stand in front of.
+    // A caret at the end of a line occupies the blank after the text.
     if caret.is_some_and(|caret| caret >= glyph) {
-        canvas.put(at, y, CARET, bold());
+        canvas.put(at, y, CARET, plain());
     }
 }
 

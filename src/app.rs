@@ -4094,8 +4094,7 @@ impl App {
     ///
     /// The rows are read off the frame that was clicked on: the row the
     /// pane is scrolled to, plus the rows down the pointer was, and
-    /// within the row the cell, which is the caret's own cell and then
-    /// the characters after it one cell further along.
+    /// within the row the cell occupied by the character.
     fn point_at_the_note(&mut self, column: u16, row: u16) -> bool {
         let Some(area) = self.layout.note.filter(|note| note.area.holds(column, row)) else {
             return false;
@@ -4134,11 +4133,7 @@ impl App {
             // does in every other text area.
             (wrapping.end(), Affinity::default())
         } else {
-            // The caret already on that row has a cell of its own, which
-            // is only there while the note has the keyboard.
-            let drawn = (wrapping.row_of(draft.caret, draft.affinity) == clicked)
-                .then(|| wrapping.column_of(draft.caret, draft.affinity));
-            wrapping.pointed_at(clicked, column - area.area.x, drawn)
+            wrapping.caret_at(clicked, column - area.area.x)
         };
         draft.caret = caret;
         draft.affinity = affinity;

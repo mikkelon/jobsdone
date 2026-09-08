@@ -191,19 +191,6 @@ impl Wrapping {
         };
         (drawn.end(), affinity)
     }
-
-    /// The same for a click, which reads the row as it was drawn: the
-    /// caret already on that row has a cell of its own, so every
-    /// character after it stands one cell further along. `drawn` is the
-    /// cell that caret was drawn in, and none where the note is only
-    /// being looked at.
-    pub fn pointed_at(&self, row: usize, column: u16, drawn: Option<u16>) -> (usize, Affinity) {
-        let column = match drawn {
-            Some(drawn) if column > drawn => column - 1,
-            _ => column,
-        };
-        self.caret_at(row, column)
-    }
 }
 
 /// The first row on screen: the one the note was left showing, moved as

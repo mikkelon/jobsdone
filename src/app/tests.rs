@@ -2866,8 +2866,7 @@ fn a_click_reads_the_row_it_landed_on_as_it_was_drawn() {
     app.update(Action::NotesPage);
     note_saying(&mut app, "one two three four");
     note_pane(&mut app, 10, 10);
-    // The caret at the start of the second row has a cell of its own, so
-    // "three four" is drawn one cell along.
+    // The caret overlays the first character of the second row.
     app.update(Action::Up);
     app.update(Action::LineStart);
     app.update(Action::Down);
@@ -2878,7 +2877,7 @@ fn a_click_reads_the_row_it_landed_on_as_it_was_drawn() {
         column: 4 + 3,
         row: 10 + 1,
     });
-    assert_eq!(caret(&app), 10, "the character drawn in that cell");
+    assert_eq!(caret(&app), 11, "the character drawn in that cell");
 }
 
 #[test]
@@ -3048,14 +3047,13 @@ fn a_note_of_wide_characters_steps_and_is_clicked_by_cells() {
         "and the column it kept is past both of them"
     );
 
-    // The row is drawn as the first character, the caret, and the rest,
-    // so the fifth cell of it is the second character.
+    // The fifth cell belongs to the third character, regardless of the caret.
     app.update(Action::Up);
     app.update(Action::MouseDown {
         column: 4 + 4,
         row: 10,
     });
-    assert_eq!(caret(&app), 1);
+    assert_eq!(caret(&app), 2);
 }
 
 #[test]

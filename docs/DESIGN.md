@@ -344,8 +344,8 @@ when the caret would otherwise leave them, so `↑` from the end of a long
 note walks up the rows on screen before any of them moves, and a window
 that is resized keeps the caret in view rather than jumping the note
 somewhere else. The body is wrapped one column short of the pane, because
-the caret is a cell of its own rather than a mark under a character: that
-column is where a caret at the end of a full row goes.
+the caret at the end of a full row occupies that final column. Within
+the text, it reverses the character beneath it without shifting the text.
 
 `y` or `Alt+y` on the notes list copies the selected note's entire body.
 While editing, `Alt+y` copies the current text, including unsaved typing,
@@ -368,7 +368,8 @@ While editing a note, `Alt+s` opens spelling suggestions for the word at the
 caret (including its end). The picker uses arrow keys to select, `Enter` to
 replace that word, and `Escape` to cancel. Suggestions are computed only on
 request. Explicit replacements follow normal note autosave. All text-input
-carets use a full block, matching the terminal cell they occupy.
+carets reverse the character beneath them, or use a full block at the end
+of the text.
 
 The last row of the spelling card is **Add to dictionary**, below a separator.
 Arrow navigation wraps: `↑` from the first suggestion reaches that action in

@@ -446,7 +446,7 @@ adds it here first, the way a new dependency is added to section 2 first.
   three different pictures of the same body. `Wrapping::of(body, width)`
   breaks the body into `Row`s at a width in cells, each row carrying the
   cluster of the body it starts at and whether the row after it carries
-  on the same line; `row_of`, `column_of`, `caret_at` and `pointed_at`
+  on the same line; `row_of`, `column_of` and `caret_at`
   cross between a caret in clusters and a cell of a row, and `viewport`
   is how far the note is scrolled. `Affinity` is which of the two rows a
   caret sitting exactly on a wrap the pane made is on, which only the way

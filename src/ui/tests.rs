@@ -2101,7 +2101,7 @@ fn a_note_of_wide_characters_wraps_and_puts_its_caret_by_cells() {
         .find(|row| row.contains("日本語"))
         .expect("the body");
 
-    assert!(row.contains("日本語█です"), "{row:?}");
+    assert!(row.contains("日本語です"), "{row:?}");
 }
 
 #[test]
@@ -2113,12 +2113,9 @@ fn a_field_of_wide_characters_puts_its_caret_where_the_cells_end() {
     }
     app.update(Action::Left);
 
-    let row = glyphs(&app, 120, 36)
-        .into_iter()
-        .find(|row| row.contains('█'))
-        .expect("the field");
+    let row = typing(&app);
 
-    assert!(row.contains("日本🙂█語"), "{row:?}");
+    assert!(row.contains("日本🙂語"), "{row:?}");
 }
 
 #[test]
@@ -2200,20 +2197,14 @@ fn a_field_longer_than_its_line_scrolls_to_keep_the_caret_on_it() {
         app.update(Action::Insert(typed));
     }
 
-    let field = look(&app, 120, 36)
-        .into_iter()
-        .find(|row| row.contains('█'))
-        .expect("the add field");
+    let field = typing(&app);
     assert!(field.contains("going END█"), "the end of it: {field:?}");
     assert!(!field.contains("The quick"), "and not the start: {field:?}");
 
     // Back to the beginning, and the line comes with it.
     app.update(Action::LineStart);
-    let field = look(&app, 120, 36)
-        .into_iter()
-        .find(|row| row.contains('█'))
-        .expect("the add field");
-    assert!(field.contains("█The quick brown fox"), "{field:?}");
+    let field = typing(&app);
+    assert!(field.contains("The quick brown fox"), "{field:?}");
 }
 
 /// An empty group is not drawn, and the add line is not a row of Plan:
@@ -2469,10 +2460,20 @@ const CLUSTERS: &str = "cafe\u{301} \u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\
 
 /// The one row of the screen a caret is on.
 fn typing(app: &App) -> String {
-    glyphs(app, 120, 36)
-        .into_iter()
-        .find(|row| row.contains('█'))
-        .expect("the line being typed")
+    let mut terminal = Terminal::new(TestBackend::new(120, 36)).expect("a test terminal");
+    terminal
+        .draw(|frame| _ = draw(app, frame))
+        .expect("a frame");
+    let buffer = terminal.backend().buffer();
+    let row = (0..36)
+        .find(|&y| (0..120).any(|x| buffer[(x, y)].symbol() == CARET))
+        .or_else(|| {
+            (0..36)
+                .rev()
+                .find(|&y| (0..120).any(|x| buffer[(x, y)].modifier.contains(Modifier::REVERSED)))
+        })
+        .expect("the line being typed");
+    glyphs(app, 120, 36).remove(usize::from(row))
 }
 
 /// Every field was edited a character at a time, so the accent of a
@@ -2496,14 +2497,14 @@ fn a_title_of_clusters_keeps_its_marks_and_steps_over_them_whole() {
     app.update(Action::Left);
     assert!(
         typing(&app)
-            .contains("cafe\u{301} █\u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}"),
+            .contains("cafe\u{301} \u{1F468}\u{200D}\u{1F469}\u{200D}\u{1F467}\u{200D}\u{1F466}"),
         "the caret in front of the family: {:?}",
         typing(&app)
     );
     app.update(Action::Left);
     app.update(Action::Insert('X'));
     assert!(
-        typing(&app).contains("cafe\u{301}X█ \u{1F468}\u{200D}"),
+        typing(&app).contains("cafe\u{301}X \u{1F468}\u{200D}"),
         "a letter beside the accent, which keeps it: {:?}",
         typing(&app)
     );
@@ -2553,7 +2554,7 @@ fn a_query_of_clusters_finds_the_row_it_is_stored_in() {
     app.update(Action::Left);
     app.update(Action::Insert('X'));
     assert!(
-        typing(&app).contains("cafe\u{301} X█\u{1F468}\u{200D}"),
+        typing(&app).contains("cafe\u{301} X\u{1F468}\u{200D}"),
         "a letter typed in front of the family: {:?}",
         typing(&app)
     );
@@ -2583,7 +2584,7 @@ fn a_note_of_clusters_wraps_and_saves_them_whole() {
     app.update(Action::Left);
     app.update(Action::Insert('X'));
     assert!(
-        typing(&app).contains("cafe\u{301}X█ \u{1F468}\u{200D}"),
+        typing(&app).contains("cafe\u{301}X \u{1F468}\u{200D}"),
         "a letter beside the accent: {:?}",
         typing(&app)
     );
@@ -2957,7 +2958,7 @@ fn a_wide_character_before_a_word_does_not_shift_its_underline() {
 }
 
 #[test]
-fn the_caret_keeps_its_cell_beside_a_word_that_is_underlined() {
+fn the_caret_reverses_its_character_beside_a_word_that_is_underlined() {
     // The caret is left two characters into "meeting", so the word it is
     // in is the one held back and the word before it is marked.
     let mut app = spelling_app();
@@ -2977,20 +2978,21 @@ fn the_caret_keeps_its_cell_beside_a_word_that_is_underlined() {
 
     let row = glyphs(&app, 120, 36)
         .into_iter()
-        .find(|row| row.contains("remember teh me█eting"))
-        .expect("the caret between the two characters");
-    assert!(row.contains("remember teh me\u{2588}eting"));
+        .find(|row| row.contains("remember teh meeting"))
+        .expect("the text beneath the caret");
+    assert!(row.contains("remember teh meeting"));
 
     let (at, cells) = drawn_at(buffer, "teh");
     assert!(all_underlined(buffer, at, &cells), "the finished word");
-    let (_, caret) = drawn_at(buffer, "\u{2588}");
+    let (_, word) = drawn_at(buffer, "meeting");
+    let caret = [word[2]];
     assert!(
         !any_underlined(buffer, at, &caret),
-        "the caret is a cell of the field, not of the word"
+        "the active word has no underline"
     );
     assert!(
-        buffer[(caret[0], at)].modifier.contains(Modifier::BOLD),
-        "and keeps the weight it is drawn in"
+        buffer[(caret[0], at)].modifier.contains(Modifier::REVERSED),
+        "the character beneath the caret is reversed"
     );
 }
 
@@ -3380,9 +3382,7 @@ fn the_open_note_names_the_key_that_fixes_a_spelling() {
 }
 
 #[test]
-fn the_caret_fills_the_cell_it_has_wherever_it_is_drawn() {
-    // A field on a task row and the body of a note are the two places a
-    // caret is drawn, and in both the cell is the caret's alone.
+fn the_caret_fills_a_blank_cell_at_the_end_of_fields_and_notes() {
     let mut app = empty();
     app.update(Action::Add);
     let drawn = glyphs(&app, 120, 36);
@@ -3454,11 +3454,10 @@ fn a_line_as_long_as_the_body_keeps_its_last_character_and_its_caret_on_screen()
     );
     assert_eq!(look(&app, 120, 36)[5].chars().count(), 120);
 
-    // And with the caret at the start of the row, the cell it takes does
-    // not push the last character off the window.
+    // Moving the caret within the text preserves every character column.
     app.update(Action::LineStart);
     let row = body_rows(&app, 120, 36).remove(0);
-    assert_eq!(row, format!("\u{2588}{}", "x".repeat(wide as usize)));
+    assert_eq!(row, "x".repeat(wide as usize));
 }
 
 #[test]
@@ -3549,4 +3548,43 @@ fn a_window_that_collapses_to_one_tab_takes_the_body_and_the_mouse_with_it() {
         row: narrow.y,
     });
     assert_eq!(app.draft().expect("the open note").caret, 3);
+}
+
+#[test]
+fn moving_the_caret_preserves_character_columns_in_fields_and_notes() {
+    let text = "ab日本e\u{301}🙂z";
+    for note in [false, true] {
+        let mut app = empty();
+        if note {
+            app.update(Action::NotesPage);
+        }
+        app.update(Action::Add);
+        for ch in text.chars() {
+            app.update(Action::Insert(ch));
+        }
+        app.update(Action::LineStart);
+        let mut terminal = Terminal::new(TestBackend::new(120, 36)).expect("a terminal");
+        let mut origin = None;
+        let mut column = 0;
+        for cluster in text.graphemes(true) {
+            terminal
+                .draw(|frame| _ = draw(&app, frame))
+                .expect("a frame");
+            let buffer = terminal.backend().buffer();
+            let (y, positions) = drawn_from(buffer, text, if note { NOTES_DIVIDER } else { 0 });
+            let position = (positions[0], y);
+            assert_eq!(*origin.get_or_insert(position), position);
+            let x = positions[0] + column;
+            assert_eq!(buffer[(x, y)].symbol(), cluster);
+            assert!(
+                buffer[(x, y)].modifier.contains(Modifier::REVERSED),
+                "note={note}, cluster={cluster:?}"
+            );
+            if column > 0 {
+                assert!(!buffer[(x - 1, y)].modifier.contains(Modifier::REVERSED));
+            }
+            column += cells(cluster);
+            app.update(Action::Right);
+        }
+    }
 }

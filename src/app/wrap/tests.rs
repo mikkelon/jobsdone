@@ -122,27 +122,6 @@ fn a_cell_of_a_row_is_the_character_drawn_in_it() {
 }
 
 #[test]
-fn a_click_reads_the_row_the_caret_was_drawn_on_as_it_was_drawn() {
-    let wrapping = Wrapping::of("hello there world", 8);
-    // With the caret at the start of the row, "there" is drawn from the
-    // second cell on, so the cell of the "h" is the third.
-    assert_eq!(
-        wrapping.pointed_at(1, 2, Some(0)),
-        (7, Affinity::AfterTheBreak)
-    );
-    // The caret's own cell points at the character it stands in front of.
-    assert_eq!(
-        wrapping.pointed_at(1, 0, Some(0)),
-        (6, Affinity::AfterTheBreak)
-    );
-    // With no caret drawn on the row, the cells are the characters'.
-    assert_eq!(
-        wrapping.pointed_at(1, 2, None),
-        (8, Affinity::AfterTheBreak)
-    );
-}
-
-#[test]
 fn the_rows_on_screen_stay_where_they_are_while_the_caret_is_among_them() {
     // Twenty rows in a window ten high, showing rows five to fourteen.
     assert_eq!(viewport(5, 14, 20, 10), 5);
