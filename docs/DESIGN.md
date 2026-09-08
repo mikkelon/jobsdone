@@ -168,6 +168,16 @@ Conventions, so the map is guessable:
   palette, so it teaches the map and then stops being needed. Help is the
   whole map on one overlay. There are no hidden keys.
 
+### Text selection
+
+Every editable field supports mouse dragging and Shift+arrow selection.
+Ctrl+Shift+Left/Right selects by word, Shift+Home/End selects to the line
+edge, and Ctrl+A selects the whole field. In notes, vertical selection
+follows the wrapped rows and scrolls with the caret. Selected characters
+use reverse video. Typing or pasting replaces the selection; Backspace
+and Delete remove it. Left/Right collapses it to the corresponding edge.
+Alt+y copies selected text from any field. Ctrl+C retains its quit action.
+
 ## 5. The day is home; the review is a mode, not a place
 
 The main screen is today's plan beside the backlog, because the core loop is
@@ -348,7 +358,8 @@ the caret at the end of a full row occupies that final column. Within
 the text, it reverses the character beneath it without shifting the text.
 
 `y` or `Alt+y` on the notes list copies the selected note's entire body.
-While editing, `Alt+y` copies the current text, including unsaved typing,
+While editing, `Alt+y` copies the selection, or the whole current text
+when nothing is selected, including unsaved typing,
 without moving the caret or scroll position; plain `y` still types.
 The hint bar names the shortcut and briefly says "Note copied" after
 success, or explains a clipboard failure. The list's command palette

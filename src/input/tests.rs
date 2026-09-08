@@ -805,3 +805,51 @@ fn control_arrows_move_by_word_in_every_text_context_only() {
         }
     }
 }
+
+#[test]
+fn shifted_navigation_selects_in_every_text_context() {
+    let contexts = [
+        writing(Field::Adding),
+        writing(Field::Renaming),
+        field(PopupKind::Search),
+        field(PopupKind::Palette),
+        field(PopupKind::Date),
+        field(PopupKind::Dictionary),
+        KeyContext::Settings { field: true },
+        KeyContext::Notes {
+            pane: NotesPane::Note,
+            text_field: true,
+        },
+        KeyContext::Review {
+            step: ReviewStep::Pile,
+            asks: true,
+            text_field: true,
+        },
+    ];
+    for context in contexts {
+        for (code, modifiers, action) in [
+            (KeyCode::Left, KeyModifiers::SHIFT, Action::SelectLeft),
+            (KeyCode::Right, KeyModifiers::SHIFT, Action::SelectRight),
+            (KeyCode::Up, KeyModifiers::SHIFT, Action::SelectUp),
+            (KeyCode::Down, KeyModifiers::SHIFT, Action::SelectDown),
+            (KeyCode::Home, KeyModifiers::SHIFT, Action::SelectStart),
+            (KeyCode::End, KeyModifiers::SHIFT, Action::SelectEnd),
+            (
+                KeyCode::Left,
+                KeyModifiers::SHIFT | KeyModifiers::CONTROL,
+                Action::SelectWordLeft,
+            ),
+            (
+                KeyCode::Right,
+                KeyModifiers::SHIFT | KeyModifiers::CONTROL,
+                Action::SelectWordRight,
+            ),
+            (KeyCode::Char('a'), KeyModifiers::CONTROL, Action::SelectAll),
+        ] {
+            assert_eq!(
+                action_for(&Event::Key(KeyEvent::new(code, modifiers)), context),
+                Some(action)
+            );
+        }
+    }
+}

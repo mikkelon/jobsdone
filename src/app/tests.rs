@@ -3786,6 +3786,7 @@ fn a_click_outside_any_row_still_moves_the_keyboard_to_that_pane() {
     add(&mut app, "Clean out the garage");
     app.update(Action::PaneLeft);
     app.set_layout(Layout {
+        text_cells: Vec::new(),
         narrow: false,
         lists: vec![ListArea {
             list: List::Backlog,
@@ -3863,6 +3864,7 @@ fn dragging_a_row_carries_it_the_way_the_keys_do() {
         })
         .collect();
     app.set_layout(Layout {
+        text_cells: Vec::new(),
         narrow: false,
         lists: vec![ListArea {
             list: List::Day,

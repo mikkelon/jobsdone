@@ -537,6 +537,8 @@ fn one_row(width: u16, row: &domain::Row, look: Look) -> String {
     let area = Rect::new(0, 0, width, 1);
     let mut buffer = Buffer::empty(area);
     let mut canvas = Canvas {
+        selection: None,
+        text_cells: Vec::new(),
         buffer: &mut buffer,
         area,
     };
@@ -3586,5 +3588,112 @@ fn moving_the_caret_preserves_character_columns_in_fields_and_notes() {
             column += cells(cluster);
             app.update(Action::Right);
         }
+    }
+}
+
+#[test]
+fn note_selection_spans_rows_and_replaces_whole_graphemes() {
+    let mut app = note_open("ab\ne\u{301}界z", 120, 36);
+    app.update(Action::LineStart);
+    app.update(Action::SelectRight);
+    app.update(Action::SelectRight);
+    assert_eq!(app.selection(), Some(3..5));
+    assert_eq!(
+        app.update(Action::CopyNote),
+        crate::app::Flow::CopyNote("e\u{301}界".into())
+    );
+    app.update(Action::Insert('X'));
+    assert_eq!(app.draft().unwrap().text, "ab\nXz");
+    app.update(Action::SelectUp);
+    assert_eq!(app.selection(), Some(1..4));
+    app.update(Action::Backspace);
+    assert_eq!(app.draft().unwrap().text, "az");
+}
+
+#[test]
+fn dragging_in_a_note_selects_and_highlights_the_text() {
+    let mut app = note_open("abcdef", 120, 36);
+    let area = app.layout().note.unwrap().area;
+    app.update(Action::MouseDown {
+        column: area.x + 1,
+        row: area.y,
+    });
+    app.update(Action::MouseDrag {
+        column: area.x + 4,
+        row: area.y,
+    });
+    app.update(Action::MouseUp {
+        column: area.x + 4,
+        row: area.y,
+    });
+    assert_eq!(app.selection(), Some(1..4));
+    let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(120, 36)).unwrap();
+    terminal
+        .draw(|frame| {
+            draw(&app, frame);
+        })
+        .unwrap();
+    for x in area.x + 1..area.x + 4 {
+        assert!(
+            terminal.backend().buffer()[(x, area.y)]
+                .modifier
+                .contains(Modifier::REVERSED)
+        );
+    }
+    app.update(Action::Right);
+    assert_eq!(app.selection(), None);
+    assert_eq!(app.draft().unwrap().caret, 4);
+}
+
+#[test]
+fn mouse_and_keyboard_selection_work_in_title_and_popup_fields() {
+    for popup in [false, true] {
+        let mut app = empty();
+        app.update(if popup { Action::Search } else { Action::Add });
+        for ch in "abc界def".chars() {
+            app.update(Action::Insert(ch));
+        }
+        let (_, layout) = screen(&app, 120, 36);
+        let start = layout
+            .text_cells
+            .iter()
+            .find(|(_, _, caret)| *caret == 1)
+            .copied()
+            .unwrap();
+        let end = layout
+            .text_cells
+            .iter()
+            .find(|(_, _, caret)| *caret == 4)
+            .copied()
+            .unwrap();
+        app.set_layout(layout);
+        app.update(Action::MouseDown {
+            column: start.0,
+            row: start.1,
+        });
+        app.update(Action::MouseDrag {
+            column: end.0,
+            row: end.1,
+        });
+        app.update(Action::MouseUp {
+            column: end.0,
+            row: end.1,
+        });
+        assert_eq!(app.selection(), Some(1..4));
+        app.update(Action::Insert('X'));
+        let text = if popup {
+            &app.popup().unwrap().text
+        } else {
+            &app.editor().unwrap().text
+        };
+        assert_eq!(text, "aXdef");
+        app.update(Action::SelectAll);
+        app.update(Action::DeleteForward);
+        let text = if popup {
+            &app.popup().unwrap().text
+        } else {
+            &app.editor().unwrap().text
+        };
+        assert_eq!(text, "");
     }
 }

@@ -224,6 +224,15 @@ pub enum Action {
     WordRight,
     LineStart,
     LineEnd,
+    SelectLeft,
+    SelectRight,
+    SelectUp,
+    SelectDown,
+    SelectWordLeft,
+    SelectWordRight,
+    SelectStart,
+    SelectEnd,
+    SelectAll,
 
     // The mouse, in cell coordinates.
     MouseDown {
@@ -2186,11 +2195,28 @@ fn key_name(key: &KeyEvent) -> Option<String> {
 /// The keys that move and change a caret. They are the text field itself
 /// rather than a row of the table, so they are never in the hint bar.
 fn editing(key: &KeyEvent) -> Option<Action> {
+    if key.modifiers == KeyModifiers::ALT && key.code == KeyCode::Char('y') {
+        return Some(Action::CopyNote);
+    }
     if key.modifiers.contains(KeyModifiers::ALT) {
         return None;
     }
+    if key.modifiers.contains(KeyModifiers::SHIFT) {
+        return match (key.code, key.modifiers.contains(KeyModifiers::CONTROL)) {
+            (KeyCode::Left, true) => Some(Action::SelectWordLeft),
+            (KeyCode::Right, true) => Some(Action::SelectWordRight),
+            (KeyCode::Left, false) => Some(Action::SelectLeft),
+            (KeyCode::Right, false) => Some(Action::SelectRight),
+            (KeyCode::Up, false) => Some(Action::SelectUp),
+            (KeyCode::Down, false) => Some(Action::SelectDown),
+            (KeyCode::Home, false) => Some(Action::SelectStart),
+            (KeyCode::End, false) => Some(Action::SelectEnd),
+            _ => None,
+        };
+    }
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         return match key.code {
+            KeyCode::Char('a') => Some(Action::SelectAll),
             KeyCode::Left => Some(Action::WordLeft),
             KeyCode::Right => Some(Action::WordRight),
             _ => None,

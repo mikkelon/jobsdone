@@ -935,6 +935,8 @@ pub struct Layout {
     /// Whether the window was too narrow for two panes and collapsed to
     /// tabs.
     pub narrow: bool,
+    /// Visible field cells as (column, row, grapheme offset).
+    pub text_cells: Vec<(u16, u16, usize)>,
     pub lists: Vec<ListArea>,
     pub rows: Vec<RowArea>,
     /// The body of the note on screen, when there is one.
@@ -1020,6 +1022,8 @@ pub struct App {
     /// key. Application state, like the title being typed (DOMAIN.md
     /// section 18).
     moving: Option<Id>,
+    selection_anchor: Option<usize>,
+    selecting_mouse: bool,
     /// The row the mouse took hold of, while it holds it.
     dragging: Option<(List, RowId)>,
     /// Whether the window manager still has to be told what the window
@@ -1080,6 +1084,8 @@ impl App {
             message: None,
             cursors: Cursors::default(),
             moving: None,
+            selection_anchor: None,
+            selecting_mouse: false,
             dragging: None,
             window_owed: false,
             quit_refused: false,
@@ -1128,6 +1134,51 @@ impl App {
     /// a reload on a tick, and by the setting being turned off, and
     /// several of the arms in front of that return early.
     pub fn update(&mut self, action: Action) -> Flow {
+        let selecting = matches!(
+            action,
+            Action::SelectLeft
+                | Action::SelectRight
+                | Action::SelectUp
+                | Action::SelectDown
+                | Action::SelectWordLeft
+                | Action::SelectWordRight
+                | Action::SelectStart
+                | Action::SelectEnd
+                | Action::SelectAll
+        );
+        if selecting && self.selection_anchor.is_none() {
+            self.selection_anchor = self.active_text().map(|(_, caret)| caret);
+        }
+        let mut action = action;
+        if matches!(action, Action::Left | Action::Right) && self.selection().is_some() {
+            let range = self.selection().unwrap();
+            self.set_caret(if action == Action::Left {
+                range.start
+            } else {
+                range.end
+            });
+            self.selection_anchor = None;
+            action = Action::Resize;
+        } else if matches!(
+            action,
+            Action::Insert(_) | Action::Backspace | Action::DeleteForward
+        ) {
+            if self.erase_selection() && !matches!(action, Action::Insert(_)) {
+                action = Action::Resize;
+            }
+        } else if !selecting
+            && !matches!(
+                action,
+                Action::Tick
+                    | Action::Resize
+                    | Action::FocusGained
+                    | Action::MouseDrag { .. }
+                    | Action::MouseUp { .. }
+                    | Action::CopyNote
+            )
+        {
+            self.selection_anchor = None;
+        }
         let flow = self.dispatch(action);
         // A window being closed has no next redraw to check a note for.
         if flow != Flow::Quit {
@@ -1306,6 +1357,27 @@ impl App {
                     self.move_caret(true);
                 }
             }
+            Action::SelectLeft => self.move_caret(false),
+            Action::SelectRight => self.move_caret(true),
+            Action::SelectWordLeft => self.move_by_word(false),
+            Action::SelectWordRight => self.move_by_word(true),
+            Action::SelectUp | Action::SelectDown => {
+                if self.popup.is_none() && self.draft.is_some() {
+                    self.step_the_caret(action == Action::SelectDown);
+                } else {
+                    self.set_caret(if action == Action::SelectDown {
+                        usize::MAX
+                    } else {
+                        0
+                    });
+                }
+            }
+            Action::SelectStart => self.jump_to_the_edge(false),
+            Action::SelectEnd => self.jump_to_the_edge(true),
+            Action::SelectAll => {
+                self.selection_anchor = Some(0);
+                self.set_caret(usize::MAX);
+            }
             Action::LineStart => self.jump_to_the_edge(false),
             Action::LineEnd => self.jump_to_the_edge(true),
             Action::WordLeft => self.move_by_word(false),
@@ -1313,7 +1385,10 @@ impl App {
 
             Action::MouseDown { column, row } => self.point_at(column, row),
             Action::MouseDrag { column, row } => self.drag_to(column, row),
-            Action::MouseUp { .. } => self.dragging = None,
+            Action::MouseUp { .. } => {
+                self.dragging = None;
+                self.selecting_mouse = false;
+            }
             Action::Scroll { down, .. } => self.step(down),
         }
         Flow::Continue
@@ -2924,8 +2999,15 @@ impl App {
 
     // ---- the notes page ----------------------------------------------
 
-    /// Copy the live draft without moving its caret or waiting for a save.
+    /// Copy selected text, or the live note when there is no selection.
     fn copy_note(&mut self) -> Flow {
+        if let Some(range) = self.selection()
+            && let Some((text, _)) = self.active_text()
+        {
+            return Flow::CopyNote(
+                text[byte_at(text, range.start)..byte_at(text, range.end)].to_owned(),
+            );
+        }
         if self.page != Page::Notes {
             return Flow::Continue;
         }
@@ -4072,10 +4154,19 @@ impl App {
     /// keyboard to that pane. A click on a pane's empty space moves the
     /// keyboard and leaves the cursor where it was.
     fn point_at(&mut self, column: u16, row: u16) {
+        self.dragging = None;
+        self.selecting_mouse = false;
+        if self.point_at_field(column, row, false) {
+            self.selection_anchor = self.active_text().map(|(_, caret)| caret);
+            self.selecting_mouse = true;
+            return;
+        }
         if self.popup.is_some() || self.editor.is_some() {
             return;
         }
         if self.point_at_the_note(column, row) {
+            self.selection_anchor = self.active_text().map(|(_, caret)| caret);
+            self.selecting_mouse = true;
             return;
         }
         let Some(list) = self.layout.list_at(column, row) else {
@@ -4146,6 +4237,25 @@ impl App {
     /// button comes up. Nothing is only reachable by mouse: this is the
     /// same command `J` and `K` send.
     fn drag_to(&mut self, column: u16, row: u16) {
+        if self.selecting_mouse {
+            if !self.point_at_field(column, row, true)
+                && self.popup.is_none()
+                && let Some(note) = self.layout.note
+            {
+                let x = column.clamp(note.area.x, note.area.x + note.area.width.saturating_sub(1));
+                let y = row.clamp(
+                    note.area.y,
+                    note.area.y + note.area.height.saturating_sub(1),
+                );
+                self.point_at_the_note(x, y);
+                if row < note.area.y {
+                    self.step_the_caret(false);
+                } else if row >= note.area.y + note.area.height {
+                    self.step_the_caret(true);
+                }
+            }
+            return;
+        }
         let Some((list, task)) = self.dragging else {
             return;
         };
@@ -4370,6 +4480,63 @@ impl App {
         }
     }
 
+    fn active_text(&self) -> Option<(&str, usize)> {
+        if !self.key_context().text_field() {
+            return None;
+        }
+        if let Some(popup) = &self.popup {
+            return Some((&popup.text, popup.caret));
+        }
+        if let Some(editor) = &self.editor {
+            return Some((&editor.text, editor.caret));
+        }
+        if let Some(draft) = &self.setting_draft {
+            return Some((&draft.text, draft.caret));
+        }
+        self.draft
+            .as_ref()
+            .map(|draft| (draft.text.as_str(), draft.caret))
+    }
+
+    pub fn selection(&self) -> Option<Range<usize>> {
+        let (text, caret) = self.active_text()?;
+        let anchor = self.selection_anchor?.min(glyphs(text));
+        (anchor != caret).then_some(anchor.min(caret)..anchor.max(caret))
+    }
+
+    fn erase_selection(&mut self) -> bool {
+        let range = self.selection();
+        self.selection_anchor = None;
+        let Some(range) = range else {
+            return false;
+        };
+        if let Some((text, caret)) = self.field() {
+            text.replace_range(byte_at(text, range.start)..byte_at(text, range.end), "");
+            *caret = range.start;
+        }
+        self.after_typing();
+        true
+    }
+
+    fn point_at_field(&mut self, column: u16, row: u16, dragging: bool) -> bool {
+        let cells = &self.layout.text_cells;
+        let hit = if dragging {
+            cells
+                .iter()
+                .min_by_key(|(x, y, _)| (y.abs_diff(row), x.abs_diff(column)))
+        } else {
+            cells.iter().find(|(x, y, _)| *x == column && *y == row)
+        };
+        let Some((_, _, caret)) = hit.copied() else {
+            return false;
+        };
+        if self.active_text().is_none() {
+            return false;
+        }
+        self.set_caret(caret);
+        true
+    }
+
     /// The text field with the keyboard: the one in a popup that is typed
     /// into, the field on a row, or the open note.
     ///
@@ -4477,7 +4644,7 @@ impl App {
     /// wrapped has as many of them as it has rows, which is what the
     /// writer sees.
     fn jump_to_the_edge(&mut self, end: bool) {
-        let Some((wrapping, _)) = self.note_on_screen() else {
+        let Some((wrapping, _)) = self.note_on_screen().filter(|_| self.popup.is_none()) else {
             self.set_caret(if end { usize::MAX } else { 0 });
             return;
         };

@@ -102,6 +102,8 @@ fn cursor() -> Style {
 /// Writing a cell resets it first, so a popup drawn over a pane takes none
 /// of the pane's weight with it.
 struct Canvas<'a> {
+    selection: Option<Range<usize>>,
+    text_cells: Vec<(u16, u16, usize)>,
     buffer: &'a mut Buffer,
     area: Rect,
 }
@@ -408,6 +410,8 @@ struct Rows {
 pub fn draw(app: &App, frame: &mut Frame) -> Layout {
     let area = frame.area();
     let mut canvas = Canvas {
+        selection: app.selection().filter(|_| app.popup().is_none()),
+        text_cells: Vec::new(),
         buffer: frame.buffer_mut(),
         area,
     };
@@ -449,7 +453,12 @@ pub fn draw(app: &App, frame: &mut Frame) -> Layout {
         two_panes(&mut canvas, app, &rows, &mut layout);
     }
 
+    if app.popup().is_some() {
+        canvas.text_cells.clear();
+        canvas.selection = app.selection();
+    }
     popup::draw(&mut canvas, app, &rows);
+    layout.text_cells = canvas.text_cells;
     layout
 }
 
@@ -1786,17 +1795,36 @@ fn caret_line(canvas: &mut Canvas, x: u16, y: u16, width: u16, text: &str, caret
         from += glyph.len();
     }
 
-    let at = canvas.put(x, y, &before[from..], plain());
+    let mut at = x;
+    let first = text[..from].graphemes(true).count();
+    let mut index = first;
+    for cluster in text[from..].graphemes(true) {
+        let width_of_cluster = cells(cluster);
+        if at + width_of_cluster > x + width {
+            break;
+        }
+        let selected = canvas
+            .selection
+            .as_ref()
+            .is_some_and(|range| range.contains(&index));
+        let style = if selected || index == caret {
+            plain().add_modifier(Modifier::REVERSED)
+        } else {
+            plain()
+        };
+        canvas.put(at, y, cluster, style);
+        canvas.restyle(at, y, width_of_cluster, style);
+        for column in at..at + width_of_cluster {
+            canvas.text_cells.push((column, y, index));
+        }
+        at += width_of_cluster;
+        index += 1;
+    }
     if after.is_empty() {
         canvas.put(at, y, CARET, plain());
-    } else {
-        canvas.put(at, y, clip(after, (x + width).saturating_sub(at)), plain());
-        canvas.restyle(
-            at,
-            y,
-            caret_width.min(width),
-            Style::new().add_modifier(Modifier::REVERSED),
-        );
+    }
+    for column in at..x + width {
+        canvas.text_cells.push((column, y, index));
     }
 }
 
@@ -2013,13 +2041,17 @@ fn note_line(
             Some(word) if word.start <= cluster_at => misspelt(),
             _ => plain(),
         };
-        let style = if caret == Some(glyph) {
+        let selected = canvas
+            .selection
+            .as_ref()
+            .is_some_and(|range| range.contains(&cluster_at));
+        let style = if caret == Some(glyph) || selected {
             style.add_modifier(Modifier::REVERSED)
         } else {
             style
         };
         let end = canvas.put(at, y, cluster, style);
-        if caret == Some(glyph) {
+        if caret == Some(glyph) || selected {
             canvas.restyle(at, y, cells(cluster), style);
         }
         at = end;
