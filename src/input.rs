@@ -934,8 +934,8 @@ const NOTES_NOTE: &[Binding] = &[
 
 const REVIEW_PILE: &[Binding] = &[
     Binding {
-        keys: &[("d", Action::Close)],
-        shown: "d",
+        keys: &[("space", Action::Close)],
+        shown: "space",
         label: "done",
         bar: Bar::Left,
         narrow: Bar::Left,
