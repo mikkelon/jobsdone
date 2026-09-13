@@ -1,0 +1,43 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+if [ "$#" -ne 3 ]; then
+    echo 'usage: scripts/package-release TARGET BINARY OUTPUT_DIRECTORY' >&2
+    exit 2
+fi
+target="$1"
+binary="$(realpath "$2")"
+mkdir -p "$3"
+output="$(realpath "$3")"
+case "$target" in
+    x86_64-unknown-linux-musl | aarch64-unknown-linux-musl) ;;
+    *) echo "unsupported release target: $target" >&2; exit 2 ;;
+esac
+version="$(sed -n 's/^version = "\([^"]*\)"$/\1/p' "$root/Cargo.toml" | head -n 1)"
+[[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || exit 2
+if [ -n "${RELEASE_TAG:-}" ] && [ "$RELEASE_TAG" != "v$version" ]; then
+    echo "release tag $RELEASE_TAG does not match Cargo version $version" >&2
+    exit 2
+fi
+[ "$("$binary" --version)" = "jobsdone $version" ]
+readelf -h "$binary" > /dev/null
+case "$target" in
+    x86_64-*) readelf -h "$binary" | grep -q 'Machine:.*X86-64' ;;
+    aarch64-*) readelf -h "$binary" | grep -q 'Machine:.*AArch64' ;;
+esac
+if readelf -l "$binary" | grep -q INTERP || readelf -d "$binary" | grep -q NEEDED; then
+    echo 'release binary must be statically linked' >&2
+    exit 1
+fi
+stage="$(mktemp -d)"
+trap 'rm -rf "$stage"' EXIT
+name="jobsdone-v$version-$target"
+mkdir -p "$stage/$name/scripts" "$stage/$name/assets"
+install -m755 "$binary" "$stage/$name/jobsdone"
+install -m755 "$root/scripts/"{install,uninstall,launch-terminal,install-release} "$stage/$name/scripts/"
+install -m644 "$root/assets/jobsdone.svg" "$stage/$name/assets/"
+install -m644 "$root/LICENSE" "$root/README.md" "$stage/$name/"
+tar -czf "$output/$name.tar.gz" -C "$stage" "$name"
+(cd "$output" && sha256sum "$name.tar.gz" > "$name.tar.gz.sha256")
+echo "$output/$name.tar.gz"

@@ -145,9 +145,11 @@ Rejected:
   development never touches the real one.
 - `make install` and `make uninstall`: see section 7.
 
-GitHub Actions runs `make check` on every push. The repository is
-`jobsdone` on the author's personal GitHub account, private for now and
-written as if it were public.
+GitHub Actions runs `env -u NO_COLOR make check` on pushes and pull requests.
+The repository is `mikkelon/jobsdone`. The release workflow pins Rust 1.98.0,
+builds static musl binaries on native x86-64 and ARM64 Linux runners, and
+publishes complete archives on version tags. Manual runs build artifacts
+without publishing. [RELEASING.md](RELEASING.md) describes the release contract.
 
 Rejected:
 
@@ -157,9 +159,15 @@ Rejected:
 
 ## 7. Build and install
 
-`scripts/install`, behind `make install`, installs for the current user
-and runs again to update in place; `scripts/uninstall` takes everything
-out and leaves the data. It works on any Linux and does more on Omarchy.
+`scripts/install-release` downloads and verifies a prebuilt Linux release,
+then calls `scripts/install --binary PATH`. Release installations include
+`jobsdone-update` for explicit updates and `jobsdone-uninstall` for removal.
+The app itself has no network update check.
+
+`scripts/install`, behind `make install`, builds from source for the current
+user; running it again updates in place. `scripts/uninstall` takes everything
+out and leaves the data. Both installation paths include the desktop launcher
+and terminal profiles, with additional integration on Omarchy.
 
     scripts/install [--keybind [KEYS] | --no-keybind] [--floating | --tiled] [--size WxH]
 
@@ -172,7 +180,7 @@ install does not undo what the settings page said.
 
 Everywhere:
 
-- The binary, with `cargo install --path . --root ~/.local`, so it lands
+- The binary, with `cargo install --locked --path . --root ~/.local`, so it lands
   in `~/.local/bin`. The desktop session that runs a keybind or a
   launcher entry has that directory on its PATH; it does not have
   `~/.cargo/bin`, least of all on a machine where Rust was installed for
@@ -269,10 +277,6 @@ an app-id flag mapping.
 
 Rejected:
 
-- **A PKGBUILD.** The Arch-native way to install, but nobody else is
-  installing yet. It can be added when someone is.
-- **A release tarball with an install script.** Packaging work for no
-  present user.
 - **Hardcoding `foot` in the keybind.** It would allow
   `--window-size-chars=120x36` and an exact grid in any font, but it
   ignores the terminal the person chose, and the pixel rule gets the

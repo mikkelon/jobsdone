@@ -2,6 +2,7 @@ name: check
 
 on:
   push:
+  pull_request:
   workflow_dispatch:
 
 jobs:
@@ -13,4 +14,4 @@ jobs:
         with:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
-      - run: make check
+      - run: env -u NO_COLOR make check

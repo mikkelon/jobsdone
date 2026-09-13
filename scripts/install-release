@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+die() { printf 'Jobsdone: %s\n' "$*" >&2; exit 1; }
+version=""
+check=no
+options=()
+while [ "$#" -gt 0 ]; do
+    case "$1" in
+        --version)
+            [ "$#" -ge 2 ] || die '--version requires a version, such as v0.1.0'
+            version="$2"; shift 2 ;;
+        --check) check=yes; shift ;;
+        --keybind)
+            options+=("$1"); shift
+            if [ "$#" -gt 0 ] && [[ "$1" != -* ]]; then options+=("$1"); shift; fi ;;
+        --size)
+            if [ "$#" -lt 2 ] || ! [[ "$2" =~ ^[1-9][0-9]*x[1-9][0-9]*$ ]]; then
+                die 'Use --size with a width and height, such as --size 1000x700.'
+            fi
+            options+=("$1" "$2"); shift 2 ;;
+        --no-keybind | --floating | --tiled) options+=("$1"); shift ;;
+        -h | --help)
+            cat <<'EOF'
+Install or update Jobsdone from a prebuilt Linux release. Rust is not required.
+
+Usage: install.sh [OPTIONS]
+       jobsdone-update [OPTIONS]
+
+  --check          Show available versions without changing files
+  --version vX.Y.Z Install a specific release
+  --keybind [KEYS] Set an Omarchy shortcut (default: SUPER + SHIFT + J)
+  --no-keybind     Do not bind an Omarchy shortcut
+  --floating      Use a floating window
+  --tiled         Use a tiled window
+  --size WxH      Set the window size in pixels
+  -h, --help      Show this help
+
+Installs into ~/.local/bin. Updates preserve your tasks, settings and shortcut
+unless you explicitly request a different window or shortcut here.
+EOF
+            exit 0 ;;
+        *) die "unknown option: $1" ;;
+    esac
+done
+[ "$(uname -s)" = Linux ] || die 'only Linux is supported'
+case "$(uname -m)" in
+    x86_64) target=x86_64-unknown-linux-musl ;;
+    aarch64 | arm64) target=aarch64-unknown-linux-musl ;;
+    *) die 'supported architectures are x86-64 and ARM64' ;;
+esac
+for dependency in curl tar sha256sum; do
+    command -v "$dependency" >/dev/null || die "install $dependency first"
+done
+if [ ! -d "${TZDIR:-/usr/share/zoneinfo}" ]; then
+    die 'Install the tzdata package for your Linux distribution, then run this command again. Jobsdone needs time-zone data for dates and reminders.'
+fi
+base=https://github.com/mikkelon/jobsdone/releases
+fetch() { curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 300 --retry 2 "$@"; }
+explicit=no
+if [ -n "$version" ]; then
+    explicit=yes
+    version="v${version#v}"
+else
+    latest="$(fetch --output /dev/null --write-out '%{url_effective}' "$base/latest")" || die "Could not check for releases. Check your connection and try again, or visit $base."
+    [[ "$latest" == "$base/tag/"* ]] || die 'unexpected release URL'
+    version="${latest##*/}"
+fi
+[[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || die "invalid release version: $version"
+binary="$HOME/.local/bin/jobsdone"
+installed="$(command -v jobsdone || true)"
+if [ -x "$binary" ]; then installed="$binary"; fi
+current=""
+if [ -n "$installed" ]; then current="$("$installed" --version)"; fi
+if [ "$check" = yes ]; then
+    if [ "$current" = "jobsdone ${version#v}" ]; then
+        printf 'Jobsdone %s is up to date.\n' "${version#v}"
+    else
+        printf 'Installed: %s\nAvailable: jobsdone %s\n' "${current:-not installed}" "${version#v}"
+        echo 'Run jobsdone-update to install the latest stable release.'
+    fi
+    exit 0
+fi
+if command -v pacman >/dev/null && pacman -Q jobsdone-bin >/dev/null 2>&1; then
+    die 'jobsdone-bin is installed; update it with your AUR helper'
+fi
+if [ -n "$installed" ] && [ "$(realpath "$installed")" != "$(realpath -m "$binary")" ]; then
+    die "jobsdone is installed at $installed; update it through its package manager or remove it before switching"
+fi
+if [ "$explicit" = no ] && [ -n "$current" ]; then
+    current_version="${current#jobsdone }"
+    if [ "$current_version" != "${version#v}" ] && [ "$(printf '%s\n' "$current_version" "${version#v}" | sort -V | tail -n 1)" = "$current_version" ]; then
+        die "installed version $current_version is newer; use --version to select a release explicitly"
+    fi
+fi
+if [ "${0##*/}" = jobsdone-update ] && [ "$current" = "jobsdone ${version#v}" ] && [ "${#options[@]}" -eq 0 ]; then
+    printf 'Jobsdone %s is already up to date.\n' "${version#v}"
+    exit 0
+fi
+stage="$(mktemp -d)"
+trap 'rm -rf "$stage"' EXIT
+name="jobsdone-$version-$target"
+archive="$name.tar.gz"
+printf 'Downloading Jobsdone %s...\n' "${version#v}"
+fetch --output "$stage/$archive" "$base/download/$version/$archive" || die 'Download failed. Your installation has not changed. Try again when your connection is working.'
+fetch --output "$stage/SHA256SUMS" "$base/download/$version/SHA256SUMS" || die 'Could not download checksums. Your installation has not changed.'
+checksum="$(awk -v file="$archive" '$2 == file { print $1 }' "$stage/SHA256SUMS")"
+[[ "$checksum" =~ ^[0-9a-f]{64}$ ]] || die 'missing or ambiguous archive checksum'
+printf '%s  %s\n' "$checksum" "$archive" > "$stage/selected.sha256"
+echo 'Verifying download...'
+(cd "$stage" && sha256sum --check --status selected.sha256) || die 'The download failed verification. Your installation has not changed. Run the installer again to retry.'
+tar -xzf "$stage/$archive" -C "$stage" --no-same-owner || die 'Could not unpack the download. Your installation has not changed.'
+[ "$("$stage/$name/jobsdone" --version)" = "jobsdone ${version#v}" ] || die 'downloaded binary version does not match the release'
+"$stage/$name/scripts/install" --binary "$stage/$name/jobsdone" "${options[@]}"
+printf 'Jobsdone %s is ready.\n' "${version#v}"
+echo 'Open Jobsdone from your app launcher, or run jobsdone in a terminal.'
+echo 'Update: jobsdone-update    Check: jobsdone-update --check    Remove: jobsdone-uninstall'
+if [ -n "$current" ]; then echo 'Restart any open Jobsdone windows to use this version.'; fi

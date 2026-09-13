@@ -4,6 +4,17 @@
 # log stay where they are; the last line says where.
 set -euo pipefail
 
+case "${1:-}" in
+    '') ;;
+    -h | --help)
+        echo 'Usage: jobsdone-uninstall'
+        echo 'Remove the user installation, launcher and Jobsdone desktop integration.'
+        echo 'Your tasks, notes, settings and logs are kept. Reinstall to use them again.'
+        exit 0 ;;
+    *) echo "Unknown option: $1. Run jobsdone-uninstall --help for usage." >&2; exit 2 ;;
+esac
+echo 'Removing Jobsdone...'
+
 DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 STATE_HOME="${XDG_STATE_HOME:-$HOME/.local/state}"
@@ -49,16 +60,14 @@ if [ -e "$HOME/.local/bin/jobsdone" ]; then
     else
         rm -f "$HOME/.local/bin/jobsdone"
     fi
-    say "removed the binary"
 fi
 
 rm -f "$DESKTOP_FILE" "$ICON_FILE"
 command -v update-desktop-database >/dev/null && update-desktop-database "$(dirname "$DESKTOP_FILE")" 2>/dev/null || true
-say "removed the launcher entry"
 
 rm -f "$LAUNCHER" "$FOOT_CONFIG" "$KITTY_CONFIG" "$ALACRITTY_CONFIG" "$ALACRITTY_013_CONFIG" "$GHOSTTY_CONFIG"
+rm -f "$HOME/.local/bin/jobsdone-update" "$HOME/.local/bin/jobsdone-uninstall"
 rmdir "$(dirname "$FOOT_CONFIG")" 2>/dev/null || true
-say "removed the terminal launcher"
 
 if [ -f "$BINDINGS" ]; then
     removed=no
@@ -68,11 +77,12 @@ if [ -f "$BINDINGS" ]; then
         fi
     done
     if [ "$removed" = yes ]; then
-        say "removed the jobsdone blocks from $BINDINGS"
         if [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && command -v hyprctl >/dev/null; then
             hyprctl reload >/dev/null && say "Hyprland reloaded"
         fi
     fi
 fi
 
-say "kept the data in $DATA_HOME/jobsdone and the log in $STATE_HOME/jobsdone"
+say 'Jobsdone has been uninstalled.'
+say "Your tasks, notes and settings are kept in $DATA_HOME/jobsdone."
+say 'Reinstall Jobsdone to use them again. You can close any windows still open.'

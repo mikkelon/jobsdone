@@ -6,16 +6,18 @@ DEV_DATA_DIR := $(CURDIR)/.dev
 
 check:
 	cargo fmt --check
-	cargo clippy --all-targets -- -D warnings
-	cargo test
+	cargo clippy --locked --all-targets -- -D warnings
+	cargo test --locked
 	bash tests/launcher.sh
+	bash tests/release.sh
 
 fmt:
 	cargo fmt
 
 test:
-	cargo test
+	cargo test --locked
 	bash tests/launcher.sh
+	bash tests/release.sh
 
 # Runs against a scratch database in .dev, never the real one in
 # $XDG_DATA_HOME/jobsdone.

@@ -42,6 +42,13 @@ BOTH_END="-- jobsdone: end"
 
 say() { printf '%s\n' "$*"; }
 die() { printf 'install: %s\n' "$*" >&2; exit 1; }
+atomic_install() (
+    mkdir -p "$(dirname "$2")"
+    staged_file="$(mktemp "$2.XXXXXX")"
+    trap 'rm -f "$staged_file"' EXIT
+    install -m755 "$1" "$staged_file"
+    mv -f "$staged_file" "$2"
+)
 quoted_string() { printf '%s' "$1" | sed -e 's/\\/\\\\/g' -e 's/"/\\"/g'; }
 # The header above, which is the usage message.
 usage() { awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0"; }
@@ -94,16 +101,20 @@ done
 if [ -n "$source_binary" ]; then
     [ -x "$source_binary" ] || die "--binary must name an executable file"
     if ! [ -e "$BINARY" ] || ! [ "$source_binary" -ef "$BINARY" ]; then
-        install -Dm755 "$source_binary" "$BINARY"
+        atomic_install "$source_binary" "$BINARY"
     fi
 else
     command -v cargo >/dev/null || die "cargo was not found. Install Rust first: on Arch 'sudo pacman -S rustup && rustup default stable', elsewhere https://rustup.rs"
     say "building and installing the binary with cargo..."
-    (cd "$ROOT" && cargo install --path . --root "$HOME/.local" --quiet --force)
+    (cd "$ROOT" && cargo install --locked --path . --root "$HOME/.local" --quiet --force)
 fi
-say "installed $BINARY"
-install -Dm755 "$ROOT/scripts/launch-terminal" "$LAUNCHER"
-say "installed $LAUNCHER"
+atomic_install "$ROOT/scripts/launch-terminal" "$LAUNCHER"
+atomic_install "$ROOT/scripts/uninstall" "$HOME/.local/bin/jobsdone-uninstall"
+if [ -n "$source_binary" ]; then
+    atomic_install "$ROOT/scripts/install-release" "$HOME/.local/bin/jobsdone-update"
+else
+    rm -f "$HOME/.local/bin/jobsdone-update"
+fi
 case ":$PATH:" in
     *":$HOME/.local/bin:"*) ;;
     *) say "note: $HOME/.local/bin is not on your PATH in this shell" ;;
@@ -129,7 +140,6 @@ clipboard-paste=Shift+Insert Control+Shift+v
 \x1b[120;6u=Control+x Control+Shift+x
 EOF
 } > "$FOOT_CONFIG"
-say "installed $FOOT_CONFIG"
 
 {
     if [ -f "$CONFIG_HOME/kitty/kitty.conf" ]; then
@@ -144,7 +154,6 @@ map shift+insert paste_from_clipboard
 map ctrl+shift+v paste_from_clipboard
 EOF
 } > "$KITTY_CONFIG"
-say "installed $KITTY_CONFIG"
 
 {
     if [ -f "$CONFIG_HOME/alacritty/alacritty.toml" ]; then
@@ -163,10 +172,8 @@ bindings = [
 ]
 EOF
 } > "$ALACRITTY_CONFIG"
-say "installed $ALACRITTY_CONFIG"
 
 sed 's/^general\.import = /import = /' "$ALACRITTY_CONFIG" > "$ALACRITTY_013_CONFIG"
-say "installed $ALACRITTY_013_CONFIG"
 
 {
     if [ -f "$CONFIG_HOME/ghostty/config" ]; then
@@ -181,7 +188,6 @@ keybind = shift+insert=paste_from_clipboard
 keybind = ctrl+shift+v=paste_from_clipboard
 EOF
 } > "$GHOSTTY_CONFIG"
-say "installed $GHOSTTY_CONFIG"
 
 exec_line="$LAUNCHER"
 exec_line="$(quoted_string "$exec_line")"
@@ -204,13 +210,11 @@ StartupNotify=true
 EOF
 command -v update-desktop-database >/dev/null && update-desktop-database "$(dirname "$DESKTOP_FILE")" 2>/dev/null || true
 command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q "$DATA_HOME/icons/hicolor" 2>/dev/null || true
-say "installed the launcher entry $DESKTOP_FILE"
 
 # --- Omarchy: the keybind and the window ------------------------------------
 
 if ! on_omarchy; then
-    say "not an Omarchy machine; the desktop integration is left to you."
-    say "The app draws nothing of its own around itself: a floating, centred terminal of 120 by 36 cells is the intended window."
+    say 'Desktop launcher installed.'
     exit 0
 fi
 

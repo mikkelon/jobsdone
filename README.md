@@ -1,130 +1,127 @@
 # jobsdone
 
-A keyboard-first daily task manager for the terminal, built around a
-daily work routine: plan today, work through it, review what yesterday
-left behind. It lives in a floating terminal that a keybind opens for a
-moment and closes again, next to btop and lazygit.
+A keyboard-first task manager for the terminal. Plan today, work through your
+list, and review what yesterday left behind.
 
 ![A morning in the app: the review, planning the day, working through it, in a floating terminal on Omarchy](assets/demo.gif)
 
-Omarchy is the first-class home: the install wires up the window rule,
-the keybind and a launcher entry, and the app takes its colours from
-whatever theme the terminal is in, dark or light. Any other Linux gets
-the binary and a launcher entry, and does its own windowing.
+- Organize tasks by day, set reminders, and schedule recurring work.
+- Keep notes with optional offline spell checking.
+- Work in a terminal that follows your theme, with your data stored locally.
+
+Built for Linux, with floating windows and a keyboard shortcut on Omarchy.
 
 ## Install
 
-You need Rust. On Arch that is `sudo pacman -S rustup && rustup default
-stable`; elsewhere, https://rustup.rs. Then:
+For Linux on x86-64 or ARM64:
 
-    git clone https://github.com/mikkelon/jobsdone
-    cd jobsdone
-    make install
+```sh
+curl -fsSL https://github.com/mikkelon/jobsdone/releases/latest/download/install.sh -o jobsdone-install.sh &&
+    bash jobsdone-install.sh
+```
 
-This puts the binary in `~/.local/bin`, a `Jobsdone` entry in the app
-launcher, and on Omarchy a Hyprland rule that floats and centres the
-window at 120 by 36 cells. If SUPER+SHIFT+J is free it offers to bind it
-to the app; if the key is taken it says by what and leaves it to you.
-Running `make install` again updates everything in place, and `make
-uninstall` removes it all except your data.
+Open **Jobsdone** from your app launcher, or run `jobsdone` in a terminal.
+You can delete `jobsdone-install.sh` afterward.
 
-For other keys or another window, run the script itself:
+The installer puts the app in `~/.local/bin`. On Omarchy, it sets up a floating
+window and offers **Super+Shift+J** as a shortcut if the key is free.
 
-    scripts/install --keybind "SUPER + ALT + J" --size 1000x700
-    scripts/install --no-keybind --tiled
+<details>
+<summary>Requirements and installation options</summary>
 
-The window flags are settings the app keeps, so a later install leaves
-them alone, the settings page changes them without an install, and
-`jobsdone desktop [--floating | --tiled] [--size WxH]` writes the
-Hyprland rule again from a terminal.
+The installer reports missing prerequisites. If the download command cannot
+find `curl`, install it with your package manager and try again.
 
-On a Linux desktop that is not Omarchy the launcher entry opens the app
-in the default terminal. For a floating window, add a rule for the
-terminal window in your compositor's configuration; the app never sizes
-or positions itself.
+For optional clipboard support, install `wl-clipboard` on Wayland or `xclip`
+on X11. The desktop launcher supports Foot, Kitty, Alacritty and Ghostty.
 
-## Use
+Choose a shortcut and window size:
 
-Press `?` inside the app for every key that works where you are. The
-hint bar at the bottom always names the ones that matter most.
+```sh
+bash jobsdone-install.sh --keybind "SUPER + ALT + J" --size 1000x700
+```
 
-In any text field, `Ctrl+Left` and `Ctrl+Right` move by word. This includes
-task titles, notes, dates, search, and settings fields.
+Use `--no-keybind` to skip the shortcut, `--tiled` for a tiled window, or
+`--version v0.1.0` to install a particular release. Run
+`bash jobsdone-install.sh --help` for all options.
 
-Mouse dragging and Shift+arrow select text in every editable field. Ctrl+A
-selects the whole field. Ctrl+Shift+C/X/V copies, cuts, and pastes; Ctrl+C
-still quits. Cut removes text only after it reaches the clipboard. Pasting
-preserves note line breaks and flattens them in single-line fields.
+On other Linux desktops, configure floating windows in your window manager.
 
-Use the installed Jobsdone launcher (`jobsdone-terminal`) for these shortcuts
-in Foot, Kitty, Alacritty, or Ghostty. Its app-specific terminal profiles also
-support Omarchy's Super+C/X/V shortcuts without changing normal terminal
-bindings. `JOBSDONE_TERMINAL=kitty jobsdone-terminal` selects a terminal
-explicitly. When running `jobsdone` directly in an ordinary terminal, that
-terminal may intercept copy shortcuts for its own selection; Alt+y copies the
-app's selection instead.
+</details>
 
-On the notes page (`n`), `y` copies the selected note from the list. Alt+y
-copies the text selection while editing, or the whole note if nothing is
-selected. Clipboard access uses `wl-copy`/`wl-paste` (the `wl-clipboard`
-package) on Wayland, or `xclip` on X11.
+## Get started
 
-Notes mark possible US English spelling mistakes using Harper, entirely
-offline, with red squiggly underlines (straight underlines on terminals without
-styled underline support). Spell checking is off by default; enable
-**Spell-check notes in US English** in settings (`,`). The word at the caret
-stays unmarked while editing. To correct a word, move the caret into it and press `Alt+s`; use
-the arrow keys to choose a suggestion, `Enter` to replace, or `Escape` to
-cancel. Checking never changes your text automatically, and notes can still
-be written in any language.
+The hint bar shows the keys available on the current screen.
 
-To accept a product name or another personal word, open `Alt+s`, press `↑`
-to wrap to **Add to dictionary**, then `Enter`. Manage saved words under
-**Settings → Notes → Personal dictionary**: add, edit, or remove entries.
-Personal words ignore capitalization; the list preserves the spelling you enter.
+| Key | Action |
+| --- | --- |
+| `?` | Show help |
+| `,` | Open settings |
+| `n` | Open notes |
+| `Ctrl+C` | Quit |
 
-`,` opens the settings page: the hour the day starts, which days are work
-days, how far back the review pile reaches, whether the window floats and
-how big it is, and a few more. Each row says what it does and what it
-holds when nobody has changed it.
+Settings let you choose your working days, when a day starts, and how far back
+to review unfinished work. On Omarchy, you can also adjust the window size.
 
-`docs/PRODUCT.md` says what the program does and why, `docs/DESIGN.md`
-how it looks and behaves, and `wireframes/index.html` shows every screen.
+Select text with the mouse or Shift+arrow keys. Use Ctrl+Shift+C/X/V to copy,
+cut and paste through the Jobsdone launcher. In an ordinary terminal, Alt+y
+copies the app's selection.
+
+## Update or uninstall
+
+| What you want to do | Command |
+| --- | --- |
+| Check for an update | `jobsdone-update --check` |
+| Install the latest release | `jobsdone-update` |
+| Remove the app | `jobsdone-uninstall` |
+
+Updates keep your tasks, notes, settings and shortcut. Restart open Jobsdone
+windows after updating.
+
+Uninstall keeps your data. Reinstall to pick up where you left off.
 
 ## Command line and agents
 
-Subcommands use the same database as the terminal app and exit after completing
-an operation. `jobsdone --help` lists them; add `--json` for structured output.
+Manage tasks from a shell or automation:
 
-    jobsdone task list --day today --json
-    jobsdone task add "Prepare demo" --day today --focus
-    jobsdone task move 42 17 --day today
-    jobsdone task reorder 42 --before 17
+```sh
+jobsdone task add "Prepare demo" --day today --focus
+jobsdone task list --day today --json
+```
 
-Commands support complete changes in one invocation, including multiple task IDs
-and properties, with atomic saving and one undo entry. Reads leave recurrence and
-the morning review gate alone; `jobsdone refresh` catches up recurring copies.
-[The CLI guide](docs/CLI.md) explains JSON input, dates, ordering, undo, and errors.
+Run `jobsdone --help` for commands or read the [CLI guide](docs/CLI.md).
+`jobsdone --skill` prints the bundled agent instructions.
 
-Every release embeds an agent skill: `jobsdone --skill` prints the version that
-matches the binary, without opening the database. Agents discover it through
-`--help`. Skill installation into an agent's project or personal directory is an
-explicit export; installation never automatically copies or symlinks it there.
+## Your data
 
-## Files
+Tasks, notes and settings live in `~/.local/share/jobsdone/jobsdone.db`.
+Logs are in `~/.local/state/jobsdone/jobsdone.log`. These paths follow your
+XDG directory settings.
 
-The database is at `~/.local/share/jobsdone/jobsdone.db` and is the
-only thing worth backing up: the settings are in it too. The log is at
-`~/.local/state/jobsdone/jobsdone.log`. There is no configuration file.
+## Build from source
+
+Install [Rust](https://rustup.rs), Git, a C compiler, make and `tzdata`, then:
+
+```sh
+git clone https://github.com/mikkelon/jobsdone
+cd jobsdone
+make install
+```
+
+To update a source installation, pull the desired changes and run `make install`
+again. Use `make uninstall` to remove it.
 
 ## Development
 
-`make check` runs what CI runs: format check, clippy, tests. `make run`
-starts the app against a scratch database in `.dev`, never the real
-one. `uat/` holds the tools for driving the built program and for trying
-the install on a clean Omarchy machine in a VM; `uat/README.md` explains
-them.
+| Command | Purpose |
+| --- | --- |
+| `make run` | Run with a separate development database |
+| `env -u NO_COLOR make check` | Run formatting, lint and test checks |
+
+[Product](docs/PRODUCT.md) · [Design](docs/DESIGN.md) ·
+[Architecture](docs/ARCHITECTURE.md) · [Stack](docs/STACK.md) ·
+[Desktop testing](uat/README.md) · [Releasing](docs/RELEASING.md)
 
 ## License
 
-MIT, see `LICENSE`.
+[MIT](LICENSE)
