@@ -4,12 +4,15 @@ set -euo pipefail
 die() { printf 'Jobsdone: %s\n' "$*" >&2; exit 1; }
 version=""
 check=no
+channel=""
 options=()
 while [ "$#" -gt 0 ]; do
     case "$1" in
         --version)
             [ "$#" -ge 2 ] || die '--version requires a version, such as v0.1.0'
             version="$2"; shift 2 ;;
+        --channel)
+            case "${2:-}" in beta | stable) channel="$2"; shift 2 ;; *) die 'Use --channel beta or --channel stable.' ;; esac ;;
         --check) check=yes; shift ;;
         --keybind)
             options+=("$1"); shift
@@ -22,12 +25,13 @@ while [ "$#" -gt 0 ]; do
         --no-keybind | --floating | --tiled) options+=("$1"); shift ;;
         -h | --help)
             cat <<'EOF'
-Install or update Jobsdone from a prebuilt Linux release. Rust is not required.
+Install or update Jobsdone from a published Linux release.
 
 Usage: install.sh [OPTIONS]
        jobsdone-update [OPTIONS]
 
   --check          Show available versions without changing files
+  --channel NAME   Select beta or stable releases
   --version vX.Y.Z Install a specific release
   --keybind [KEYS] Set an Omarchy shortcut (default: SUPER + SHIFT + J)
   --no-keybind     Do not bind an Omarchy shortcut
@@ -35,6 +39,9 @@ Usage: install.sh [OPTIONS]
   --tiled         Use a tiled window
   --size WxH      Set the window size in pixels
   -h, --help      Show this help
+
+Updates follow the installed version's channel. Fresh installs default to stable;
+use --channel beta to try beta releases.
 
 Installs into ~/.local/bin. Updates preserve your tasks, settings and shortcut
 unless you explicitly request a different window or shortcut here.
@@ -57,27 +64,32 @@ if [ ! -d "${TZDIR:-/usr/share/zoneinfo}" ]; then
 fi
 base=https://github.com/mikkelon/jobsdone/releases
 fetch() { curl --fail --silent --show-error --location --proto '=https' --proto-redir '=https' --connect-timeout 15 --max-time 300 --retry 2 "$@"; }
-explicit=no
-if [ -n "$version" ]; then
-    explicit=yes
-    version="v${version#v}"
-else
-    latest="$(fetch --output /dev/null --write-out '%{url_effective}' "$base/latest")" || die "Could not check for releases. Check your connection and try again, or visit $base."
-    [[ "$latest" == "$base/tag/"* ]] || die 'unexpected release URL'
-    version="${latest##*/}"
-fi
-[[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || die "invalid release version: $version"
 binary="$HOME/.local/bin/jobsdone"
 installed="$(command -v jobsdone || true)"
 if [ -x "$binary" ]; then installed="$binary"; fi
 current=""
 if [ -n "$installed" ]; then current="$("$installed" --version)"; fi
+if [ -z "$channel" ]; then
+    case "$current" in *-*) channel=beta ;; *) channel=stable ;; esac
+fi
+explicit=no
+if [ -n "$version" ]; then
+    explicit=yes
+    version="v${version#v}"
+else
+    manifest="$(fetch "https://raw.githubusercontent.com/mikkelon/jobsdone/release-$channel/Cargo.toml")" || die "Could not find a $channel release. Check your connection and try again, or visit $base."
+    version="v$(printf '%s\n' "$manifest" | sed -n 's/^version = "\([^"]*\)"$/\1/p' | head -n 1)"
+fi
+[[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || die "invalid release version: $version"
+if [ "$explicit" = no ] && [ "$channel" = stable ] && [[ "$version" == *-* ]]; then
+    die 'The stable channel contains a prerelease. Your installation has not changed.'
+fi
 if [ "$check" = yes ]; then
     if [ "$current" = "jobsdone ${version#v}" ]; then
         printf 'Jobsdone %s is up to date.\n' "${version#v}"
     else
         printf 'Installed: %s\nAvailable: jobsdone %s\n' "${current:-not installed}" "${version#v}"
-        echo 'Run jobsdone-update to install the latest stable release.'
+        printf 'Update with: jobsdone-update --channel %s\n' "$channel"
     fi
     exit 0
 fi
@@ -89,7 +101,11 @@ if [ -n "$installed" ] && [ "$(realpath "$installed")" != "$(realpath -m "$binar
 fi
 if [ "$explicit" = no ] && [ -n "$current" ]; then
     current_version="${current#jobsdone }"
-    if [ "$current_version" != "${version#v}" ] && [ "$(printf '%s\n' "$current_version" "${version#v}" | sort -V | tail -n 1)" = "$current_version" ]; then
+    # GNU version sort places a tilde before the corresponding final release.
+    current_order="${current_version/-/\~}"
+    available_order="${version#v}"
+    available_order="${available_order/-/\~}"
+    if [ "$current_order" != "$available_order" ] && [ "$(printf '%s\n' "$current_order" "$available_order" | sort -V | tail -n 1)" = "$current_order" ]; then
         die "installed version $current_version is newer; use --version to select a release explicitly"
     fi
 fi

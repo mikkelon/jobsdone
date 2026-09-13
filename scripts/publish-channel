@@ -1,0 +1,55 @@
+#!/usr/bin/env python3
+"""Point a release channel at the newest published version's commit."""
+
+import re
+import subprocess
+import sys
+import tomllib
+
+
+def git(*args):
+    return subprocess.check_output(["git", *args], text=True).strip()
+
+
+def version_key(version):
+    match = re.fullmatch(r"(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?", version)
+    if not match:
+        raise ValueError(f"Invalid version: {version}")
+    major, minor, patch, prerelease = match.groups()
+    identifiers = tuple(
+        (0, int(part)) if part.isdigit() else (1, part)
+        for part in (prerelease or "").split(".")
+    )
+    return (int(major), int(minor), int(patch), prerelease is None, identifiers)
+
+
+def manifest_version(ref):
+    return tomllib.loads(git("show", f"{ref}:Cargo.toml"))["package"]["version"]
+
+
+def main():
+    if len(sys.argv) != 3 or sys.argv[1] not in ("beta", "stable"):
+        sys.exit("usage: scripts/publish-channel beta|stable vX.Y.Z[-beta.N]")
+    channel, tag = sys.argv[1:]
+    version_key(tag.removeprefix("v"))
+    commit = git("rev-parse", "--verify", f"refs/tags/{tag}^{{commit}}")
+    version = manifest_version(commit)
+    if tag != f"v{version}" or (channel == "stable" and "-" in version):
+        sys.exit("The release version does not match the channel or tag.")
+    ref = f"refs/heads/release-{channel}"
+    remote = git("ls-remote", "--refs", "origin", ref)
+    previous = remote.split()[0] if remote else ""
+    if previous:
+        git("fetch", "--quiet", "origin", previous)
+        if version_key(manifest_version(previous)) >= version_key(version):
+            print(f"{channel} already points to this version or a newer release.")
+            return
+    subprocess.run(
+        ["git", "push", f"--force-with-lease={ref}:{previous}", "origin", f"{commit}:{ref}"],
+        check=True,
+    )
+    print(f"{channel}: {version}")
+
+
+if __name__ == "__main__":
+    main()

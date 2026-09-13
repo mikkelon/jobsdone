@@ -10,6 +10,7 @@ check:
 	cargo test --locked
 	bash tests/launcher.sh
 	bash tests/release.sh
+	python3 tests/release_channels.py
 
 fmt:
 	cargo fmt
@@ -18,6 +19,7 @@ test:
 	cargo test --locked
 	bash tests/launcher.sh
 	bash tests/release.sh
+	python3 tests/release_channels.py
 
 # Runs against a scratch database in .dev, never the real one in
 # $XDG_DATA_HOME/jobsdone.

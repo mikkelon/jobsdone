@@ -9,6 +9,7 @@ images need that package installed even though the executable is statically link
 
 ## Validate a release candidate
 
+Development checks require Python 3.11 or later and Git in addition to Rust.
 Run `env -u NO_COLOR make check`. Push the candidate branch and run the **release**
 workflow from GitHub Actions with that branch selected. A manual run uploads
 archives and their checksums as workflow artifacts; it does not publish a release.
@@ -25,7 +26,7 @@ opening the launcher and using clipboard shortcuts.
 To test an archive downloaded from workflow artifacts:
 
 ```sh
-bash tests/release.sh /path/to/jobsdone-v0.1.0-x86_64-unknown-linux-musl.tar.gz
+bash tests/release.sh /path/to/jobsdone-v0.1.0-beta.1-x86_64-unknown-linux-musl.tar.gz
 ```
 
 Run this from the matching source checkout on the archive's architecture.
@@ -36,14 +37,22 @@ Run this from the matching source checkout on the archive's architecture.
 2. Merge the validated candidate into `main`.
 3. Tag that commit with `v` followed by the exact package version, and push the tag.
 
-For example, a Cargo version of `0.1.0` uses the tag `v0.1.0`. A prerelease such
-as `0.2.0-rc.1` uses `v0.2.0-rc.1` and is published as a GitHub prerelease.
+Versions are chosen manually. Public betas use `0.1.0-beta.1`,
+`0.1.0-beta.2`, and subsequent numbered betas. A substantial feature release
+starts another series, such as `0.2.0-beta.1`. Tags include the leading `v`: a
+Cargo version of `0.1.0-beta.1` uses `v0.1.0-beta.1` and is marked as a GitHub
+prerelease.
+
+`1.0.0` signals readiness for general use: installation and upgrades have been
+tested on other people's machines, data migrations are reliable, and the core
+daily workflow has held up in regular use.
 
 The workflow reruns checks, builds both targets, verifies the downloaded build
 artifacts, and assembles a draft release. It attaches both archives, `SHA256SUMS`
 and `install.sh` before publishing. Generated release notes link the changes.
 If publishing fails, rerun the workflow: an existing draft can be completed,
-but an already published release is never overwritten.
+but an already published release is never overwritten. A rerun can finish
+updating the installation channels after publication.
 
 GitHub's built-in `GITHUB_TOKEN` needs write access to repository contents only
 in the publishing job. No personal access token is needed. Enable release
@@ -54,8 +63,26 @@ with authenticated GitHub access.
 
 ## Installation contract
 
-The installer resolves the latest stable tag once and downloads all assets from
-that exact release. Explicit `--version` accepts a stable release or prerelease.
+After publication, `scripts/publish-channel` moves the managed `release-beta`
+branch to the release's tagged commit. Stable releases also update
+`release-stable`. Each branch advances only when the version is newer; a
+compare-and-swap push prevents concurrent updates from overwriting one another.
+These branches are installation references, not development branches. Published
+tags and assets stay unchanged.
+
+The README downloads the installer from the `release-beta` branch and passes
+`--channel beta`. The installer reads that channel's Cargo version once and
+downloads all assets from the matching immutable version URL. The branch is
+updated only after the release's assets are published. Explicit `--version`
+accepts a stable release or prerelease without consulting a channel.
+
+Without `--channel`, a prerelease installation follows beta and a final release
+follows stable. A fresh installation defaults to stable. Stable never resolves
+to a prerelease, and an unavailable channel fails without falling back to the
+other channel. A beta installation can advance to its corresponding stable
+release and then follows stable updates. Newer betas are never downgraded to an
+older stable version. `--channel beta` or `--channel stable` selects a channel
+for the current invocation.
 SHA-256 verification detects mismatched downloads; trust in their origin comes
 from HTTPS and the GitHub release. A checksum downloaded with an archive is not
 an independent signature.

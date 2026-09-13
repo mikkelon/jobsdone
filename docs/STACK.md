@@ -162,7 +162,9 @@ Rejected:
 `scripts/install-release` downloads and verifies a prebuilt Linux release,
 then calls `scripts/install --binary PATH`. Release installations include
 `jobsdone-update` for explicit updates and `jobsdone-uninstall` for removal.
-The app itself has no network update check.
+The app itself has no network update check. Prerelease installations follow
+the beta channel; final releases follow stable. Published channel branches
+point to tested release commits, and `--channel` selects either channel explicitly.
 
 `scripts/install`, behind `make install`, builds from source for the current
 user; running it again updates in place. `scripts/uninstall` takes everything

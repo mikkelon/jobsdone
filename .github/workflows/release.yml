@@ -8,6 +8,7 @@ on:
       - '.github/workflows/release.yml'
       - 'scripts/**'
       - 'tests/release.sh'
+      - 'tests/release_channels.py'
       - 'Cargo.toml'
       - 'Cargo.lock'
   workflow_dispatch:
@@ -85,6 +86,9 @@ jobs:
       GH_REPO: ${{ github.repository }}
       RELEASE_TAG: ${{ github.ref_name }}
     steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           pattern: jobsdone-*
@@ -102,7 +106,10 @@ jobs:
       - name: Publish complete release
         run: |
           if gh release view "$RELEASE_TAG" --json isDraft > release.json; then
-            test "$(jq -r .isDraft release.json)" = true
+            if [ "$(jq -r .isDraft release.json)" = false ]; then
+              echo 'Release is already published; leaving its assets unchanged.'
+              exit 0
+            fi
           else
             gh release create "$RELEASE_TAG" --verify-tag --draft --generate-notes
           fi
@@ -112,3 +119,9 @@ jobs:
           else
             gh release edit "$RELEASE_TAG" --draft=false
           fi
+      - name: Update installation channels
+        run: |
+          if [[ "$RELEASE_TAG" != *-* ]]; then
+            scripts/publish-channel stable "$RELEASE_TAG"
+          fi
+          scripts/publish-channel beta "$RELEASE_TAG"

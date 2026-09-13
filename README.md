@@ -3,6 +3,9 @@
 A keyboard-first task manager for the terminal. Plan today, work through your
 list, and review what yesterday left behind.
 
+> **Public beta.** Tested primarily on the maintainer’s devices. Feedback and
+> bug reports from other setups are welcome.
+
 ![A morning in the app: the review, planning the day, working through it, in a floating terminal on Omarchy](assets/demo.gif)
 
 - Organize tasks by day, set reminders, and schedule recurring work.
@@ -16,8 +19,8 @@ Built for Linux, with floating windows and a keyboard shortcut on Omarchy.
 For Linux on x86-64 or ARM64:
 
 ```sh
-curl -fsSL https://github.com/mikkelon/jobsdone/releases/latest/download/install.sh -o jobsdone-install.sh &&
-    bash jobsdone-install.sh
+curl -fsSL https://raw.githubusercontent.com/mikkelon/jobsdone/release-beta/scripts/install-release -o jobsdone-install.sh &&
+    bash jobsdone-install.sh --channel beta
 ```
 
 Open **Jobsdone** from your app launcher, or run `jobsdone` in a terminal.
@@ -38,11 +41,11 @@ on X11. The desktop launcher supports Foot, Kitty, Alacritty and Ghostty.
 Choose a shortcut and window size:
 
 ```sh
-bash jobsdone-install.sh --keybind "SUPER + ALT + J" --size 1000x700
+bash jobsdone-install.sh --channel beta --keybind "SUPER + ALT + J" --size 1000x700
 ```
 
 Use `--no-keybind` to skip the shortcut, `--tiled` for a tiled window, or
-`--version v0.1.0` to install a particular release. Run
+`--version v0.1.0-beta.1` to install a particular release. Run
 `bash jobsdone-install.sh --help` for all options.
 
 On other Linux desktops, configure floating windows in your window manager.
@@ -72,8 +75,11 @@ copies the app's selection.
 | What you want to do | Command |
 | --- | --- |
 | Check for an update | `jobsdone-update --check` |
-| Install the latest release | `jobsdone-update` |
+| Install the latest beta | `jobsdone-update` |
 | Remove the app | `jobsdone-uninstall` |
+
+Beta installations receive beta updates. Use `jobsdone-update --channel stable`
+to switch when a stable release is available.
 
 Updates keep your tasks, notes, settings and shortcut. Restart open Jobsdone
 windows after updating.

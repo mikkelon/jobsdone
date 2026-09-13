@@ -14,6 +14,10 @@ mkdir -p "$scratch/bin" "$scratch/downloads" "$HOME"
 export JOBSDONE_TEST_DOWNLOADS="$scratch/downloads"
 JOBSDONE_TEST_VERSION="v$(sed -n 's/^version = "\([^"]*\)"$/\1/p' "$root/Cargo.toml" | head -n 1)"
 export JOBSDONE_TEST_VERSION
+unset JOBSDONE_TEST_STABLE_VERSION JOBSDONE_TEST_BETA_VERSION
+if [[ "$JOBSDONE_TEST_VERSION" != *-* ]]; then
+    export JOBSDONE_TEST_STABLE_VERSION="${JOBSDONE_TEST_VERSION#v}"
+fi
 case "$(uname -m)" in
     x86_64) target=x86_64-unknown-linux-musl ;;
     aarch64 | arm64) target=aarch64-unknown-linux-musl ;;
@@ -40,8 +44,11 @@ for ((i = 1; i <= $#; i++)); do
 done
 url="${!#}"
 case "$url" in
-    https://github.com/mikkelon/jobsdone/releases/latest)
-        printf 'https://github.com/mikkelon/jobsdone/releases/tag/%s' "$JOBSDONE_TEST_VERSION" ;;
+    https://raw.githubusercontent.com/mikkelon/jobsdone/release-beta/Cargo.toml)
+        printf 'version = "%s"\n' "${JOBSDONE_TEST_BETA_VERSION:-${JOBSDONE_TEST_VERSION#v}}" ;;
+    https://raw.githubusercontent.com/mikkelon/jobsdone/release-stable/Cargo.toml)
+        [ -n "${JOBSDONE_TEST_STABLE_VERSION:-}" ] || exit 22
+        printf 'version = "%s"\n' "$JOBSDONE_TEST_STABLE_VERSION" ;;
     "https://github.com/mikkelon/jobsdone/releases/download/$JOBSDONE_TEST_VERSION/"*)
         [ "${JOBSDONE_TEST_DOWNLOAD_FAIL:-no}" != yes ] || exit 22
         cp "$JOBSDONE_TEST_DOWNLOADS/${url##*/}" "$output" ;;
@@ -59,7 +66,7 @@ cat > "$scratch/bin/pacman" <<'EOF'
 EOF
 chmod +x "$scratch/bin/"*
 
-"$root/scripts/install-release" --no-keybind
+"$root/scripts/install-release" --channel beta --no-keybind
 binary="$HOME/.local/bin/jobsdone"
 [ "$("$binary" --version)" = "jobsdone ${JOBSDONE_TEST_VERSION#v}" ]
 test -x "$HOME/.local/bin/jobsdone-update"
@@ -70,10 +77,46 @@ test -f "$XDG_DATA_HOME/applications/jobsdone.desktop"
 "$HOME/.local/bin/jobsdone-uninstall" --help > "$scratch/uninstall-help"
 test -x "$binary"
 printf '#!/usr/bin/env bash\necho "jobsdone 0.0.0"\n' > "$binary"
-"$HOME/.local/bin/jobsdone-update"
+"$HOME/.local/bin/jobsdone-update" --channel beta
 [ "$("$binary" --version)" = "jobsdone ${JOBSDONE_TEST_VERSION#v}" ]
 before="$(sha256sum "$binary")"
 desktop_before="$(sha256sum "$XDG_DATA_HOME/applications/jobsdone.desktop")"
+
+cp "$binary" "$scratch/installed-binary"
+if env -u JOBSDONE_TEST_STABLE_VERSION "$HOME/.local/bin/jobsdone-update" --channel stable; then
+    echo 'an unavailable stable channel must fail without changing files' >&2; exit 1
+fi
+[ "$(sha256sum "$binary")" = "$before" ]
+JOBSDONE_TEST_BETA_VERSION=0.1.0-beta.10 "$HOME/.local/bin/jobsdone-update" --check | grep -F '0.1.0-beta.10'
+printf '#!/usr/bin/env bash\necho "jobsdone 0.1.0-beta.10"\n' > "$binary"
+if JOBSDONE_TEST_BETA_VERSION=0.1.0-beta.2 "$HOME/.local/bin/jobsdone-update"; then
+    echo 'beta updates must not downgrade beta.10 to beta.2' >&2; exit 1
+fi
+printf '#!/usr/bin/env bash\necho "jobsdone 0.1.0"\n' > "$binary"
+if JOBSDONE_TEST_BETA_VERSION=0.1.0-beta.10 "$HOME/.local/bin/jobsdone-update" --channel beta; then
+    echo 'a final release must not downgrade to its beta' >&2; exit 1
+fi
+JOBSDONE_TEST_STABLE_VERSION=0.1.0 "$HOME/.local/bin/jobsdone-update" | grep -F 'already up to date'
+if JOBSDONE_TEST_STABLE_VERSION=0.1.0-beta.10 "$HOME/.local/bin/jobsdone-update"; then
+    echo 'stable installations must reject prerelease channel contents' >&2; exit 1
+fi
+
+promotion="jobsdone-v0.1.0-$target"
+mkdir -p "$scratch/promotion/$promotion/scripts" "$scratch/promotion/$promotion/assets"
+cp "$root/scripts/"{install,uninstall,launch-terminal,install-release} "$scratch/promotion/$promotion/scripts/"
+cp "$root/assets/jobsdone.svg" "$scratch/promotion/$promotion/assets/"
+printf '#!/usr/bin/env bash\necho "jobsdone 0.1.0"\n' > "$scratch/promotion/$promotion/jobsdone"
+chmod +x "$scratch/promotion/$promotion/jobsdone"
+mkdir -p "$scratch/promotion-downloads"
+tar -czf "$scratch/promotion-downloads/$promotion.tar.gz" -C "$scratch/promotion" "$promotion"
+(cd "$scratch/promotion-downloads" && sha256sum "$promotion.tar.gz" > SHA256SUMS)
+printf '#!/usr/bin/env bash\necho "jobsdone 0.1.0-beta.10"\n' > "$binary"
+JOBSDONE_TEST_DOWNLOADS="$scratch/promotion-downloads" JOBSDONE_TEST_VERSION=v0.1.0 \
+    "$HOME/.local/bin/jobsdone-update"
+[ "$("$binary" --version)" = 'jobsdone 0.1.0' ]
+JOBSDONE_TEST_STABLE_VERSION=0.1.0 "$HOME/.local/bin/jobsdone-update" | grep -F 'already up to date'
+cp "$scratch/installed-binary" "$binary"
+
 if TZDIR="$scratch/no-zoneinfo" "$HOME/.local/bin/jobsdone-update"; then
     echo 'missing time-zone data must produce an installation error' >&2; exit 1
 fi
