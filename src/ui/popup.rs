@@ -902,26 +902,25 @@ fn no_date(kind: DateKind) -> &'static str {
 
 /// The whole weeks a month is spread over, from the day a week begins
 /// on, so that the days either side of it are drawn dim rather than left
-/// blank.
-fn weeks_of(on: Date, start: WeekStart) -> Vec<Vec<Date>> {
+/// blank. Cells beyond the civil date range are empty.
+fn weeks_of(on: Date, start: WeekStart) -> Vec<Vec<Option<Date>>> {
     let first = on.first_of_month();
-    let mut day = first
-        .nth_weekday_of_month(1, first_column(start))
-        .unwrap_or(first);
-    if day > first {
-        day = day.saturating_sub(Span::new().days(7));
-    }
-    let last = on.last_of_month();
-
-    let mut weeks = Vec::new();
-    while day <= last {
-        let week: Vec<Date> = (0..7)
-            .map(|at| day.saturating_add(Span::new().days(at)))
-            .collect();
-        day = day.saturating_add(Span::new().days(7));
-        weeks.push(week);
-    }
-    weeks
+    let before = (first.weekday().to_monday_zero_offset()
+        - first_column(start).to_monday_zero_offset())
+    .rem_euclid(7) as usize;
+    let rows = (before + on.last_of_month().day() as usize).div_ceil(7);
+    // Derive each cell from the first representable day of the month.
+    // There are at most six rows, even where adding a week would overflow.
+    (0..rows)
+        .map(|row| {
+            (0..7)
+                .map(|column| {
+                    let offset = (row * 7 + column) as i64 - before as i64;
+                    first.checked_add(Span::new().days(offset)).ok()
+                })
+                .collect()
+        })
+        .collect()
 }
 
 /// The day of the week the leftmost column of the calendar is.
@@ -938,7 +937,7 @@ fn calendar(
     canvas: &mut Canvas,
     x: u16,
     y: u16,
-    weeks: &[Vec<Date>],
+    weeks: &[Vec<Option<Date>>],
     draft: &DateDraft,
     today: Date,
     start: WeekStart,
@@ -954,6 +953,7 @@ fn calendar(
 
     for (down, week) in weeks.iter().enumerate() {
         for (across, day) in week.iter().enumerate() {
+            let Some(day) = day else { continue };
             let style = if *day == draft.on {
                 // The one thing to press Enter on, marked the way the
                 // cursor row is.
@@ -1457,3 +1457,7 @@ fn help(canvas: &mut Canvas, _app: &App, popup: &Popup, rows: &Rows, layout: &mu
         ],
     );
 }
+
+#[cfg(test)]
+#[path = "popup_calendar_tests.rs"]
+mod calendar_boundary_tests;

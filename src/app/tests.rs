@@ -5876,3 +5876,35 @@ fn oversized_relative_dates_leave_the_picker_open_without_changing_the_model() {
         assert_eq!(*app.model(), before);
     }
 }
+
+#[test]
+fn calendar_navigation_stays_at_the_edges_of_the_supported_date_range() {
+    for (date, outward, inward) in [
+        (
+            Date::MIN,
+            [Action::Left, Action::Up, Action::PrevMonth],
+            Action::Right,
+        ),
+        (
+            Date::MAX,
+            [Action::Right, Action::Down, Action::NextMonth],
+            Action::Left,
+        ),
+    ] {
+        let mut app = started();
+        app.update(Action::GoToDate);
+        // A minimum civil year uses a leading minus, which the typed
+        // date grammar reserves for relative dates. Stand on the date
+        // directly to exercise calendar navigation independently.
+        if let Card::Date(draft) = &mut app.popup.as_mut().unwrap().card {
+            draft.on = date;
+            draft.in_calendar = true;
+        }
+        for action in outward {
+            app.update(action);
+            assert_eq!(app.popup().unwrap().date().unwrap().on, date);
+        }
+        app.update(inward);
+        assert_ne!(app.popup().unwrap().date().unwrap().on, date);
+    }
+}

@@ -333,7 +333,9 @@ quick date on the date card apply and close it, the way a key on a row
 does. Only what has to be composed first waits for Enter: a typed date, a
 day walked to in the calendar, a repeat rule.
 
-An out-of-range typed date keeps the card open with its validation message.
+At the supported date limits, unavailable calendar days are blank, and
+navigation stops at the boundary. An out-of-range typed date keeps the card
+open with its validation message.
 
 A field on a row is a mode like any other, so its keys are in the hint
 bar rather than beside it: while a title is being typed the bar says what
