@@ -1558,7 +1558,7 @@ fn the_notes_list_is_newest_first_with_the_age_of_each_note() {
     let wanted = wireframe("10-scratchpad", 0, 36);
 
     assert!(drawn[1].contains("Notes 4 notes"));
-    assert!(drawn[1].contains("n or esc back to today"));
+    assert!(drawn[1].contains("n or esc back to tasks"));
     let divider = drawn[4].chars().position(|glyph| glyph == '┬');
     assert_eq!(
         divider,
@@ -3778,4 +3778,18 @@ fn search_and_palette_scroll_the_selected_result_into_view() {
         );
         assert_eq!(app.update(Action::Confirm), crate::app::Flow::Quit);
     }
+}
+
+#[test]
+fn note_editor_status_only_advertises_actions_that_do_not_type() {
+    let mut app = empty();
+    app.update(Action::PrevDay);
+    app.update(Action::NotesPage);
+    app.update(Action::Add);
+    let drawn = look(&app, 80, 24);
+    assert!(drawn[1].contains("esc back to list"));
+    assert!(drawn[1].contains("alt-h help"));
+    assert!(!drawn[1].contains("n or esc"));
+    app.update(Action::Cancel);
+    assert!(look(&app, 80, 24)[1].contains("back to tasks"));
 }

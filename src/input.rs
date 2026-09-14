@@ -773,7 +773,7 @@ const NOTES_LIST: &[Binding] = &[
     Binding {
         keys: &[("n", Action::NotesPage), ("esc", Action::Cancel)],
         shown: "n",
-        label: "back to today",
+        label: "back to tasks",
         bar: Bar::Left,
         narrow: Bar::Short(Side::Left, "back"),
     },

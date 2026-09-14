@@ -526,6 +526,12 @@ fn with(first: Option<Item>, rest: Vec<Item>) -> Vec<Item> {
 ///
 /// A narrow window keeps the indicators and drops the words around them.
 fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
+    if app.popup().is_some() || app.editor().is_some() || app.setting_draft().is_some() {
+        canvas.put(1, y, input::name(app.key_context()), bold());
+        canvas.rsegments(canvas.width() - 1, y, &[key("ctrl-c", "quit")], 2);
+        return;
+    }
+
     if let Some(under_way) = app.review() {
         review::status(canvas, under_way, y, narrow);
         return;
@@ -588,13 +594,38 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
                 ],
             ),
         ),
+        (Page::Notes, _) if app.draft().is_some() => (
+            vec![vec![
+                words("Notes", bold()),
+                words(&counted(app.notes().count, "note", "notes"), dim()),
+                words(
+                    if canvas.width() >= 80 {
+                        "editing · autosave"
+                    } else {
+                        ""
+                    },
+                    dim(),
+                ),
+            ]],
+            vec![keys(&[
+                (
+                    "esc",
+                    if canvas.width() >= 80 {
+                        "back to list"
+                    } else {
+                        "list"
+                    },
+                ),
+                ("alt-h", "help"),
+            ])],
+        ),
         (Page::Notes, _) => (
             vec![vec![
                 words("Notes", bold()),
                 words(&counted(app.notes().count, "note", "notes"), dim()),
             ]],
             vec![
-                keys(&[("n", "or"), ("esc", "back to today")]),
+                keys(&[("n", "or"), ("esc", "back to tasks")]),
                 key("/", ""),
                 key(":", ""),
                 key("?", ""),

@@ -60,8 +60,8 @@ like it belongs to the first two.
   border, no dimming of what is behind. Centred means centred in the pane
   area, between the rule under the pane headers and the rule over the
   hint bar: a card is about what is in the panes, so that is what it sits
-  in the middle of, and the status line and the hint bar keep saying what
-  they said. A window shorter than the card is the exception: the box
+  in the middle of. The status line names the active mode rather than
+  offering shortcuts that the card would swallow. A window shorter than the card is the exception: the box
   keeps its size and covers the hint bar rather than shrinking, because
   its own footer names every key that works while it is open.
 - No window chrome of its own: the top line is a status line, the bottom
@@ -373,6 +373,11 @@ that is resized keeps the caret in view rather than jumping the note
 somewhere else. The body is wrapped one column short of the pane, because
 the caret at the end of a full row occupies that final column. Within
 the text, it reverses the character beneath it without shifting the text.
+
+The status line distinguishes the notes list from editing. While editing,
+Escape returns to the list and Alt+h opens help; unmodified page shortcuts
+are not advertised because they type text. Leaving the list says "back to
+tasks", since the previously browsed date is retained.
 
 `Ctrl+Z` undoes note edits and `Ctrl+Y` redoes them. This history is local to
 the window and separate from `u`, the task-decision undo stack. Consecutive
