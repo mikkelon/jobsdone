@@ -26,7 +26,7 @@ opening the launcher and using clipboard shortcuts.
 To test an archive downloaded from workflow artifacts:
 
 ```sh
-bash tests/release.sh /path/to/jobsdone-v0.1.0-beta.1-x86_64-unknown-linux-musl.tar.gz
+bash tests/release.sh /path/to/jobsdone-v1.0.0-x86_64-unknown-linux-musl.tar.gz
 ```
 
 Run this from the matching source checkout on the archive's architecture.
@@ -70,8 +70,8 @@ compare-and-swap push prevents concurrent updates from overwriting one another.
 These branches are installation references, not development branches. Published
 tags and assets stay unchanged.
 
-The README downloads the installer from the `release-beta` branch and passes
-`--channel beta`. The installer reads that channel's Cargo version once and
+The README downloads the installer from the `release-stable` branch and passes
+`--channel stable`. The installer reads that channel's Cargo version once and
 downloads all assets from the matching immutable version URL. The branch is
 updated only after the release's assets are published. Explicit `--version`
 accepts a stable release or prerelease without consulting a channel.

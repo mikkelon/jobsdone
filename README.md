@@ -3,9 +3,6 @@
 A keyboard-first task manager for the terminal. Plan today, work through your
 list, and review what yesterday left behind.
 
-> **Public beta.** Tested primarily on the maintainer’s devices. Feedback and
-> bug reports from other setups are welcome.
-
 ![A morning in jobsdone: review yesterday, plan today, focus the report, and complete a task](assets/demo.gif)
 
 - Organize tasks by day, set reminders, and schedule recurring work.
@@ -20,7 +17,7 @@ For Linux on x86-64 or ARM64. No sudo is needed. Uninstalling later keeps your
 tasks, notes and settings.
 
 ```sh
-bash -c "$(curl -fsSL https://raw.githubusercontent.com/mikkelon/jobsdone/release-beta/scripts/install-release)" -- --channel beta
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/mikkelon/jobsdone/release-stable/scripts/install-release)" -- --channel stable
 ```
 
 Open **Jobsdone** from your app launcher, or run `jobsdone` in a terminal.
@@ -47,7 +44,7 @@ jobsdone-update --keybind "SUPER + ALT + J" --size 1000x700
 ```
 
 Use `--no-keybind` to skip the shortcut, `--tiled` for a tiled window, or
-`--version v0.1.0-beta.1` to install a particular release. Run
+`--version v1.0.0` to install a particular release. Run
 `jobsdone-update --help` for all options. You can also append these options to
 the install command above.
 
@@ -82,11 +79,12 @@ copies the app's selection.
 | What you want to do | Command |
 | --- | --- |
 | Check for an update | `jobsdone-update --check` |
-| Install the latest beta | `jobsdone-update` |
+| Install the latest stable release | `jobsdone-update` |
 | Remove the app | `jobsdone-uninstall` |
 
-Beta installations receive beta updates. Use `jobsdone-update --channel stable`
-to switch when a stable release is available.
+Stable installations receive stable updates. If you installed a beta, run
+`jobsdone-update --channel stable` to move to the stable release. Use
+`jobsdone-update --channel beta` to try future beta releases.
 
 Updates keep your tasks, notes, settings and shortcut. Restart open Jobsdone
 windows after updating.
