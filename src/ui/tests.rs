@@ -2675,11 +2675,12 @@ fn a_card_taller_than_the_window_covers_the_hint_bar_whole() {
 fn the_settings_page_matches_the_wireframe() {
     let mut app = app();
     app.update(Action::SettingsPage);
-    same(
-        &look(&app, 120, 36),
-        &wireframe("13-settings", 0, 36),
-        "the settings page",
-    );
+    let mut wanted = wireframe("13-settings", 0, 36);
+    // The wireframe leaves build metadata blank; each release fills it
+    // with the version of the running binary.
+    let version = format!("v{}", env!("CARGO_PKG_VERSION"));
+    wanted[3].replace_range(10..10 + version.len(), &version);
+    same(&look(&app, 120, 36), &wanted, "the settings page");
 }
 
 #[test]

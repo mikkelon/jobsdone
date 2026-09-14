@@ -437,6 +437,9 @@ shown at all.
 
 ## 11. Settings
 
+The Settings heading shows the running app's version in dim text, taken
+from the build's package version, as `jobsdone --version` is.
+
 `,` opens a page of the fourteen settings of DOMAIN.md section 19, in
 six groups: the day, the work days, the review, the window, the
 looks and notes. Every row is a label dotted across to its value, because a

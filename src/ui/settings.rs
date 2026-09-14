@@ -41,7 +41,7 @@ pub(super) fn view() -> PaneView<'static> {
     }
     PaneView {
         title: "Settings".to_owned(),
-        sub: String::new(),
+        sub: format!("v{}", env!("CARGO_PKG_VERSION")),
         // What the app does not hold, said where somebody looking for it
         // would look (DESIGN.md section 11).
         right: quiet("colour and font come from the terminal"),
