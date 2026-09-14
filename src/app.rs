@@ -3292,6 +3292,9 @@ impl App {
     ///   and the keyboard follows it there, so that neither text is
     ///   written over the other and neither is thrown away.
     ///
+    /// A note deleted elsewhere follows the same rule: a clean draft
+    /// closes, but unsaved words go into a recovery note.
+    ///
     /// What comes back is whether the draft is safe to let go of: false
     /// is text that reached no row, which is the one case where leaving
     /// the note has to wait.
@@ -3314,8 +3317,12 @@ impl App {
         };
         let (note, body, saved) = (draft.note, draft.text.clone(), draft.saved.clone());
         let Some(held) = self.model.note(note).filter(|note| note.is_live()) else {
-            // Another window threw it away while it was open. There is
-            // nothing left to write it to.
+            // Deletion ends the original note, not the words that have
+            // not reached storage yet. A failed recovery keeps the draft
+            // so leaving and quitting still protect it.
+            if body != saved {
+                return self.keep_what_was_typed(body, true);
+            }
             self.draft = None;
             self.notes_pane = NotesPane::List;
             return true;
@@ -3356,11 +3363,11 @@ impl App {
                 }
                 written
             }
-            (true, true) => self.keep_what_was_typed(body),
+            (true, true) => self.keep_what_was_typed(body, false),
         }
     }
 
-    /// The open note and the row have both moved since they last agreed.
+    /// The draft changed here and the row was changed or deleted elsewhere.
     ///
     /// Neither text may be written over the other and neither may be
     /// dropped, so what was typed here becomes a note of its own and the
@@ -3374,7 +3381,7 @@ impl App {
     /// from the model, so asking it what `CreateNote` would do to this
     /// model says which id the operation is about to use; nothing is
     /// committed by the asking.
-    fn keep_what_was_typed(&mut self, body: String) -> bool {
+    fn keep_what_was_typed(&mut self, body: String, deleted: bool) -> bool {
         let ctx = self.context();
         let Ok(made) = domain::apply(&self.model, Command::CreateNote, &ctx) else {
             return false;
@@ -3410,7 +3417,11 @@ impl App {
         }
         self.set_cursor(List::Notes, RowId::Note(recovery));
         self.say(
-            "Another window changed that note. What you typed is here, in a note of its own.",
+            if deleted {
+                "Another window deleted that note. What you typed is here, in a note of its own."
+            } else {
+                "Another window changed that note. What you typed is here, in a note of its own."
+            },
             true,
         );
         true

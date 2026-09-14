@@ -3159,6 +3159,7 @@ fn a_note_another_window_threw_away_stops_being_typed_into() {
     let mut elsewhere = app_at(store, NOW);
     app.update(Action::NotesPage);
     let note = note_saying(&mut app, "half a thought");
+    app.update(Action::Tick);
 
     elsewhere.update(Action::NotesPage);
     elsewhere.update(Action::Tick);
@@ -5856,3 +5857,6 @@ fn enter_adds_one_task_and_closes_the_input_in_either_pane() {
         assert!(cursor(&app, list).is_some());
     }
 }
+
+#[path = "tests/note_recovery.rs"]
+mod note_recovery;
