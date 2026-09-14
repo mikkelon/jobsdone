@@ -61,9 +61,11 @@ like it belongs to the first two.
   area, between the rule under the pane headers and the rule over the
   hint bar: a card is about what is in the panes, so that is what it sits
   in the middle of. The status line names the active mode rather than
-  offering shortcuts that the card would swallow. A window shorter than the card is the exception: the box
-  keeps its size and covers the hint bar rather than shrinking, because
-  its own footer names every key that works while it is open.
+  offering shortcuts that the card would swallow. Below 22 rows a card
+  can use the whole terminal; lists scroll and footers stay visible.
+  A compact date card keeps typing and quick picks but has no calendar
+  focus. Dialogs below 40×12 show a resize message and accept only Escape
+  and quitting until they fit. Below 24×9 the app shows a resize message.
 - No window chrome of its own: the top line is a status line, the bottom
   line a hint bar.
 

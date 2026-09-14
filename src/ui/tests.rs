@@ -1669,9 +1669,9 @@ fn left(row: &str) -> String {
 }
 
 #[test]
-fn a_window_too_small_for_the_frame_draws_nothing_rather_than_panicking() {
+fn a_window_too_small_explains_how_to_recover() {
     let drawn = look(&app(), 20, 4);
-    assert!(drawn.iter().all(|row| row.is_empty()));
+    assert!(drawn.join("\n").contains("Resize to 24x9"));
 }
 
 #[test]
@@ -3719,7 +3719,7 @@ fn mouse_and_keyboard_selection_work_in_title_and_popup_fields() {
 
 #[test]
 fn search_and_palette_scroll_the_selected_result_into_view() {
-    for (width, height) in [(120, 36), (80, 24)] {
+    for (width, height) in [(120, 36), (80, 24), (40, 12)] {
         let mut app = empty();
         for index in 0..45 {
             app.update(Action::Add);
@@ -3778,6 +3778,66 @@ fn search_and_palette_scroll_the_selected_result_into_view() {
         );
         assert_eq!(app.update(Action::Confirm), crate::app::Flow::Quit);
     }
+}
+
+#[test]
+fn shrinking_a_calendar_returns_focus_to_the_visible_date_field() {
+    let mut app = app();
+    app.update(Action::GoToDate);
+    let (_, layout) = screen(&app, 120, 36);
+    app.set_layout(layout);
+    app.update(Action::NextPane);
+    assert!(app.popup().unwrap().date().unwrap().in_calendar);
+    let (drawn, layout) = screen(&app, 60, 16);
+    assert!(!drawn.join("\n").contains("tab calendar"));
+    assert!(!drawn.join("\n").contains("h/l/j/k day"));
+    assert!(drawn.iter().any(|line| line.contains('└')));
+    assert!(drawn.iter().any(|line| line.contains("esc cancel")));
+    app.set_layout(layout);
+    assert!(!app.popup().unwrap().date().unwrap().in_calendar);
+    app.update(Action::NextPane);
+    assert!(!app.popup().unwrap().date().unwrap().in_calendar);
+    for c in "+3".chars() {
+        app.update(Action::Insert(c));
+    }
+    app.update(Action::Confirm);
+    assert_eq!(app.showing(), on("2025-09-08"));
+}
+
+#[test]
+fn compact_dialogs_keep_their_borders_and_a_way_back_visible() {
+    for action in [
+        Action::Commands,
+        Action::Search,
+        Action::Help,
+        Action::MoveToDay,
+        Action::GoToDate,
+        Action::Repeat,
+    ] {
+        for (width, height) in [(40, 12), (60, 16), (80, 24)] {
+            let mut app = app();
+            app.update(action);
+            let (drawn, layout) = screen(&app, width, height);
+            let text = drawn.join("\n");
+            assert!(
+                text.contains('┌') && text.contains('└'),
+                "{action:?} at {width}x{height}: {text}"
+            );
+            assert!(text.contains("esc"), "{action:?}: {text}");
+            assert!(!layout.input_blocked);
+        }
+    }
+    let mut app = app();
+    app.update(Action::Delete);
+    app.update(Action::Undo);
+    app.update(Action::Commands);
+    let (drawn, layout) = screen(&app, 30, 10);
+    assert!(drawn.join("\n").contains("Resize to 40x12"));
+    app.set_layout(layout);
+    app.update(Action::Confirm);
+    assert!(app.popup().is_some(), "hidden commands cannot execute");
+    app.update(Action::Cancel);
+    assert!(app.popup().is_none());
 }
 
 #[test]

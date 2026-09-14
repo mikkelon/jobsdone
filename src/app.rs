@@ -945,6 +945,9 @@ pub struct Layout {
     /// tabs.
     pub narrow: bool,
     pub help_lines: usize,
+    /// A compact terminal can display a resize message instead of controls.
+    pub input_blocked: bool,
+    pub calendar_available: Option<bool>,
     /// Visible field cells as (column, row, grapheme offset).
     pub text_cells: Vec<(u16, u16, usize)>,
     pub lists: Vec<ListArea>,
@@ -1146,6 +1149,14 @@ impl App {
     /// a reload on a tick, and by the setting being turned off, and
     /// several of the arms in front of that return early.
     pub fn update(&mut self, action: Action) -> Flow {
+        if self.layout.input_blocked
+            && !matches!(
+                action,
+                Action::Quit | Action::Cancel | Action::Tick | Action::Resize | Action::FocusGained
+            )
+        {
+            return Flow::Continue;
+        }
         let edit_kind = if self.popup.is_none() {
             note_history::edit_kind(action, self.selection().is_some())
         } else if action == Action::Confirm
@@ -2706,6 +2717,14 @@ impl App {
     /// `tab`: the card's other control if a card is open, and the next
     /// pane or tab otherwise.
     fn next_control(&mut self) {
+        if self
+            .popup
+            .as_ref()
+            .is_some_and(|popup| popup.kind == PopupKind::Date)
+            && self.layout.calendar_available == Some(false)
+        {
+            return;
+        }
         if let Some(popup) = &mut self.popup
             && let Card::Help { all, .. } = &mut popup.card
         {
@@ -3135,6 +3154,9 @@ impl App {
     }
 
     pub fn paste(&mut self, result: Result<String, String>) {
+        if self.layout.input_blocked {
+            return;
+        }
         let Ok(pasted) = result else {
             self.say(result.unwrap_err(), false);
             return;
@@ -4159,6 +4181,14 @@ impl App {
             && popup.kind == PopupKind::Help
         {
             popup.selected = popup.selected.min(self.layout.help_lines.saturating_sub(1));
+        }
+        if self.layout.calendar_available == Some(false)
+            && let Some(Popup {
+                card: Card::Date(draft),
+                ..
+            }) = &mut self.popup
+        {
+            draft.in_calendar = false;
         }
         // A window resized under an open note has moved the rows the
         // note is scrolled to, and the frame that has just been drawn is

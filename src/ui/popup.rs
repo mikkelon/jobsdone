@@ -25,6 +25,31 @@ pub(super) fn draw(canvas: &mut Canvas, app: &App, rows: &Rows, layout: &mut Lay
     let Some(popup) = app.popup() else {
         return;
     };
+    if canvas.width() < 40 || canvas.height() < 12 {
+        for row in 0..canvas.height() {
+            canvas.put(0, row, &" ".repeat(canvas.width() as usize), plain());
+        }
+        canvas.put(0, 0, "Resize to 40x12", accent());
+        canvas.put(0, 2, "Esc back · Ctrl+C quit", plain());
+        layout.input_blocked = true;
+        layout.calendar_available = Some(false);
+        return;
+    }
+    // Small terminals lend their status and hint rows to the card.
+    let expanded;
+    let rows = if canvas.height() < 22 {
+        expanded = Rows {
+            top: 0,
+            bottom: canvas.height() - 1,
+            ..*rows
+        };
+        &expanded
+    } else {
+        rows
+    };
+    if popup.kind == PopupKind::Date {
+        layout.calendar_available = Some(calendar_visible(app, canvas.width(), canvas.height()));
+    }
     match popup.kind {
         PopupKind::Palette => palette(canvas, app, popup, rows),
         PopupKind::Search => search(canvas, app, popup, rows),
@@ -94,7 +119,8 @@ fn footer(canvas: &mut Canvas, x: u16, y: u16, width: u16, parts: &[(&str, &str)
 fn place(canvas: &Canvas, rows: &Rows, width: u16, height: u16) -> (u16, u16) {
     let x = canvas.width().saturating_sub(width) / 2;
     let body = rows.bottom - rows.top + 1;
-    let y = rows.top + body.saturating_sub(height) / 2;
+    let y =
+        (rows.top + body.saturating_sub(height) / 2).min(canvas.height().saturating_sub(height));
     (x, y)
 }
 
@@ -343,18 +369,22 @@ fn search(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     divide(canvas, x, last, width);
     if results.total == 0 {
         let add = format!("add \"{}\" to today", popup.text.trim());
-        footer(canvas, x, last + 1, width, &[("⏎", &add), ("esc", "close")]);
+        footer(canvas, x, last + 1, width, &[("esc", "close"), ("⏎", &add)]);
     } else {
         footer(
             canvas,
             x,
             last + 1,
             width,
-            &[
-                ("⏎", "go to that day"),
-                ("alt-t", "re-add to today as a new task"),
-                ("esc", "close"),
-            ],
+            if width < 70 {
+                &[("esc", "close"), ("⏎", "open"), ("alt-t", "copy to today")]
+            } else {
+                &[
+                    ("⏎", "go to that day"),
+                    ("alt-t", "re-add to today as a new task"),
+                    ("esc", "close"),
+                ]
+            },
         );
     }
 }
@@ -453,24 +483,42 @@ fn keys_of(context: KeyContext, tight: bool) -> Vec<(&'static str, &'static str)
 fn move_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     let choices = app.move_choices();
     let width = CARD_WIDTH.min(canvas.width().saturating_sub(4));
-    let height = choices.len() as u16 + 4;
+    let shown = choices
+        .len()
+        .min((rows.bottom - rows.top + 1).saturating_sub(4) as usize);
+    let first = super::scroll_to(choices.len(), Some(popup.selected), shown);
+    let height = shown as u16 + 4;
     let (x, y) = place(canvas, rows, width, height);
     card(canvas, x, y, width, height, "Move", &about(app, popup));
 
-    for (at, choice) in choices.iter().enumerate() {
+    for (at, choice) in choices.iter().skip(first).take(shown).enumerate() {
         let row = y + 2 + at as u16;
         canvas.key(x + 2, row, choice.key);
-        canvas.put(x + 8, row, choice.label, plain());
+        canvas.put(
+            x + 8,
+            row,
+            super::clip(choice.label, width.saturating_sub(10)),
+            plain(),
+        );
         let day = match choice.target {
             MoveTarget::Day(day) => day_label(day, app.dates()),
             MoveTarget::Backlog => "no day".to_owned(),
             MoveTarget::Pick => "calendar".to_owned(),
         };
-        canvas.rput(x + width - 2, row, &day, dim());
-        if at == popup.selected {
+        if width >= 46 {
+            canvas.rput(x + width - 2, row, &day, dim());
+        }
+        if first + at == popup.selected {
             canvas.restyle(x + 1, row, width - 2, cursor());
         }
     }
+    footer(
+        canvas,
+        x,
+        y + height - 2,
+        width,
+        &[("⏎", "move"), ("esc", "back"), ("↑↓", "pick")],
+    );
 }
 
 /// What the dictionary offers in place of one misspelt word, as a list
@@ -559,6 +607,13 @@ fn spelling_card(canvas: &mut Canvas, popup: &Popup, rows: &Rows) {
     if popup.selected == spelling.add_row() {
         canvas.restyle(x + 1, keep, width - 2, cursor());
     }
+    footer(
+        canvas,
+        x,
+        y + height - 2,
+        width,
+        &[("⏎", "choose"), ("esc", "back"), ("↑↓", "pick")],
+    );
 }
 
 // ---- the personal dictionary -----------------------------------------
@@ -630,19 +685,21 @@ fn dictionary_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
             popup.caret,
         );
     }
-    footer(
-        canvas,
-        x,
-        y + height - 2,
-        width,
-        &keys_of(
-            KeyContext::Popup {
-                kind: PopupKind::Dictionary,
-                text_field: writing,
-            },
-            true,
-        ),
-    );
+    let context = KeyContext::Popup {
+        kind: PopupKind::Dictionary,
+        text_field: writing,
+    };
+    if width < 50 && !writing {
+        footer(
+            canvas,
+            x,
+            y + height - 2,
+            width,
+            &[("esc", "back"), ("a", "add"), ("e", "edit"), ("x", "del")],
+        );
+    } else {
+        footer(canvas, x, y + height - 2, width, &keys_of(context, true));
+    }
 }
 
 // ---- the date card ---------------------------------------------------
@@ -661,6 +718,69 @@ const CALENDAR: u16 = 21;
 
 /// Due by, remind on, or the day the move card was asked to pick. One
 /// card with three ways to a date: type it, pick it, or walk the month.
+pub(super) fn calendar_visible(app: &App, width: u16, height: u16) -> bool {
+    let Some(draft) = app.popup().and_then(Popup::date) else {
+        return false;
+    };
+    let body = if height < 22 {
+        height
+    } else {
+        height.saturating_sub(8)
+    };
+    let weeks = weeks_of(draft.on, app.settings().week_starts_on()).len() as u16;
+    width >= 58 && body >= app.date_choices().len() as u16 + 11 + weeks
+}
+
+fn compact_date(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows, width: u16) {
+    let Some(draft) = popup.date() else { return };
+    let choices = app.date_choices();
+    let height = choices.len() as u16 + 7;
+    let (x, y) = place(canvas, rows, width, height);
+    card(
+        canvas,
+        x,
+        y,
+        width,
+        height,
+        name_of(draft.kind),
+        &about(app, popup),
+    );
+    super::caret_line(canvas, x + 2, y + 1, width - 4, &popup.text, popup.caret);
+    let resolved = if popup.text.trim().is_empty()
+        || domain::parse_date(popup.text.trim(), app.today()).is_some()
+    {
+        day_label(draft.on, app.dates())
+    } else {
+        "Not a date: try tomorrow or +3".to_owned()
+    };
+    canvas.put(x + 2, y + 2, super::clip(&resolved, width - 4), dim());
+    let switches = matches!(draft.kind, DateKind::Due | DateKind::Remind);
+    if switches {
+        footer(
+            canvas,
+            x,
+            y + 3,
+            width,
+            &[("alt-d", "due"), ("alt-r", "remind")],
+        );
+    } else {
+        canvas.put(x + 2, y + 3, "Type a date, e.g. +3 or mon", dim());
+    }
+    for (at, choice) in choices.iter().enumerate() {
+        let row = y + 4 + at as u16;
+        canvas.key(x + 2, row, choice.key);
+        canvas.put(x + 8, row, choice.label, plain());
+    }
+    divide(canvas, x, y + height - 3, width);
+    footer(
+        canvas,
+        x,
+        y + height - 2,
+        width,
+        &[("⏎", "set"), ("esc", "cancel")],
+    );
+}
+
 fn date_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     let Some(draft) = popup.date() else {
         return;
@@ -669,7 +789,6 @@ fn date_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     let start = app.settings().week_starts_on();
     let weeks = weeks_of(draft.on, start);
     let width = DATE_WIDTH.min(canvas.width().saturating_sub(4));
-    let body = rows.bottom - rows.top + 1;
 
     // The border, a blank, the field, a blank, the picks, the calendar
     // under a blank, then a blank, the rule, the footer and the border.
@@ -677,7 +796,11 @@ fn date_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     let month = 3 + weeks.len() as u16;
     // A window with no room for the calendar keeps the card that types
     // and picks rather than losing the card altogether.
-    let shown = around + month <= body;
+    let shown = calendar_visible(app, canvas.width(), canvas.height());
+    if !shown {
+        compact_date(canvas, app, popup, rows, width);
+        return;
+    }
     let height = around + if shown { month } else { 0 };
     let (x, y) = place(canvas, rows, width, height);
 
@@ -865,12 +988,18 @@ fn repeat_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     let width = DATE_WIDTH.min(canvas.width().saturating_sub(4));
     // The border, a blank, the shapes, a blank, the preview, the rule,
     // the footer, a blank and the border.
-    let height = shapes.len() as u16 + 8;
+    let compact = width < 50;
+    let around = 8 + u16::from(compact);
+    let shown = shapes
+        .len()
+        .min((rows.bottom - rows.top + 1).saturating_sub(around).max(1) as usize);
+    let first = super::scroll_to(shapes.len(), Some(popup.selected), shown);
+    let height = shown as u16 + around;
     let (x, y) = place(canvas, rows, width, height);
     card(canvas, x, y, width, height, "Repeat", &about(app, popup));
 
-    for (at, shape) in shapes.iter().enumerate() {
-        let row = y + 2 + at as u16;
+    for (at, shape) in shapes.iter().enumerate().skip(first).take(shown) {
+        let row = y + 2 + (at - first) as u16;
         let named = input::bindings(KeyContext::Popup {
             kind: PopupKind::Repeat,
             text_field: false,
@@ -886,20 +1015,25 @@ fn repeat_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
 
         canvas.key(x + 2, row, binding.shown);
         canvas.put(x + 8, row, binding.label, plain());
-        shape_of(
-            canvas,
-            x + width - 2,
-            row,
-            *shape,
-            draft,
-            at == popup.selected,
-            app,
-        );
+        if !compact || at == popup.selected {
+            shape_of(
+                canvas,
+                x + width - 2,
+                if compact { y + 2 + shown as u16 } else { row },
+                *shape,
+                draft,
+                at == popup.selected,
+                app,
+            );
+        }
         if at == popup.selected {
             canvas.restyle(x + 1, row, width - 2, cursor());
         }
     }
 
+    if shapes.len() > shown {
+        position(canvas, x, y, width, popup.selected, shapes.len());
+    }
     let preview: Vec<String> = app
         .repeat_preview()
         .iter()
@@ -925,13 +1059,14 @@ fn repeat_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
         x,
         last + 1,
         width,
-        &keys_of(
-            KeyContext::Popup {
-                kind: PopupKind::Repeat,
-                text_field: false,
-            },
-            false,
-        ),
+        &[("⏎", "save"), ("esc", "back"), ("↑↓", "pick")],
+    );
+    footer(
+        canvas,
+        x,
+        y + height - 2,
+        width,
+        &[("h/l", "adjust"), ("space", "toggle day")],
     );
 }
 
@@ -1038,8 +1173,14 @@ fn copy_question(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     for (at, answer) in answers.iter().enumerate() {
         let row = y + 4 + at as u16;
         canvas.key(x + 2, row, answer.shown);
-        canvas.put(x + 8, row, &sentence(answer.label), plain());
+        canvas.put(
+            x + 8,
+            row,
+            super::clip(&sentence(answer.label), width.saturating_sub(10)),
+            plain(),
+        );
     }
+    footer(canvas, x, y + height - 2, width, &[("esc", "cancel")]);
 }
 
 /// The question `x` asks while `confirm_delete` is on: the row named in
@@ -1066,7 +1207,12 @@ fn delete_question(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     for (at, answer) in answers.iter().enumerate() {
         let row = y + 4 + at as u16;
         canvas.key(x + 2, row, answer.shown);
-        canvas.put(x + 8, row, &sentence(answer.label), plain());
+        canvas.put(
+            x + 8,
+            row,
+            super::clip(&sentence(answer.label), width.saturating_sub(10)),
+            plain(),
+        );
     }
 }
 

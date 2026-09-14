@@ -418,7 +418,12 @@ pub fn draw(app: &App, frame: &mut Frame) -> Layout {
 
     // Below this there is no room for a margin, two rules and a row.
     if area.width < 24 || area.height < 9 {
-        return Layout::default();
+        canvas.put(0, 0, "Resize to 24x9", accent());
+        canvas.put(0, 1, "Ctrl+C quits", dim());
+        return Layout {
+            input_blocked: true,
+            ..Layout::default()
+        };
     }
 
     let rows = Rows {
@@ -658,7 +663,20 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
 /// action that can be undone has to say so somewhere (DESIGN.md section
 /// 8).
 fn hint_bar(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
-    let context = app.key_context();
+    // A resize is drawn before its layout is handed back to the app.
+    // Reflect the visible date field immediately, including that first frame.
+    let context = match app.key_context() {
+        input::KeyContext::Popup {
+            kind: input::PopupKind::Date,
+            ..
+        } if !popup::calendar_visible(app, canvas.width(), canvas.height()) => {
+            input::KeyContext::Popup {
+                kind: input::PopupKind::Date,
+                text_field: true,
+            }
+        }
+        context => context,
+    };
     let mut x = canvas.put(1, y, input::name(context), bold()) + 2;
 
     let edge = canvas.width() - 1;
@@ -678,6 +696,20 @@ fn hint_bar(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
     let mut left = Vec::new();
     let mut right = Vec::new();
     for binding in input::bindings(context) {
+        if matches!(
+            context,
+            input::KeyContext::Popup {
+                kind: input::PopupKind::Date,
+                ..
+            }
+        ) && binding
+            .keys
+            .first()
+            .is_some_and(|(_, action)| *action == input::Action::NextPane)
+            && !popup::calendar_visible(app, canvas.width(), canvas.height())
+        {
+            continue;
+        }
         let bar = if narrow { binding.narrow } else { binding.bar };
         match bar.slot(binding.label) {
             Some((Side::Left, name)) => left.push((binding.shown, name)),
