@@ -5676,3 +5676,24 @@ fn word_navigation_moves_task_popup_and_note_carets_without_editing() {
     assert_eq!(draft.affinity, Affinity::AfterTheBreak);
     assert_eq!(draft.text, "one\ntwo three");
 }
+
+// ---- UX polish regressions ------------------------------------------
+
+#[test]
+fn failed_quick_add_keeps_the_title_and_caret() {
+    let mut app = App::new(
+        Box::new(Broken(MemStore::new())),
+        Box::new(Desk::here()),
+        Locale::default(),
+        &at(NOW),
+    )
+    .unwrap();
+    app.update(Action::Add);
+    type_in(&mut app, "Call café");
+    app.update(Action::Left);
+    let before = app.editor().unwrap().clone();
+    app.update(Action::Confirm);
+    assert_eq!(app.editor(), Some(&before));
+    assert!(app.message().is_some());
+    assert!(app.model().tasks.is_empty());
+}

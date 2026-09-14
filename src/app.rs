@@ -3780,10 +3780,10 @@ impl App {
                     && let Some(added) = added_task(&change)
                 {
                     self.set_cursor(list, RowId::Task(added));
-                }
-                if let Some(editor) = &mut self.editor {
-                    editor.text.clear();
-                    editor.caret = 0;
+                    if let Some(editor) = &mut self.editor {
+                        editor.text.clear();
+                        editor.caret = 0;
+                    }
                 }
             }
             (Field::Renaming, Some(id)) => {

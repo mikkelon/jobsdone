@@ -324,8 +324,9 @@ day walked to in the calendar, a repeat rule.
 A field on a row is a mode like any other, so its keys are in the hint
 bar rather than beside it: while a title is being typed the bar says what
 Enter does there, "add & keep typing" when adding and "save" when
-renaming. A line longer than the field scrolls with the caret rather than
-clipping at its end, so what is being typed is always the part on screen.
+renaming. A failed addition retains its draft and caret for retry; only a
+successful save clears the field. A line longer than the field scrolls
+with the caret rather than clipping at its end, so what is being typed is always the part on screen.
 What just happened goes first on the same line until the next key, or for
 the seconds `message_seconds` names when no key comes, which at 0 is
 however long it takes one to arrive, and the keys that still fit follow
