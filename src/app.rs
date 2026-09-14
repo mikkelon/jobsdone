@@ -731,6 +731,10 @@ impl Popup {
 pub enum Card {
     /// A popup that answers with a key or a row, and builds nothing.
     None,
+    Help {
+        context: KeyContext,
+        all: bool,
+    },
     Date(DateDraft),
     Repeat(RepeatDraft),
     Spelling(SpellingDraft),
@@ -940,6 +944,7 @@ pub struct Layout {
     /// Whether the window was too narrow for two panes and collapsed to
     /// tabs.
     pub narrow: bool,
+    pub help_lines: usize,
     /// Visible field cells as (column, row, grapheme offset).
     pub text_cells: Vec<(u16, u16, usize)>,
     pub lists: Vec<ListArea>,
@@ -2702,6 +2707,13 @@ impl App {
     /// pane or tab otherwise.
     fn next_control(&mut self) {
         if let Some(popup) = &mut self.popup
+            && let Card::Help { all, .. } = &mut popup.card
+        {
+            *all = !*all;
+            popup.selected = 0;
+            return;
+        }
+        if let Some(popup) = &mut self.popup
             && let Card::Date(draft) = &mut popup.card
         {
             draft.in_calendar = !draft.in_calendar;
@@ -4143,6 +4155,11 @@ impl App {
 
     pub fn set_layout(&mut self, layout: Layout) {
         self.layout = layout;
+        if let Some(popup) = &mut self.popup
+            && popup.kind == PopupKind::Help
+        {
+            popup.selected = popup.selected.min(self.layout.help_lines.saturating_sub(1));
+        }
         // A window resized under an open note has moved the rows the
         // note is scrolled to, and the frame that has just been drawn is
         // the one the next click will be aimed at.
@@ -4226,6 +4243,7 @@ impl App {
     /// How many rows the open popup offers.
     fn popup_rows(&self) -> usize {
         match self.popup.as_ref().map(|popup| popup.kind) {
+            Some(PopupKind::Help) => self.layout.help_lines.max(1),
             Some(PopupKind::Palette) => self.palette_rows().len(),
             Some(PopupKind::Search) => self.search_results().total,
             Some(PopupKind::Move) => self.move_choices().len(),
@@ -4447,6 +4465,7 @@ impl App {
     // ---- popups and their text fields --------------------------------
 
     fn open(&mut self, kind: PopupKind, target: Option<RowId>) {
+        let context = self.page_context();
         self.editor = None;
         self.popup = Some(Popup {
             kind,
@@ -4454,7 +4473,14 @@ impl App {
             caret: 0,
             selected: 0,
             target,
-            card: Card::None,
+            card: if kind == PopupKind::Help {
+                Card::Help {
+                    context,
+                    all: false,
+                }
+            } else {
+                Card::None
+            },
         });
     }
 

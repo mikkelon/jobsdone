@@ -167,8 +167,10 @@ Conventions, so the map is guessable:
   you filter and press Enter; the key shown is for next time, outside the
   palette, so it teaches the map and then stops being needed. Search and
   palette lists scroll with selection and show position when they overflow.
-  Help is the
-  whole map on one overlay. There are no hidden keys.
+  Help opens on the current mode; `↑/↓` or `j/k` scroll and Tab switches
+  between current-mode and all-mode keys. Descriptions wrap, including
+  note editing, surfaced review and card controls. `Alt+h` opens help while
+  editing a note, where `?` remains text.
 
 ### Text selection
 

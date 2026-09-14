@@ -457,7 +457,7 @@ pub fn draw(app: &App, frame: &mut Frame) -> Layout {
         canvas.text_cells.clear();
         canvas.selection = app.selection();
     }
-    popup::draw(&mut canvas, app, &rows);
+    popup::draw(&mut canvas, app, &rows, &mut layout);
     layout.text_cells = canvas.text_cells;
     layout
 }

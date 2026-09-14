@@ -3799,6 +3799,7 @@ fn a_click_outside_any_row_still_moves_the_keyboard_to_that_pane() {
         }],
         rows: Vec::new(),
         note: None,
+        ..Layout::default()
     });
     let was = cursor(&app, List::Backlog);
 
@@ -3877,6 +3878,7 @@ fn dragging_a_row_carries_it_the_way_the_keys_do() {
         }],
         rows,
         note: None,
+        ..Layout::default()
     });
 
     // Take hold of the third row and drag it over the first.

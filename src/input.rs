@@ -867,6 +867,13 @@ const NOTES_NOTE: &[Binding] = &[
         narrow: Bar::Off,
     },
     Binding {
+        keys: &[("alt-h", Action::Help)],
+        shown: "alt-h",
+        label: "help",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
         keys: &[("alt-y", Action::CopyNote)],
         shown: "alt-y",
         label: "copy note",
@@ -1802,13 +1809,34 @@ const DICTIONARY_FIELD: &[Binding] = &[
     },
 ];
 
-const HELP_OVERLAY: &[Binding] = &[Binding {
-    keys: &[("?", Action::Cancel), ("esc", Action::Cancel)],
-    shown: "? or esc",
-    label: "close",
-    bar: Bar::Left,
-    narrow: Bar::Left,
-}];
+const HELP_OVERLAY: &[Binding] = &[
+    Binding {
+        keys: &[("?", Action::Cancel), ("esc", Action::Cancel)],
+        shown: "? or esc",
+        label: "close",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[
+            ("j", Action::Down),
+            ("k", Action::Up),
+            ("down", Action::Down),
+            ("up", Action::Up),
+        ],
+        shown: "↑/↓",
+        label: "scroll",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("tab", Action::NextPane)],
+        shown: "tab",
+        label: "current/all keys",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+];
 
 /// The settings page. Its rows are settings rather than tasks, so a key
 /// changes a value instead of acting on a row: `h` and `l` step it,

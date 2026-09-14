@@ -1097,18 +1097,34 @@ fn the_palette_lists_the_commands_of_the_page_beneath_it() {
 }
 
 #[test]
-fn the_help_overlay_is_the_whole_key_map() {
+fn help_starts_in_context_and_all_modes_remain_reachable() {
     let mut app = app();
     app.update(Action::Help);
-    let text = look(&app, 120, 36).join("\n");
-
-    assert!(text.contains(" Keys "));
-    assert!(text.contains("? or esc close"));
-    for column in ["EVERYWHERE", "DAY", "BACKLOG", "REVIEW", "NOTES"] {
-        assert!(text.contains(column), "the {column} column");
+    let (drawn, layout) = screen(&app, 80, 24);
+    assert!(drawn.join("\n").contains("current mode"));
+    app.set_layout(layout);
+    app.update(Action::NextPane);
+    let mut seen = String::new();
+    for _ in 0..700 {
+        let (drawn, layout) = screen(&app, 80, 24);
+        seen.push_str(&drawn.join("\n"));
+        app.set_layout(layout);
+        app.update(Action::Down);
     }
-    assert!(text.contains("notes page"), "a key only the help shows");
-    assert!(text.contains("ctrl-c"), "the key that is a row of no table");
+    for label in [
+        "BACKLOG",
+        "DUE & REMINDERS",
+        "NOTE EDITING",
+        "ctrl-z",
+        "alt-s",
+        "ctrl-c",
+        "CALENDAR",
+        "DICTIONARY INPUT",
+    ] {
+        assert!(seen.contains(label), "missing {label}");
+    }
+    app.update(Action::Cancel);
+    assert!(app.popup().is_none());
 }
 
 #[test]

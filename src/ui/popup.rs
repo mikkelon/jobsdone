@@ -15,20 +15,20 @@ use ratatui::style::{Color, Modifier, Style};
 use super::{
     Canvas, DateOrder, Rows, accent, bold, count, cursor, day_label, dim, place_label, plain,
 };
-use crate::app::{App, DateDraft, DateKind, MoveTarget, Popup, RepeatDraft, RowId};
+use crate::app::{App, Card, DateDraft, DateKind, Layout, MoveTarget, Popup, RepeatDraft, RowId};
 use crate::domain::{self, Row, WeekStart, Weekday, WorkDays};
 use crate::input::{
     self, Action, Binding, KeyContext, NotesPane, Pane, PopupKind, ReviewStep, Shown,
 };
 
-pub(super) fn draw(canvas: &mut Canvas, app: &App, rows: &Rows) {
+pub(super) fn draw(canvas: &mut Canvas, app: &App, rows: &Rows, layout: &mut Layout) {
     let Some(popup) = app.popup() else {
         return;
     };
     match popup.kind {
         PopupKind::Palette => palette(canvas, app, popup, rows),
         PopupKind::Search => search(canvas, app, popup, rows),
-        PopupKind::Help => help(canvas, rows),
+        PopupKind::Help => help(canvas, app, popup, rows, layout),
         PopupKind::Move => move_card(canvas, app, popup, rows),
         PopupKind::Date => date_card(canvas, app, popup, rows),
         PopupKind::Repeat => repeat_card(canvas, app, popup, rows),
@@ -1072,167 +1072,242 @@ fn delete_question(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
 
 // ---- the help overlay ------------------------------------------------
 
-/// One line of a help column.
-enum Help {
-    Heading(&'static str),
-    Key(&'static Binding),
-    Blank,
+/// Help starts with the originating context; Tab expands it to every mode.
+struct HelpLine {
+    key: String,
+    text: String,
+    heading: bool,
 }
 
-fn context(pane: Pane) -> KeyContext {
-    KeyContext::Home {
-        pane,
-        day: Shown::Today,
-        field: None,
+fn help_sections(context: KeyContext, all: bool) -> Vec<(&'static str, KeyContext)> {
+    let mut sections = vec![(input::name(context), context)];
+    if all {
+        let home = |pane, day| KeyContext::Home {
+            pane,
+            day,
+            field: None,
+        };
+        let mut others = vec![
+            ("TODAY", home(Pane::Day, Shown::Today)),
+            ("BACKLOG", home(Pane::Backlog, Shown::Today)),
+            ("PAST / FUTURE DAY", home(Pane::Day, Shown::Past)),
+            ("DAYS", home(Pane::Backlog, Shown::Past)),
+            (
+                "ADD TASK",
+                KeyContext::Home {
+                    pane: Pane::Day,
+                    day: Shown::Today,
+                    field: Some(input::Field::Adding),
+                },
+            ),
+            (
+                "RENAME TASK",
+                KeyContext::Home {
+                    pane: Pane::Day,
+                    day: Shown::Today,
+                    field: Some(input::Field::Renaming),
+                },
+            ),
+            (
+                "REVIEW PILE",
+                KeyContext::Review {
+                    step: ReviewStep::Pile,
+                    asks: true,
+                    text_field: false,
+                },
+            ),
+            (
+                "DUE & REMINDERS",
+                KeyContext::Review {
+                    step: ReviewStep::Surfaced,
+                    asks: true,
+                    text_field: false,
+                },
+            ),
+            (
+                "NOTES LIST",
+                KeyContext::Notes {
+                    pane: NotesPane::List,
+                    text_field: false,
+                },
+            ),
+            (
+                "NOTE EDITING",
+                KeyContext::Notes {
+                    pane: NotesPane::Note,
+                    text_field: true,
+                },
+            ),
+            ("SETTINGS", KeyContext::Settings { field: false }),
+            ("SETTING INPUT", KeyContext::Settings { field: true }),
+        ];
+        for kind in [
+            PopupKind::Search,
+            PopupKind::Palette,
+            PopupKind::Move,
+            PopupKind::Date,
+            PopupKind::Repeat,
+            PopupKind::CopyQuestion,
+            PopupKind::DeleteQuestion,
+            PopupKind::Spelling,
+            PopupKind::Dictionary,
+        ] {
+            let ctx = KeyContext::Popup {
+                kind,
+                text_field: matches!(
+                    kind,
+                    PopupKind::Search | PopupKind::Palette | PopupKind::Date
+                ),
+            };
+            others.push((input::name(ctx), ctx));
+        }
+        others.push((
+            "CALENDAR",
+            KeyContext::Popup {
+                kind: PopupKind::Date,
+                text_field: false,
+            },
+        ));
+        others.push((
+            "DICTIONARY INPUT",
+            KeyContext::Popup {
+                kind: PopupKind::Dictionary,
+                text_field: true,
+            },
+        ));
+        sections.extend(others.into_iter().filter(|(_, ctx)| *ctx != context));
     }
+    sections
 }
 
-/// The same two panes with the day pane stepped off today, which is what
-/// gives them their other set of keys.
-fn browsing(pane: Pane) -> KeyContext {
-    KeyContext::Home {
-        pane,
-        day: Shown::Past,
-        field: None,
-    }
-}
-
-/// A row is the same row in two contexts when it says the same thing.
-fn same(one: &Binding, other: &Binding) -> bool {
-    one.shown == other.shown && one.label == other.label
-}
-
-/// Every row of a context that teaches a key.
-fn named(context: KeyContext) -> Vec<&'static Binding> {
-    input::bindings(context)
-        .iter()
-        .filter(|binding| !binding.keys.is_empty())
-        .collect()
-}
-
-/// The same, minus the rows already written somewhere the eye has been:
-/// the "everywhere" column, and the heading above this one.
-fn only(context: KeyContext, written: &[&'static Binding]) -> Vec<Help> {
-    named(context)
-        .into_iter()
-        .filter(|binding| !written.iter().any(|other| same(other, binding)))
-        .map(Help::Key)
-        .collect()
-}
-
-/// The whole key map, grouped the way the contexts group it. Nothing here
-/// is written twice: a row in both home panes is "everywhere".
-fn columns() -> Vec<(&'static str, Vec<Help>)> {
-    let day = input::bindings(context(Pane::Day));
-    let backlog = input::bindings(context(Pane::Backlog));
-    let shared: Vec<&'static Binding> = day
-        .iter()
-        .filter(|binding| !binding.keys.is_empty())
-        .filter(|binding| backlog.iter().any(|other| same(binding, other)))
-        .collect();
-
-    // A heading takes the keys of the one above it as written already,
-    // so the same row is never twice in one column.
-    let mut above = shared.clone();
-    above.extend(named(context(Pane::Backlog)));
-    let mut third = only(context(Pane::Backlog), &shared);
-    third.push(Help::Blank);
-    third.push(Help::Heading("DAYS"));
-    third.extend(only(browsing(Pane::Backlog), &above));
-    third.push(Help::Blank);
-    third.push(Help::Heading("REVIEW"));
-    third.extend(only(
-        KeyContext::Review {
-            step: ReviewStep::Pile,
-            asks: true,
-            text_field: false,
-        },
-        &shared,
-    ));
-
-    let mut above = shared.clone();
-    above.extend(named(context(Pane::Day)));
-    let mut second = only(context(Pane::Day), &shared);
-    second.push(Help::Blank);
-    second.push(Help::Heading("PAST DAY"));
-    second.extend(only(browsing(Pane::Day), &above));
-    second.push(Help::Blank);
-    second.push(Help::Heading("NOTES"));
-    second.extend(only(
-        KeyContext::Notes {
-            pane: NotesPane::List,
-            text_field: false,
-        },
-        &shared,
-    ));
-
-    // The settings page shares nothing but the keys that are everywhere,
-    // so its column is the whole of its own table.
-    let fourth = only(KeyContext::Settings { field: false }, &shared);
-
-    let mut everywhere: Vec<Help> = shared.into_iter().map(Help::Key).collect();
-    everywhere.push(Help::Key(&input::CTRL_C));
-
-    vec![
-        ("EVERYWHERE", everywhere),
-        ("DAY", second),
-        ("BACKLOG", third),
-        ("SETTINGS", fourth),
-    ]
-}
-
-fn help(canvas: &mut Canvas, rows: &Rows) {
-    let columns = columns();
-    let tallest = columns
-        .iter()
-        .map(|(_, lines)| lines.len())
-        .max()
-        .unwrap_or(0) as u16;
-
-    let width = canvas.width().saturating_sub(4);
-    let body = rows.bottom - rows.top + 1;
-    let height = (tallest + 5).min(body);
-    let x = 2;
-    let y = rows.top + body.saturating_sub(height) / 2;
-
-    frame(canvas, x, y, width, height);
-    canvas.put(x + 2, y, " Keys ", accent());
-    // The way out, on the frame: ` ? or esc close `, whose blank cells
-    // are drawn too so that the frame does not show between the words.
-    let mut at = x + width - 2 - count(" ? or esc close ");
-    at = canvas.put(at, y, " ", dim());
-    at = canvas.key(at, y, "?");
-    at = canvas.put(at, y, " or ", dim());
-    at = canvas.key(at, y, "esc");
-    canvas.put(at, y, " close ", dim());
-
-    let column = (width - 6) / columns.len() as u16;
-    for (at, (title, lines)) in columns.iter().enumerate() {
-        let left = x + 3 + at as u16 * column;
-        canvas.put(left, y + 2, title, dim());
-        for (down, line) in lines.iter().enumerate() {
-            let row = y + 3 + down as u16;
-            if row >= y + height - 1 {
-                break;
+fn help(canvas: &mut Canvas, _app: &App, popup: &Popup, rows: &Rows, layout: &mut Layout) {
+    let Card::Help { context, all } = popup.card else {
+        return;
+    };
+    let width = canvas.width().saturating_sub(4).min(90);
+    let key_width = 18.min(width.saturating_sub(12));
+    let text_width = width.saturating_sub(key_width + 5).max(1);
+    let mut lines = Vec::new();
+    for (title, ctx) in help_sections(context, all) {
+        lines.push(HelpLine {
+            key: String::new(),
+            text: title.to_owned(),
+            heading: true,
+        });
+        for binding in input::bindings(ctx)
+            .iter()
+            .filter(|binding| !binding.keys.is_empty())
+        {
+            for (at, (part, _)) in super::wrapped(binding.label, text_width)
+                .into_iter()
+                .enumerate()
+            {
+                lines.push(HelpLine {
+                    key: if at == 0 {
+                        binding.shown.to_owned()
+                    } else {
+                        String::new()
+                    },
+                    text: part,
+                    heading: false,
+                });
             }
-            match line {
-                Help::Blank => {}
-                Help::Heading(text) => {
-                    canvas.put(left, row, text, dim());
-                }
-                Help::Key(binding) => {
-                    let after = canvas.key(left, row, binding.shown);
-                    canvas.put(
-                        after + 1,
-                        row,
-                        super::clip(
-                            binding.label,
-                            column.saturating_sub(count(binding.shown) + 2),
-                        ),
-                        plain(),
-                    );
+        }
+        if ctx.text_field() {
+            for (key, label) in [
+                ("home/end", "start/end of displayed row"),
+                ("backspace/delete", "delete before/after caret"),
+                ("shift+arrows", "select text"),
+                ("shift-home/end", "select to row edge"),
+                ("ctrl-shift-←/→", "select by word"),
+                ("ctrl-a", "select all"),
+                ("ctrl-←/→", "move by word"),
+                ("ctrl-backspace", "delete previous word"),
+                ("ctrl-shift-c", "copy selection"),
+                ("ctrl-insert", "copy selection"),
+                (
+                    "alt-y",
+                    if matches!(ctx, KeyContext::Notes { .. }) {
+                        "copy selection; whole note if none"
+                    } else {
+                        "copy selection"
+                    },
+                ),
+                ("ctrl-shift-x", "cut selection"),
+                ("ctrl-shift-v", "paste"),
+                ("shift-insert", "paste"),
+                ("ctrl-x", "cut selection"),
+                ("ctrl-v", "paste"),
+            ] {
+                for (at, (part, _)) in super::wrapped(label, text_width).into_iter().enumerate() {
+                    lines.push(HelpLine {
+                        key: if at == 0 {
+                            key.to_owned()
+                        } else {
+                            String::new()
+                        },
+                        text: part,
+                        heading: false,
+                    });
                 }
             }
         }
+        lines.push(HelpLine {
+            key: String::new(),
+            text: String::new(),
+            heading: false,
+        });
     }
+    for (at, (part, _)) in super::wrapped(input::CTRL_C.label, text_width)
+        .into_iter()
+        .enumerate()
+    {
+        lines.push(HelpLine {
+            key: if at == 0 {
+                input::CTRL_C.shown.to_owned()
+            } else {
+                String::new()
+            },
+            text: part,
+            heading: false,
+        });
+    }
+    layout.help_lines = lines.len();
+    let room = (rows.bottom - rows.top + 1).saturating_sub(4).max(1) as usize;
+    let shown = lines.len().min(room);
+    let selected = popup.selected.min(lines.len().saturating_sub(1));
+    let first = super::scroll_to(lines.len(), Some(selected), shown);
+    let height = shown as u16 + 4;
+    let (x, y) = place(canvas, rows, width, height);
+    card(
+        canvas,
+        x,
+        y,
+        width,
+        height,
+        "Keys",
+        if all { "all modes" } else { "current mode" },
+    );
+    position(canvas, x, y, width, selected, lines.len());
+    for (at, line) in lines.iter().skip(first).take(shown).enumerate() {
+        let row = y + 1 + at as u16;
+        if line.heading {
+            canvas.put(x + 2, row, super::clip(&line.text, width - 4), accent());
+        } else {
+            canvas.key(x + 2, row, &line.key);
+            canvas.put(x + key_width + 3, row, &line.text, plain());
+        }
+    }
+    divide(canvas, x, y + height - 3, width);
+    footer(
+        canvas,
+        x,
+        y + height - 2,
+        width,
+        &[
+            ("esc", "close"),
+            ("↑/↓", "scroll"),
+            ("tab", if all { "current keys" } else { "all keys" }),
+        ],
+    );
 }

@@ -66,8 +66,9 @@ The hint bar shows the keys available on the current screen.
 | `n` | Open notes |
 | `Ctrl+C` | Quit |
 
-In a note, Ctrl+Z undoes text edits and Ctrl+Y redoes them.
-In the review, j/k move and s leaves a surfaced task in the backlog unchanged.
+In a note, Ctrl+Z undoes text edits, Ctrl+Y redoes them, and Alt+h opens
+editing help. In the review, j/k move and s leaves a surfaced task in the
+backlog unchanged. Help scrolls with the arrows; Tab shows all modes.
 
 Settings let you choose your working days, when a day starts, and how far back
 to review unfinished work. On Omarchy, you can also adjust the window size.
