@@ -622,10 +622,23 @@ fn wireframe(name: &str, block: usize, height: usize) -> Vec<String> {
         .map(|(at, _)| at)
         .collect();
     let start = heads[block] + 2;
-    all[start..start + height]
+    let mut rows: Vec<String> = all[start..start + height]
         .iter()
         .map(|line| line.trim_end().to_owned())
-        .collect()
+        .collect();
+    // The original wireframes include vertical margins. Reuse their content
+    // with those rows moved into the body for the current layout.
+    rows.remove(0);
+    rows.pop();
+    let insert_at = if matches!(name, "01-review" | "02-surfaced") {
+        height - 7 // The review action stays anchored above the hint rule.
+    } else {
+        height - 4
+    };
+    let blank_body = rows[insert_at - 1].clone();
+    rows.insert(insert_at, blank_body.clone());
+    rows.insert(insert_at + 1, blank_body);
+    rows
 }
 
 fn same(drawn: &[String], wanted: &[String], what: &str) {
@@ -840,12 +853,12 @@ fn a_past_day_with_nothing_on_it_names_the_keys_that_leave_it() {
 #[test]
 fn the_narrow_window_makes_the_day_and_the_day_list_its_tabs() {
     let drawn = look(&history(), 80, 44);
-    let tabs = drawn[3].clone();
+    let tabs = drawn[2].clone();
 
     assert!(tabs.contains("MON 1 SEP"), "the tab is the day, not TODAY");
     assert!(tabs.contains("DAYS 11"), "and the backlog gives way to it");
     assert_eq!(
-        drawn[drawn.len() - 2],
+        drawn[drawn.len() - 1],
         " PAST DAY  [/] day  . back  space close  t today  x del                  ? more",
         "and the bar keeps the way home in it"
     );
@@ -860,7 +873,7 @@ fn a_hint_bar_too_full_for_its_right_end_leaves_it_out() {
         app.update(Action::NextDay);
     }
     let drawn = look(&app, 120, 36);
-    let bar = drawn[34].clone();
+    let bar = drawn[35].clone();
 
     assert!(bar.starts_with(" FUTURE DAY  [/] day  . today"));
     assert!(
@@ -879,7 +892,7 @@ fn the_day_list_keeps_its_last_word_under_its_last_day() {
     }
     // A window too short for the whole list, so it has scrolled.
     let drawn = look(&app, 120, 20);
-    let body: Vec<&String> = drawn[5..17].iter().collect();
+    let body: Vec<&String> = drawn[4..18].iter().collect();
 
     assert!(
         body.last()
@@ -890,11 +903,11 @@ fn the_day_list_keeps_its_last_word_under_its_last_day() {
 }
 
 #[test]
-fn the_frame_keeps_its_one_cell_margin() {
+fn the_frame_uses_the_edge_rows_and_keeps_its_side_margins() {
     let drawn = look(&app(), 120, 36);
 
-    assert_eq!(drawn[0], "", "a blank row above the status line");
-    assert_eq!(drawn[35], "", "a blank row below the hint bar");
+    assert!(!drawn[0].is_empty(), "status occupies the first row");
+    assert!(!drawn[35].is_empty(), "hints occupy the last row");
     for (at, row) in drawn.iter().enumerate() {
         let rule = row.starts_with('─');
         assert!(
@@ -919,7 +932,7 @@ fn draw_answers_where_every_row_was_put() {
         .collect();
     assert_eq!(day.len(), 9, "every row of the day pane");
     assert_eq!(
-        day[0].area.y, 6,
+        day[0].area.y, 5,
         "under the header rule and its group label"
     );
     assert_eq!(day[0].area.x, 0);
@@ -1040,11 +1053,11 @@ fn the_cursor_row_is_reversed_and_keeps_its_colours() {
         })
         .expect("a frame");
 
-    // Row 5 is the FOCUS label; the first task is under it.
+    // Row 4 is the FOCUS label; the first task is under it.
     let buffer = terminal.backend().buffer();
-    let on = buffer[(1, 6)].modifier.contains(Modifier::REVERSED);
+    let on = buffer[(1, 5)].modifier.contains(Modifier::REVERSED);
     assert!(on, "the cursor starts on the first row of the day pane");
-    let off = buffer[(1, 7)].modifier.contains(Modifier::REVERSED);
+    let off = buffer[(1, 6)].modifier.contains(Modifier::REVERSED);
     assert!(!off, "and on no other");
 
     app.update(Action::Down);
@@ -1054,7 +1067,7 @@ fn the_cursor_row_is_reversed_and_keeps_its_colours() {
         })
         .expect("a frame");
     let buffer = terminal.backend().buffer();
-    assert!(buffer[(1, 7)].modifier.contains(Modifier::REVERSED));
+    assert!(buffer[(1, 6)].modifier.contains(Modifier::REVERSED));
 }
 
 #[test]
@@ -1076,8 +1089,8 @@ fn a_pile_left_behind_is_counted_in_red() {
         "two of the seven were dealt with, and the key that opens the review is on the count"
     );
     let buffer = terminal.backend().buffer();
-    let at = look(&app, 120, 36)[1].find('●').expect("the count") as u16;
-    assert_eq!(buffer[(at, 1)].fg, Color::Red);
+    let at = look(&app, 120, 36)[0].find('●').expect("the count") as u16;
+    assert_eq!(buffer[(at, 0)].fg, Color::Red);
 }
 
 #[test]
@@ -1093,7 +1106,7 @@ fn the_palette_lists_the_commands_of_the_page_beneath_it() {
     );
     assert!(text.contains("Move to day…"), "a command, capitalised");
     assert!(text.contains("⏎ run"), "and the footer");
-    assert!(drawn[35].is_empty(), "the popup stays inside the margin");
+    assert!(!drawn[35].is_empty(), "the hint bar stays visible");
 }
 
 #[test]
@@ -1254,14 +1267,14 @@ fn the_add_line_becomes_the_field_that_is_typed_into() {
     // Nothing is planned yet, so no group label stands over the field:
     // the add line is the pane's own (DESIGN.md section 6).
     assert!(
-        drawn[5].contains("+  Call the landlord about the leak█"),
+        drawn[4].contains("+  Call the landlord about the leak█"),
         "the field is where the add line was: {:?}",
-        drawn[5]
+        drawn[4]
     );
     assert!(
-        drawn[34].contains("shift+⏎ add & keep typing"),
+        drawn[35].contains("shift+⏎ add & keep typing"),
         "and the hint bar says what Enter does: {:?}",
-        drawn[34]
+        drawn[35]
     );
 }
 
@@ -1271,9 +1284,9 @@ fn a_title_is_edited_in_the_row_it_belongs_to() {
     app.update(Action::Edit);
     let drawn = look(&app, 120, 36);
 
-    assert!(drawn[6].contains("[ ] Ship invoice export█"));
-    assert!(drawn[34].contains("⏎ save"));
-    assert!(drawn[34].contains("esc cancel"));
+    assert!(drawn[5].contains("[ ] Ship invoice export█"));
+    assert!(drawn[35].contains("⏎ save"));
+    assert!(drawn[35].contains("esc cancel"));
 }
 
 #[test]
@@ -1282,7 +1295,7 @@ fn the_hint_bar_says_what_just_happened_and_offers_to_undo_it() {
     app.update(Action::Delete);
     let drawn = look(&app, 120, 36);
 
-    let bar = drawn[34].trim_end();
+    let bar = drawn[35].trim_end();
     assert!(
         bar.starts_with(" TODAY  Deleted \"Ship invoice export\"  u  undo  "),
         "{bar:?}"
@@ -1305,7 +1318,7 @@ fn a_field_keeps_its_keys_beside_what_just_happened() {
         app.update(Action::Insert(typed));
     }
     app.update(Action::AddAndContinue);
-    let bar = look(&app, 120, 36)[34].trim_end().to_owned();
+    let bar = look(&app, 120, 36)[35].trim_end().to_owned();
 
     assert!(bar.contains("Added \"Task\""), "{bar:?}");
     assert!(bar.contains("add & keep typing"), "{bar:?}");
@@ -1513,7 +1526,7 @@ fn a_month_first_locale_writes_the_month_first() {
     );
     let drawn = look(&app, 120, 36);
 
-    assert!(drawn[3].contains("Today Fri Sep 5"));
+    assert!(drawn[2].contains("Today Fri Sep 5"));
     assert!(
         !drawn.join("\n").contains("Fri 5 Sep"),
         "no date is written the other way round"
@@ -1532,7 +1545,7 @@ fn the_date_order_setting_overrules_the_locale() {
     settings.set_date_style(DateStyle::DayFirst);
     app.change_settings(settings);
 
-    assert!(look(&app, 120, 36)[3].contains("Today Fri 5 Sep"));
+    assert!(look(&app, 120, 36)[2].contains("Today Fri 5 Sep"));
 }
 
 #[test]
@@ -1557,9 +1570,9 @@ fn the_notes_list_is_newest_first_with_the_age_of_each_note() {
     let drawn = look(&app, 120, 36);
     let wanted = wireframe("10-scratchpad", 0, 36);
 
-    assert!(drawn[1].contains("4 notes"));
-    assert!(drawn[1].contains("n or esc back to tasks"));
-    let divider = drawn[4].chars().position(|glyph| glyph == '┬');
+    assert!(drawn[0].contains("4 notes"));
+    assert!(drawn[0].contains("n or esc back to tasks"));
+    let divider = drawn[3].chars().position(|glyph| glyph == '┬');
     assert_eq!(
         divider,
         Some(44),
@@ -1570,10 +1583,10 @@ fn the_notes_list_is_newest_first_with_the_age_of_each_note() {
     // wireframe's own column. Its first row is the one note whose body the
     // wireframe draws in full beside it, so only its text differs.
     assert_eq!(
-        left(&drawn[5]),
+        left(&drawn[4]),
         "  ▪ Mention to Anna:              yesterday"
     );
-    for row in [6, 7, 8, 9, 10] {
+    for row in [5, 6, 7, 8, 9] {
         assert_eq!(left(&drawn[row]), left(&wanted[row]), "row {row}");
     }
 }
@@ -1587,14 +1600,14 @@ fn the_open_note_is_a_text_area_beside_the_list() {
     let wanted = wireframe("10-scratchpad", 0, 36);
 
     // The header of the note is the day and the time it was made.
-    assert_eq!(drawn[3], wanted[3], "the two headers");
+    assert_eq!(drawn[2], wanted[2], "the two headers");
     // The body, beside the list, wrapped where the writer wrapped it.
-    for row in 5..=14 {
+    for row in 4..=13 {
         assert_eq!(right(&drawn[row]), right(&wanted[row]), "row {row}");
     }
     // Copying and spelling were added after the original scratchpad wireframe.
     assert_eq!(
-        drawn[34],
+        drawn[35],
         " NOTE  esc back to the list  ctrl-z undo edit  ctrl-y redo edit  alt-y copy note  type to edit"
     );
 }
@@ -1608,16 +1621,16 @@ fn one_tab_stacks_the_list_and_the_note() {
 
     // The list keeps to its own rows, and the note's header becomes the
     // rule between the two.
-    assert!(drawn[5].starts_with("  ▪ Mention to Anna:"));
-    assert!(drawn[10].starts_with("  +  new note"));
+    assert!(drawn[4].starts_with("  ▪ Mention to Anna:"));
+    assert!(drawn[9].starts_with("  +  new note"));
     assert!(
-        drawn[11].starts_with(" Note Thu 4 Sep 16:40 ─────"),
+        drawn[10].starts_with(" Note Thu 4 Sep 16:40 ─────"),
         "{:?}",
-        drawn[11]
+        drawn[10]
     );
-    assert_eq!(drawn[12], "  Mention to Anna:");
+    assert_eq!(drawn[11], "  Mention to Anna:");
     assert_eq!(
-        drawn[42],
+        drawn[43],
         " NOTE  esc back  ctrl-z undo edit  alt-y copy note  type to edit"
     );
 }
@@ -1632,7 +1645,7 @@ fn a_note_written_in_the_small_hours_is_as_old_as_the_evening_it_came_from() {
     let mut app = app_on(MemStore::holding(model));
     app.update(Action::NotesPage);
 
-    assert!(look(&app, 120, 36)[5].contains("yesterday"));
+    assert!(look(&app, 120, 36)[4].contains("yesterday"));
 }
 
 #[test]
@@ -1641,13 +1654,13 @@ fn a_page_with_no_notes_on_it_names_the_key_that_makes_one() {
     app.update(Action::NotesPage);
     let drawn = look(&app, 120, 36);
 
-    assert!(drawn[1].starts_with(" 0 notes"));
-    assert!(drawn[6].starts_with("  +  new note"), "{:?}", drawn[6]);
+    assert!(drawn[0].starts_with(" 0 notes"));
+    assert!(drawn[5].starts_with("  +  new note"), "{:?}", drawn[5]);
     assert!(drawn.join("\n").contains("No notes yet."));
 
     // And one note in is one note, not "1 notes".
     app.update(Action::Add);
-    assert!(look(&app, 120, 36)[1].starts_with(" 1 note "));
+    assert!(look(&app, 120, 36)[0].starts_with(" 1 note "));
 }
 
 /// Everything to the right of the divider, which is the open note.
@@ -1806,26 +1819,26 @@ fn the_cursor_row_shows_a_long_title_whole_on_the_lines_under_it() {
     let (drawn, layout) = screen(&app, 120, 36);
 
     assert!(
-        drawn[6].starts_with(" [ ] Review the complete kitchen"),
+        drawn[5].starts_with(" [ ] Review the complete kitchen"),
+        "{:?}",
+        drawn[5]
+    );
+    assert!(!drawn[5].contains('\u{2026}'), "read whole: {:?}", drawn[5]);
+    assert!(
+        drawn[6].starts_with("     "),
+        "the rest is under the title: {:?}",
+        drawn[6]
+    );
+    assert!(
+        drawn[6].contains("send detailed questions"),
         "{:?}",
         drawn[6]
     );
-    assert!(!drawn[6].contains('\u{2026}'), "read whole: {:?}", drawn[6]);
+    assert!(drawn[7].contains("installation costs"), "{:?}", drawn[7]);
     assert!(
-        drawn[7].starts_with("     "),
-        "the rest is under the title: {:?}",
-        drawn[7]
-    );
-    assert!(
-        drawn[7].contains("send detailed questions"),
-        "{:?}",
-        drawn[7]
-    );
-    assert!(drawn[8].contains("installation costs"), "{:?}", drawn[8]);
-    assert!(
-        drawn[9].starts_with(" [ ] Book dentist"),
+        drawn[8].starts_with(" [ ] Book dentist"),
         "the next row moved down: {:?}",
-        drawn[9]
+        drawn[8]
     );
 
     let first = layout
@@ -1839,11 +1852,11 @@ fn the_cursor_row_shows_a_long_title_whole_on_the_lines_under_it() {
     app.update(Action::Down);
     let drawn = look(&app, 120, 36);
     assert!(
-        drawn[6].contains('\u{2026}'),
+        drawn[5].contains('\u{2026}'),
         "cut again once the cursor has left: {:?}",
-        drawn[6]
+        drawn[5]
     );
-    assert!(drawn[7].starts_with(" [ ] Book dentist"), "{:?}", drawn[7]);
+    assert!(drawn[6].starts_with(" [ ] Book dentist"), "{:?}", drawn[6]);
 }
 
 /// The chips give way, not the row: whatever else it carries, a row keeps
@@ -1937,15 +1950,15 @@ fn the_narrow_hint_bar_names_five_keys_and_defers_to_help() {
 
     let day = look(&app, 80, 44);
     assert_eq!(
-        day[42],
+        day[43],
         " TODAY  space done  f focus  a add  b backlog  x del                     ? more"
     );
 
     app.update(Action::PaneRight);
     let backlog = look(&app, 80, 44);
-    assert!(backlog[42].starts_with(" BACKLOG  space done  t today  a add  x del"));
-    assert!(backlog[42].ends_with("? more"));
-    assert_eq!(backlog[2].chars().filter(|glyph| *glyph == '─').count(), 80);
+    assert!(backlog[43].starts_with(" BACKLOG  space done  t today  a add  x del"));
+    assert!(backlog[43].ends_with("? more"));
+    assert_eq!(backlog[1].chars().filter(|glyph| *glyph == '─').count(), 80);
 }
 
 #[test]
@@ -1953,16 +1966,16 @@ fn the_narrow_tab_row_marks_the_tab_the_keyboard_is_on() {
     let mut app = app();
     let (_, layout) = screen(&app, 80, 44);
     app.set_layout(layout);
-    assert_eq!(look(&app, 80, 44)[3], "  TODAY 6   BACKLOG 12   NOTES 4");
+    assert_eq!(look(&app, 80, 44)[2], "  TODAY 6   BACKLOG 12   NOTES 4");
 
     // Right from the backlog is the notes tab, not a pane of its own.
     app.update(Action::PaneRight);
     app.update(Action::PaneRight);
     let notes = look(&app, 80, 44);
     assert_eq!(app.page(), Page::Notes);
-    assert!(!notes[1].contains("notes"));
-    assert!(notes[3].contains("NOTES 4"));
-    assert!(notes[5].contains("▪ Mention to Anna:"));
+    assert!(!notes[0].contains("notes"));
+    assert!(notes[2].contains("NOTES 4"));
+    assert!(notes[4].contains("▪ Mention to Anna:"));
 }
 
 /// The colour and attribute parameters of every `ESC [ … m` written, with
@@ -2154,7 +2167,7 @@ fn a_day_header_keeps_its_counts_clear_of_its_label() {
     let mut app = app_on(MemStore::holding(model));
     app.update(Action::NextDay);
 
-    let header: Vec<char> = look(&app, 120, 36).remove(3).chars().collect();
+    let header: Vec<char> = look(&app, 120, 36).remove(2).chars().collect();
     let pane: String = header[..59].iter().collect();
     assert_eq!(
         pane.trim_end(),
@@ -2352,22 +2365,22 @@ fn the_step_that_asks_nothing_names_only_the_one_thing_to_press() {
 
     let wide = look(&app, 120, 36);
     assert_eq!(
-        wide[34],
+        wide[35],
         " SURFACED                                                                                     ⏎ start the day  esc skip"
     );
     assert_eq!(
-        wide[1],
+        wide[0],
         " MORNING REVIEW step 1 of 1 · due & reminders                    1 starting today, nothing to decide   esc skip for now"
     );
 
     let narrow = look(&app, 60, 44);
     assert_eq!(
-        narrow[42],
+        narrow[43],
         " SURFACED                         ⏎ start the day  esc skip"
     );
     // `due & remindnothing to decide` ran the two ends together.
     assert_eq!(
-        narrow[1],
+        narrow[0],
         " MORNING REVIEW step 1 of 1               nothing to decide"
     );
 }
@@ -2383,7 +2396,7 @@ fn the_hint_bar_does_not_offer_a_key_the_open_field_would_type() {
     }
     app.update(Action::AddAndContinue);
 
-    let bar = look(&app, 120, 36).remove(34);
+    let bar = look(&app, 120, 36).remove(35);
     assert!(
         bar.contains("Added \"Task\""),
         "what just happened: {bar:?}"
@@ -2393,7 +2406,7 @@ fn the_hint_bar_does_not_offer_a_key_the_open_field_would_type() {
     // Out of the field, and the offer is there again.
     app.update(Action::Cancel);
     app.update(Action::Close);
-    let bar = look(&app, 120, 36).remove(34);
+    let bar = look(&app, 120, 36).remove(35);
     assert!(bar.contains("u  undo"), "{bar:?}");
 }
 
@@ -2677,10 +2690,13 @@ fn the_settings_page_matches_the_wireframe() {
     let mut app = app();
     app.update(Action::SettingsPage);
     let mut wanted = wireframe("13-settings", 0, 36);
+    // Two more body rows expose the next settings group.
+    wanted[32] = format!("{}│", " ".repeat(79));
+    wanted[33] = format!(" NOTES {} │", "─".repeat(71));
     // The wireframe leaves build metadata blank; each release fills it
     // with the version of the running binary.
     let version = format!("v{}", env!("CARGO_PKG_VERSION"));
-    wanted[3].replace_range(10..10 + version.len(), &version);
+    wanted[2].replace_range(10..10 + version.len(), &version);
     same(&look(&app, 120, 36), &wanted, "the settings page");
 }
 
@@ -2773,7 +2789,7 @@ fn a_narrow_settings_page_keeps_the_list_and_drops_the_description() {
     );
     // The page is not one of the three tabs, so it keeps its header at
     // every width.
-    assert!(drawn[3].starts_with(" Settings"), "{:?}", drawn[3]);
+    assert!(drawn[2].starts_with(" Settings"), "{:?}", drawn[2]);
     assert!(
         text.contains("Confirm before delete"),
         "the whole list is on"
@@ -2820,9 +2836,9 @@ fn a_typed_row_becomes_a_field_where_its_value_was() {
         "the caret follows the digit: {row:?}"
     );
     assert!(
-        drawn[34].contains("⏎ save") && drawn[34].contains("esc cancel"),
+        drawn[35].contains("⏎ save") && drawn[35].contains("esc cancel"),
         "and the hint bar is the field's: {:?}",
-        drawn[34]
+        drawn[35]
     );
 }
 
@@ -3067,7 +3083,7 @@ fn the_spelling_card_names_the_word_and_lists_what_to_put_in_its_place() {
 
     // The card's keys are the rows of its context, so the hint bar
     // teaches them the way it teaches every other card's.
-    let bar = &drawn[34];
+    let bar = &drawn[35];
     assert!(bar.contains("SPELLING"), "{bar:?}");
     assert!(bar.contains("↑/↓ move"), "{bar:?}");
     assert!(bar.contains("⏎ choose"), "{bar:?}");
@@ -3322,7 +3338,7 @@ fn the_manager_lists_its_words_and_names_the_keys_that_change_them() {
     }
 
     // And the hint bar names the manager it is over.
-    let bar = drawn[34].clone();
+    let bar = drawn[35].clone();
     assert!(bar.contains("DICTIONARY"), "{bar:?}");
 }
 
@@ -3398,7 +3414,7 @@ fn the_open_note_only_hints_at_spelling_when_enabled() {
         app.change_settings(settings);
         app.update(Action::Left);
         for (width, height) in [(120, 36), (80, 44)] {
-            let bar = look(&app, width, height)[height as usize - 2].clone();
+            let bar = look(&app, width, height)[height as usize - 1].clone();
             assert_eq!(
                 bar.contains("alt-s"),
                 enabled,
@@ -3479,7 +3495,7 @@ fn a_line_as_long_as_the_body_keeps_its_last_character_and_its_caret_on_screen()
         format!("{}\u{2588}", "x".repeat(wide as usize)),
         "the whole line and the caret after it"
     );
-    assert_eq!(look(&app, 120, 36)[5].chars().count(), 120);
+    assert_eq!(look(&app, 120, 36)[4].chars().count(), 120);
 
     // Moving the caret within the text preserves every character column.
     app.update(Action::LineStart);
@@ -3494,7 +3510,7 @@ fn the_open_note_says_where_its_body_was_drawn() {
 
     assert_eq!(area.note, 1);
     assert_eq!(area.area.x, 47, "two columns in from the divider");
-    assert_eq!(area.area.y, 5, "under the header and its rule");
+    assert_eq!(area.area.y, 4, "under the header and its rule");
     assert_eq!(
         area.wrapped_at(),
         area.area.width - 1,
@@ -3855,11 +3871,11 @@ fn note_editor_status_only_advertises_actions_that_do_not_type() {
     app.update(Action::NotesPage);
     app.update(Action::Add);
     let drawn = look(&app, 80, 24);
-    assert!(drawn[1].contains("esc back to list"));
-    assert!(drawn[1].contains("alt-h help"));
-    assert!(!drawn[1].contains("n or esc"));
+    assert!(drawn[0].contains("esc back to list"));
+    assert!(drawn[0].contains("alt-h help"));
+    assert!(!drawn[0].contains("n or esc"));
     app.update(Action::Cancel);
-    assert!(look(&app, 80, 24)[1].contains("back to tasks"));
+    assert!(look(&app, 80, 24)[0].contains("back to tasks"));
 }
 
 #[test]
@@ -3876,13 +3892,13 @@ fn page_headers_do_not_repeat_names_dates_or_note_counts() {
                 app.update(action);
             }
             let drawn = look(&app, width, 36);
-            let headings = drawn[1..=3].join("\n").to_lowercase();
+            let headings = drawn[0..=2].join("\n").to_lowercase();
             let date = day_label(app.showing(), app.dates()).to_lowercase();
             assert_eq!(headings.matches(&date).count(), 1, "{width}: {headings}");
             if app.shown() == Shown::Today {
                 assert_eq!(headings.matches("today").count(), 1, "{headings}");
             } else {
-                assert!(drawn[1].contains(". "), "return to today stays visible");
+                assert!(drawn[0].contains(". "), "return to today stays visible");
             }
         }
         app.update(Action::NotesPage);
@@ -3891,24 +3907,24 @@ fn page_headers_do_not_repeat_names_dates_or_note_counts() {
                 app.update(Action::Add);
             }
             let drawn = look(&app, width, 36);
-            assert!(!drawn[1].contains("Notes"), "{drawn:?}");
-            assert!(drawn[3].to_lowercase().contains("notes"));
+            assert!(!drawn[0].contains("Notes"), "{drawn:?}");
+            assert!(drawn[2].to_lowercase().contains("notes"));
             if width < NARROW {
-                assert!(!drawn[1].contains("note"), "count belongs to tab");
+                assert!(!drawn[0].contains("note"), "count belongs to tab");
             } else {
-                assert!(drawn[1].contains(if editing { "1 note" } else { "0 notes" }));
+                assert!(drawn[0].contains(if editing { "1 note" } else { "0 notes" }));
             }
             if editing {
-                assert!(drawn[1].contains("editing · autosave"));
-                assert!(drawn[1].contains("esc back to list"));
-                assert!(drawn[1].contains("alt-h help"));
+                assert!(drawn[0].contains("editing · autosave"));
+                assert!(drawn[0].contains("esc back to list"));
+                assert!(drawn[0].contains("alt-h help"));
             }
         }
         app.update(Action::Cancel);
         app.update(Action::SettingsPage);
         let drawn = look(&app, width, 36);
-        let headings = drawn[1..=3].join("\n");
+        let headings = drawn[0..=2].join("\n");
         assert_eq!(headings.matches("Settings").count(), 1, "{headings}");
-        assert!(drawn[1].contains("esc back"));
+        assert!(drawn[0].contains("esc back"));
     }
 }

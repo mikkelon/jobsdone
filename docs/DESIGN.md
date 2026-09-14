@@ -46,9 +46,8 @@ like it belongs to the first two.
   end. The cursor row is the one exception: it is read whole, its title
   going on under it at the pane's full width, and the rows below move
   down for as long as the cursor is there.
-- A one-cell margin all round: a blank row above the status line and below
-  the hint bar, a blank column at the left and right edges. Text never
-  touches the window border.
+- A one-cell margin at the left and right edges. The status line and hint
+  bar occupy the first and last rows, with no vertical padding.
 - Structure is drawn with box-drawing lines in the dim colour: a divider
   between panes, a horizontal rule under the status line and above the
   hint bar, a box around a popup. Hyprland draws the window border; the

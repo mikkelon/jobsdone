@@ -393,8 +393,7 @@ fn ordinal(day: u8) -> &'static str {
 
 // ---- the frame -------------------------------------------------------
 
-/// The rows the frame is made of, once the one-cell top and bottom margins
-/// are taken off.
+/// The rows the frame is made of.
 struct Rows {
     /// The status line.
     status: u16,
@@ -416,7 +415,7 @@ pub fn draw(app: &App, frame: &mut Frame) -> Layout {
         area,
     };
 
-    // Below this there is no room for a margin, two rules and a row.
+    // Keep a usable minimum size for the frame and its body.
     if area.width < 24 || area.height < 9 {
         canvas.put(0, 0, "Resize to 24x9", accent());
         canvas.put(0, 1, "Ctrl+C quits", dim());
@@ -427,11 +426,11 @@ pub fn draw(app: &App, frame: &mut Frame) -> Layout {
     }
 
     let rows = Rows {
-        status: 1,
-        headers: 3,
-        top: 5,
-        bottom: area.height - 4,
-        hints: area.height - 2,
+        status: 0,
+        headers: 2,
+        top: 4,
+        bottom: area.height - 3,
+        hints: area.height - 1,
     };
     let narrow = area.width < NARROW;
     let width = area.width;
