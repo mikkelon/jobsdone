@@ -265,6 +265,10 @@ fn event_for(name: &str) -> Event {
         Some(rest) => (rest, KeyModifiers::CONTROL),
         None => (name, alt),
     };
+    let (name, alt) = match name.strip_prefix("shift-") {
+        Some(rest) => (rest, KeyModifiers::SHIFT),
+        None => (name, alt),
+    };
     let code = match name {
         "space" => KeyCode::Char(' '),
         "tab" => KeyCode::Tab,
@@ -538,7 +542,7 @@ fn adding_and_renaming_call_enter_different_things() {
             .map(|binding| binding.label)
     };
 
-    assert_eq!(name(writing(Field::Adding)), Some("add & keep typing"));
+    assert_eq!(name(writing(Field::Adding)), Some("add"));
     assert_eq!(name(writing(Field::Renaming)), Some("save"));
 }
 
@@ -916,4 +920,25 @@ fn shifted_navigation_selects_in_every_text_context() {
             );
         }
     }
+}
+
+#[test]
+fn shift_enter_only_keeps_adding_in_the_add_field() {
+    let shifted = Event::Key(KeyEvent::new(KeyCode::Enter, KeyModifiers::SHIFT));
+    assert_eq!(
+        action_for(&shifted, writing(Field::Adding)),
+        Some(Action::AddAndContinue)
+    );
+    assert_eq!(
+        action_for(&press(KeyCode::Enter), writing(Field::Adding)),
+        Some(Action::Confirm)
+    );
+    assert_eq!(
+        action_for(&shifted, writing(Field::Renaming)),
+        Some(Action::Confirm)
+    );
+    assert_ne!(
+        action_for(&shifted, home(Pane::Day)),
+        Some(Action::AddAndContinue)
+    );
 }

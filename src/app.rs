@@ -1342,6 +1342,16 @@ impl App {
             Action::Help => self.open(PopupKind::Help, None),
             Action::Cancel => self.back_out(),
             Action::Confirm => return self.confirm(),
+            Action::AddAndContinue => {
+                if self.popup.is_none()
+                    && self
+                        .editor
+                        .as_ref()
+                        .is_some_and(|editor| editor.field == Field::Adding)
+                {
+                    self.commit_the_title(true);
+                }
+            }
 
             Action::Add => self.add(),
             Action::Edit => self.start_renaming(),
@@ -3853,9 +3863,9 @@ impl App {
         });
     }
 
-    /// Enter in the field: one command, and then either the field again
-    /// or the question a recurring copy asks.
-    fn commit_the_title(&mut self) {
+    /// Save the title, keeping an empty add field only for Shift+Enter.
+    /// Renaming a recurring copy opens its scope question.
+    fn commit_the_title(&mut self, keep_adding: bool) {
         let Some(editor) = &self.editor else {
             return;
         };
@@ -3878,9 +3888,13 @@ impl App {
                     && let Some(added) = added_task(&change)
                 {
                     self.set_cursor(list, RowId::Task(added));
-                    if let Some(editor) = &mut self.editor {
-                        editor.text.clear();
-                        editor.caret = 0;
+                    if keep_adding {
+                        if let Some(editor) = &mut self.editor {
+                            editor.text.clear();
+                            editor.caret = 0;
+                        }
+                    } else {
+                        self.editor = None;
                     }
                 }
             }
@@ -4556,7 +4570,7 @@ impl App {
     fn confirm(&mut self) -> Flow {
         let Some(kind) = self.popup.as_ref().map(|popup| popup.kind) else {
             if self.editor.is_some() {
-                self.commit_the_title();
+                self.commit_the_title(false);
             } else if self.setting_draft.is_some() {
                 self.take_the_typed_setting();
             } else if self.page == Page::Settings {

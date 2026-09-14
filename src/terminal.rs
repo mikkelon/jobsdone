@@ -11,7 +11,8 @@ use std::time::Duration;
 
 use crossterm::event::{
     self, DisableBracketedPaste, DisableFocusChange, DisableMouseCapture, EnableBracketedPaste,
-    EnableFocusChange, EnableMouseCapture, Event,
+    EnableFocusChange, EnableMouseCapture, Event, KeyboardEnhancementFlags,
+    PopKeyboardEnhancementFlags, PushKeyboardEnhancementFlags,
 };
 use crossterm::execute;
 use crossterm::terminal::{
@@ -166,7 +167,9 @@ fn enter_screen(writer: &mut impl Write) -> io::Result<()> {
         writer,
         EnterAlternateScreen,
         EnableFocusChange,
-        EnableBracketedPaste
+        EnableBracketedPaste,
+        // Let supporting terminals distinguish Shift+Enter from Enter.
+        PushKeyboardEnhancementFlags(KeyboardEnhancementFlags::DISAMBIGUATE_ESCAPE_CODES)
     )
 }
 
@@ -190,6 +193,7 @@ fn leave() -> io::Result<()> {
 fn leave_screen(writer: &mut impl Write) -> io::Result<()> {
     execute!(
         writer,
+        PopKeyboardEnhancementFlags,
         DisableFocusChange,
         DisableMouseCapture,
         DisableBracketedPaste,
@@ -216,9 +220,11 @@ mod tests {
         let mut entered = Vec::new();
         enter_screen(&mut entered).unwrap();
         assert!(entered.windows(8).any(|bytes| bytes == b"\x1b[?2004h"));
+        assert!(entered.windows(5).any(|bytes| bytes == b"\x1b[>1u"));
 
         let mut left = Vec::new();
         leave_screen(&mut left).unwrap();
         assert!(left.windows(8).any(|bytes| bytes == b"\x1b[?2004l"));
+        assert!(left.windows(5).any(|bytes| bytes == b"\x1b[<1u"));
     }
 }

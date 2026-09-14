@@ -1259,7 +1259,7 @@ fn the_add_line_becomes_the_field_that_is_typed_into() {
         drawn[5]
     );
     assert!(
-        drawn[34].contains("⏎ add & keep typing"),
+        drawn[34].contains("shift+⏎ add & keep typing"),
         "and the hint bar says what Enter does: {:?}",
         drawn[34]
     );
@@ -1304,7 +1304,7 @@ fn a_field_keeps_its_keys_beside_what_just_happened() {
     for typed in "Task".chars() {
         app.update(Action::Insert(typed));
     }
-    app.update(Action::Confirm);
+    app.update(Action::AddAndContinue);
     let bar = look(&app, 120, 36)[34].trim_end().to_owned();
 
     assert!(bar.contains("Added \"Task\""), "{bar:?}");
@@ -2371,7 +2371,7 @@ fn the_step_that_asks_nothing_names_only_the_one_thing_to_press() {
     );
 }
 
-/// Adding leaves the field open after Enter, and the hint bar went on
+/// Adding leaves the field open after Shift+Enter, and the hint bar went on
 /// offering `u undo` for the task just added, where `u` types a letter.
 #[test]
 fn the_hint_bar_does_not_offer_a_key_the_open_field_would_type() {
@@ -2380,7 +2380,7 @@ fn the_hint_bar_does_not_offer_a_key_the_open_field_would_type() {
     for typed in "Task".chars() {
         app.update(Action::Insert(typed));
     }
-    app.update(Action::Confirm);
+    app.update(Action::AddAndContinue);
 
     let bar = look(&app, 120, 36).remove(34);
     assert!(

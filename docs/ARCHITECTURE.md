@@ -328,8 +328,8 @@ adds it here first, the way a new dependency is added to section 2 first.
   with a text-field overlay, and `KeyContext::text_field()` to read it.
   Home's overlay is a
   `Option<Field>` rather than a bool, because the hint bar has to say
-  which field it is: adding keeps the field open after Enter and
-  renaming does not. The settings page's is a bool: it has one kind of
+  which field it is: adding offers Shift+Enter to keep the field open,
+  while Enter closes it after adding or renaming. The settings page's is a bool: it has one kind of
   field, so there is nothing to tell apart.
   Home also carries a `Shown`, which day the day pane
   is on, because history is the same page stepped to another day and its

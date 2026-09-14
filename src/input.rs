@@ -75,7 +75,7 @@ pub enum PopupKind {
 
 /// The in-place text field on the home page, which is the only place a
 /// task's title is written. Which one it is decides what Enter is called,
-/// because adding keeps the field open and renaming does not.
+/// with Shift+Enter offered only when adding.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Field {
     Adding,
@@ -217,6 +217,7 @@ pub enum Action {
     Commands,
     Help,
     Confirm,
+    AddAndContinue,
     Cancel,
 
     // Text fields.
@@ -1253,8 +1254,7 @@ pub fn decisions(step: ReviewStep) -> &'static [Decision] {
     }
 }
 
-/// The in-place field on a task row. Adding keeps the field open after
-/// Enter so that a list is typed in one go; renaming closes it.
+/// The in-place field on a task row. Shift+Enter keeps adding; Enter closes it.
 const HOME_ADDING: &[Binding] = &[
     Binding {
         keys: &[],
@@ -1266,9 +1266,16 @@ const HOME_ADDING: &[Binding] = &[
     Binding {
         keys: &[("enter", Action::Confirm)],
         shown: "⏎",
-        label: "add & keep typing",
+        label: "add",
         bar: Bar::Left,
         narrow: Bar::Short(Side::Left, "add"),
+    },
+    Binding {
+        keys: &[("shift-enter", Action::AddAndContinue)],
+        shown: "shift+⏎",
+        label: "add & keep typing",
+        bar: Bar::Left,
+        narrow: Bar::Short(Side::Left, "add more"),
     },
     Binding {
         keys: &[("esc", Action::Cancel)],
@@ -2151,6 +2158,12 @@ pub const CTRL_C: Binding = Binding {
 fn key_action(key: &KeyEvent, context: KeyContext) -> Option<Action> {
     if key.modifiers == KeyModifiers::CONTROL && key.code == KeyCode::Char('c') {
         return Some(Action::Quit);
+    }
+    if key.code == KeyCode::Enter
+        && key.modifiers == KeyModifiers::SHIFT
+        && let Some(action) = bound(context, "shift-enter")
+    {
+        return Some(action);
     }
     if !context.text_field() {
         return bound(context, &key_name(key)?);

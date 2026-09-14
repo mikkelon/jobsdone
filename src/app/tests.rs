@@ -828,7 +828,7 @@ fn the_review_will_not_open_on_nothing() {
 // ---- adding and renaming ---------------------------------------------
 
 #[test]
-fn a_adds_to_the_pane_the_keyboard_is_on_and_keeps_the_field_open() {
+fn shift_enter_keeps_adding_until_enter_closes_the_field() {
     let mut app = started();
     app.update(Action::Add);
     assert_eq!(
@@ -842,7 +842,7 @@ fn a_adds_to_the_pane_the_keyboard_is_on_and_keeps_the_field_open() {
     );
 
     type_in(&mut app, "Ship invoice export");
-    app.update(Action::Confirm);
+    app.update(Action::AddAndContinue);
 
     assert_eq!(titles(&app, List::Day), ["Ship invoice export"]);
     assert_eq!(
@@ -853,13 +853,12 @@ fn a_adds_to_the_pane_the_keyboard_is_on_and_keeps_the_field_open() {
 
     type_in(&mut app, "Reply to the tender questions");
     app.update(Action::Confirm);
-    app.update(Action::Cancel);
 
     assert_eq!(
         titles(&app, List::Day),
         ["Ship invoice export", "Reply to the tender questions"]
     );
-    assert!(app.editor().is_none(), "escape stops");
+    assert!(app.editor().is_none(), "Enter closes the field");
 }
 
 #[test]
@@ -5839,4 +5838,20 @@ fn spelling_replacements_are_single_undoable_note_edits() {
     assert_eq!(app.draft().unwrap().text, "teh");
     app.update(Action::RedoText);
     assert_eq!(app.draft().unwrap().text, replacement);
+}
+
+#[test]
+fn enter_adds_one_task_and_closes_the_input_in_either_pane() {
+    for list in [List::Day, List::Backlog] {
+        let mut app = started();
+        if list == List::Backlog {
+            app.update(Action::PaneRight);
+        }
+        app.update(Action::Add);
+        type_in(&mut app, "One task");
+        app.update(Action::Confirm);
+        assert_eq!(titles(&app, list), ["One task"]);
+        assert!(app.editor().is_none());
+        assert!(cursor(&app, list).is_some());
+    }
 }

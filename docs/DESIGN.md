@@ -330,9 +330,10 @@ day walked to in the calendar, a repeat rule.
 
 A field on a row is a mode like any other, so its keys are in the hint
 bar rather than beside it: while a title is being typed the bar says what
-Enter does there, "add & keep typing" when adding and "save" when
-renaming. A failed addition retains its draft and caret for retry; only a
-successful save clears the field. A line longer than the field scrolls
+Enter does there, "add" when adding and "save" when renaming. Enter adds
+one task and closes the field; Shift+Enter adds and keeps typing in an empty
+field. A failed addition retains its draft and caret for retry; only a
+successful save closes or clears the field. A line longer than the field scrolls
 with the caret rather than clipping at its end, so what is being typed is always the part on screen.
 What just happened goes first on the same line until the next key, or for
 the seconds `message_seconds` names when no key comes, which at 0 is
