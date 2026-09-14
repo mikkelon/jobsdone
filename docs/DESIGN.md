@@ -165,7 +165,9 @@ Conventions, so the map is guessable:
   under that row's own title, and then what it does to the app. A pane
   with no row under the cursor names the page instead. Inside the palette
   you filter and press Enter; the key shown is for next time, outside the
-  palette, so it teaches the map and then stops being needed. Help is the
+  palette, so it teaches the map and then stops being needed. Search and
+  palette lists scroll with selection and show position when they overflow.
+  Help is the
   whole map on one overlay. There are no hidden keys.
 
 ### Text selection

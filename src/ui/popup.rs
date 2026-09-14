@@ -98,6 +98,16 @@ fn place(canvas: &Canvas, rows: &Rows, width: u16, height: u16) -> (u16, u16) {
     (x, y)
 }
 
+fn position(canvas: &mut Canvas, x: u16, y: u16, width: u16, selected: usize, total: usize) {
+    let label = format!(" {} / {} ↑↓ ", selected.saturating_add(1).min(total), total);
+    canvas.rput(
+        x + width - 2,
+        y,
+        super::clip(&label, width.saturating_sub(4)),
+        accent(),
+    );
+}
+
 // ---- the command palette ---------------------------------------------
 
 const PALETTE_WIDTH: u16 = 60;
@@ -138,8 +148,22 @@ fn palette(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     input(canvas, x, y + 1, width, ":", popup, 0);
     divide(canvas, x, y + 2, width);
 
-    let mut command_at = 0;
-    for (at, line) in lines.iter().take(shown).enumerate() {
+    let selected_line = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| matches!(line, Command::Row(_)))
+        .nth(popup.selected)
+        .map(|(index, _)| index)
+        .unwrap_or(0);
+    let first = super::scroll_to(lines.len(), Some(selected_line), shown);
+    if lines.len() > shown {
+        position(canvas, x, y, width, popup.selected, commands.len());
+    }
+    let mut command_at = lines[..first]
+        .iter()
+        .filter(|line| matches!(line, Command::Row(_)))
+        .count();
+    for (at, line) in lines.iter().skip(first).take(shown).enumerate() {
         let row = y + 3 + at as u16;
         match line {
             Command::Blank => {}
@@ -260,8 +284,22 @@ fn search(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     canvas.rput(x + width - 2, y + 1, matches, dim());
     divide(canvas, x, y + 2, width);
 
-    let mut found_at = 0;
-    for (at, line) in lines.iter().take(shown).enumerate() {
+    let selected_line = lines
+        .iter()
+        .enumerate()
+        .filter(|(_, line)| matches!(line, Line::Found(..)))
+        .nth(popup.selected)
+        .map(|(index, _)| index)
+        .unwrap_or(0);
+    let first = super::scroll_to(lines.len(), Some(selected_line), shown);
+    if lines.len() > shown {
+        position(canvas, x, y, width, popup.selected, results.total);
+    }
+    let mut found_at = lines[..first]
+        .iter()
+        .filter(|line| matches!(line, Line::Found(..)))
+        .count();
+    for (at, line) in lines.iter().skip(first).take(shown).enumerate() {
         let row = y + 3 + at as u16;
         match line {
             Line::Blank => {}

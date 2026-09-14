@@ -3698,3 +3698,68 @@ fn mouse_and_keyboard_selection_work_in_title_and_popup_fields() {
         assert_eq!(text, "");
     }
 }
+
+// ---- UX polish regressions ------------------------------------------
+
+#[test]
+fn search_and_palette_scroll_the_selected_result_into_view() {
+    for (width, height) in [(120, 36), (80, 24)] {
+        let mut app = empty();
+        for index in 0..45 {
+            app.update(Action::Add);
+            for c in format!("Task {index:02}").chars() {
+                app.update(Action::Insert(c));
+            }
+            app.update(Action::Confirm);
+            app.update(Action::Cancel);
+        }
+        app.update(Action::Search);
+        for _ in 0..44 {
+            app.update(Action::Down);
+        }
+        let mut terminal = Terminal::new(TestBackend::new(width, height)).unwrap();
+        terminal
+            .draw(|frame| {
+                draw(&app, frame);
+            })
+            .unwrap();
+        let buffer = terminal.backend().buffer();
+        let drawn = lines(buffer);
+        let column = (width - 80.min(width - 4)) / 2 + 6;
+        let row = drawn
+            .iter()
+            .position(|line| {
+                line.chars()
+                    .skip(column as usize)
+                    .take(7)
+                    .collect::<String>()
+                    == "Task 44"
+            })
+            .expect("selected result inside popup");
+        assert!(
+            buffer[(column, row as u16)]
+                .modifier
+                .contains(Modifier::REVERSED)
+        );
+        assert!(drawn.join("\n").contains("45 / 45"));
+        app.update(Action::Confirm);
+        assert_eq!(
+            app.model()
+                .live_task(app.cursor(List::Day).unwrap().task().unwrap())
+                .unwrap()
+                .title,
+            "Task 44"
+        );
+
+        app.update(Action::Commands);
+        for _ in 0..100 {
+            app.update(Action::Down);
+        }
+        let drawn = look(&app, width, height).join("\n");
+        assert!(
+            drawn.contains("Quit"),
+            "last command visible at {width}x{height}: {drawn}"
+        );
+        assert_eq!(app.update(Action::Confirm), crate::app::Flow::Quit);
+    }
+}

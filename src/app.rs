@@ -1583,6 +1583,16 @@ impl App {
             review.steps = self.steps_of(&review);
             self.review = Some(review);
         }
+        if self
+            .popup
+            .as_ref()
+            .is_some_and(|popup| matches!(popup.kind, PopupKind::Search | PopupKind::Palette))
+        {
+            let last = self.popup_rows().saturating_sub(1);
+            if let Some(popup) = &mut self.popup {
+                popup.selected = popup.selected.min(last);
+            }
+        }
     }
 
     // ---- the morning review ------------------------------------------
