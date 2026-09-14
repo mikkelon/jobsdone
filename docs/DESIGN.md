@@ -380,6 +380,7 @@ The status line distinguishes the notes list from editing. While editing,
 Escape returns to the list and Alt+h opens help; unmodified page shortcuts
 are not advertised because they type text. Leaving the list says "back to
 tasks", since the previously browsed date is retained.
+The note hint bar offers Alt+s only while note spell checking is enabled.
 
 `Ctrl+Z` undoes note edits and `Ctrl+Y` redoes them. This history is local to
 the window and separate from `u`, the task-decision undo stack. Consecutive

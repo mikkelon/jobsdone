@@ -696,6 +696,14 @@ fn hint_bar(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
     let mut left = Vec::new();
     let mut right = Vec::new();
     for binding in input::bindings(context) {
+        if !app.settings().spell_check_notes()
+            && binding
+                .keys
+                .iter()
+                .any(|(_, action)| *action == input::Action::FixSpelling)
+        {
+            continue;
+        }
         if matches!(
             context,
             input::KeyContext::Popup {

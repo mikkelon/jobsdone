@@ -1595,7 +1595,7 @@ fn the_open_note_is_a_text_area_beside_the_list() {
     // Copying and spelling were added after the original scratchpad wireframe.
     assert_eq!(
         drawn[34],
-        " NOTE  esc back to the list  ctrl-z undo edit  ctrl-y redo edit  alt-y copy note  alt-s fix spelling…  type to edit"
+        " NOTE  esc back to the list  ctrl-z undo edit  ctrl-y redo edit  alt-y copy note  type to edit"
     );
 }
 
@@ -1618,7 +1618,7 @@ fn one_tab_stacks_the_list_and_the_note() {
     assert_eq!(drawn[12], "  Mention to Anna:");
     assert_eq!(
         drawn[42],
-        " NOTE  esc back  ctrl-z undo edit  alt-y copy note  alt-s spelling"
+        " NOTE  esc back  ctrl-z undo edit  alt-y copy note  type to edit"
     );
 }
 
@@ -3384,20 +3384,26 @@ fn the_manager_keeps_inside_a_narrow_window_and_scrolls_to_its_row() {
 }
 
 #[test]
-fn the_open_note_names_the_key_that_fixes_a_spelling() {
+fn the_open_note_only_hints_at_spelling_when_enabled() {
     let mut app = empty();
     app.update(Action::NotesPage);
     app.update(Action::Add);
     app.update(Action::Left);
 
-    let bar = look(&app, 120, 36)[34].clone();
-    assert!(bar.contains("alt-s fix spelling…"), "the wide bar: {bar:?}");
-
-    let narrow = look(&app, 80, 44)[42].clone();
-    assert!(
-        narrow.contains("alt-s spelling"),
-        "the narrow bar: {narrow:?}"
-    );
+    for enabled in [false, true, false] {
+        let mut settings = app.settings().clone();
+        settings.set_spell_check_notes(enabled);
+        app.change_settings(settings);
+        app.update(Action::Left);
+        for (width, height) in [(120, 36), (80, 44)] {
+            let bar = look(&app, width, height)[height as usize - 2].clone();
+            assert_eq!(
+                bar.contains("alt-s"),
+                enabled,
+                "spell check {enabled} at {width}x{height}: {bar:?}"
+            );
+        }
+    }
 }
 
 #[test]
