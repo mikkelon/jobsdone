@@ -5593,6 +5593,50 @@ fn word_steps_handle_spaces_punctuation_unicode_and_edges() {
 }
 
 #[test]
+fn deleting_words_preserves_boundaries_unicode_and_text_after_the_caret() {
+    for (text, caret, expected, next) in [
+        ("one two", 7, "one ", 4),
+        ("one   ", 6, "", 0),
+        ("one/two", 4, "onetwo", 3),
+        ("hello world", 2, "llo world", 0),
+        ("cafe\u{301} 👨‍👩‍👧‍👦", 6, "cafe\u{301} ", 5),
+        ("cafe\u{301}", 4, "", 0),
+        ("one\ntwo", 4, "two", 0),
+        ("one", 0, "one", 0),
+        ("", 0, "", 0),
+    ] {
+        let mut app = started();
+        app.update(Action::Add);
+        for ch in text.chars() {
+            app.update(Action::Insert(ch));
+        }
+        app.set_caret(caret);
+        app.update(Action::DeleteWordBackward);
+        let editor = app.editor().unwrap();
+        assert_eq!(editor.text, expected, "{text:?}");
+        assert_eq!(editor.caret, next, "{text:?}");
+    }
+}
+
+#[test]
+fn deleting_a_word_removes_only_the_selection_and_updates_popup_filtering() {
+    let mut app = started();
+    app.update(Action::Search);
+    for ch in "one two".chars() {
+        app.update(Action::Insert(ch));
+    }
+    app.popup.as_mut().unwrap().selected = 3;
+    app.update(Action::SelectLeft);
+    app.update(Action::DeleteWordBackward);
+    assert_eq!(app.popup.as_ref().unwrap().text, "one tw");
+    assert_eq!(app.popup.as_ref().unwrap().caret, 6);
+    assert_eq!(app.popup.as_ref().unwrap().selected, 0);
+    assert!(app.selection().is_none());
+    app.update(Action::DeleteWordBackward);
+    assert_eq!(app.popup.as_ref().unwrap().text, "one ");
+}
+
+#[test]
 fn word_navigation_moves_task_popup_and_note_carets_without_editing() {
     let mut app = started();
     app.update(Action::Add);

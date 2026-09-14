@@ -841,11 +841,13 @@ fn the_spelling_card_is_walked_and_answered_and_left() {
 }
 
 #[test]
-fn control_arrows_move_by_word_in_every_text_context_only() {
+fn control_word_shortcuts_work_in_every_text_context_only() {
     for context in every_context() {
         for (code, action) in [
             (KeyCode::Left, Action::WordLeft),
             (KeyCode::Right, Action::WordRight),
+            (KeyCode::Backspace, Action::DeleteWordBackward),
+            (KeyCode::Char('h'), Action::DeleteWordBackward),
         ] {
             assert_eq!(
                 action_for(&press_with(code, KeyModifiers::CONTROL), context),

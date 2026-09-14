@@ -220,6 +220,7 @@ pub enum Action {
     // Text fields.
     Insert(char),
     Backspace,
+    DeleteWordBackward,
     DeleteForward,
     Left,
     Right,
@@ -2238,6 +2239,8 @@ fn editing(key: &KeyEvent) -> Option<Action> {
             KeyCode::Insert => Some(Action::CopySelection),
             KeyCode::Left => Some(Action::WordLeft),
             KeyCode::Right => Some(Action::WordRight),
+            // Legacy terminals encode Ctrl+Backspace as BS (Ctrl+H).
+            KeyCode::Backspace | KeyCode::Char('h') => Some(Action::DeleteWordBackward),
             _ => None,
         };
     }

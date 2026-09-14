@@ -1164,7 +1164,10 @@ impl App {
             action = Action::Resize;
         } else if matches!(
             action,
-            Action::Insert(_) | Action::Backspace | Action::DeleteForward
+            Action::Insert(_)
+                | Action::Backspace
+                | Action::DeleteWordBackward
+                | Action::DeleteForward
         ) {
             if self.erase_selection() && !matches!(action, Action::Insert(_)) {
                 action = Action::Resize;
@@ -1349,6 +1352,7 @@ impl App {
 
             Action::Insert(typed) => self.type_in(typed),
             Action::Backspace => self.rub_out(),
+            Action::DeleteWordBackward => self.rub_out_word(),
             Action::DeleteForward => self.rub_forward(),
             Action::Left => {
                 if !self.walk_the_calendar(Span::new().days(-1))
@@ -4785,6 +4789,18 @@ impl App {
             let to = byte_at(text, *caret);
             text.replace_range(from..to, "");
             *caret -= 1;
+        }
+        self.after_typing();
+    }
+
+    /// Ctrl+Backspace deletes back to the same boundary as Ctrl+Left.
+    fn rub_out_word(&mut self) {
+        if let Some((text, caret)) = self.field() {
+            let start = word_caret(text, *caret, false);
+            let from = byte_at(text, start);
+            let to = byte_at(text, *caret);
+            text.replace_range(from..to, "");
+            *caret = start;
         }
         self.after_typing();
     }

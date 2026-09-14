@@ -176,6 +176,8 @@ edge, and Ctrl+A selects the whole field. In notes, vertical selection
 follows the wrapped rows and scrolls with the caret. Selected characters
 use reverse video. Typing or pasting replaces the selection; Backspace
 and Delete remove it. Left/Right collapses it to the corresponding edge.
+Ctrl+Backspace removes the selection, or deletes back to the Ctrl+Left
+word boundary: preceding whitespace followed by a word or punctuation run.
 Ctrl+Shift+C/X/V copies, cuts, and pastes in every text field. Ctrl+Insert
 copies, Ctrl+X cuts, and Shift+Insert or Ctrl+V pastes. Copy and cut require
 a selection; cut deletes only after the clipboard write succeeds. Failed
