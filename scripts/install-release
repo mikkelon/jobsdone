@@ -131,6 +131,8 @@ tar -xzf "$stage/$archive" -C "$stage" --no-same-owner || die 'Could not unpack 
 [ "$("$stage/$name/jobsdone" --version)" = "jobsdone ${version#v}" ] || die 'downloaded binary version does not match the release'
 "$stage/$name/scripts/install" --binary "$stage/$name/jobsdone" "${options[@]}"
 printf 'Jobsdone %s is ready.\n' "${version#v}"
+# Keep $HOME literal so these commands can be copied into the user's shell.
+# shellcheck disable=SC2016
 case ":$PATH:" in
     *":$HOME/.local/bin:"*)
         echo 'Run: jobsdone'
