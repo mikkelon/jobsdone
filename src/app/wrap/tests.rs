@@ -151,3 +151,62 @@ fn a_window_that_shrank_keeps_the_caret_on_screen() {
     // And no height at all is still a row.
     assert_eq!(viewport(5, 14, 20, 0), 14);
 }
+
+#[test]
+fn mixed_hard_breaks_keep_original_grapheme_offsets() {
+    let wrapping = Wrapping::of("abc\r\ndef\r\nghi\rx\n\r\n", 40);
+    assert_eq!(
+        rows("abc\r\ndef\r\nghi\rx\n\r\n", 40),
+        ["abc", "def", "ghi", "x", "", ""]
+    );
+    assert_eq!(
+        wrapping
+            .rows()
+            .iter()
+            .map(|row| row.start)
+            .collect::<Vec<_>>(),
+        [0, 4, 8, 12, 14, 15]
+    );
+    assert_eq!(wrapping.end(), 15);
+    assert_eq!(wrapping.caret_at(2, 0).0, 8);
+}
+
+#[test]
+fn controls_have_one_visible_cell_and_original_grapheme_positions() {
+    let wrapping = Wrapping::of("a\t\u{1b}b\r\ne\u{301}日", 3);
+    assert_eq!(
+        wrapping
+            .rows()
+            .iter()
+            .map(|row| row.start)
+            .collect::<Vec<_>>(),
+        [0, 3, 5]
+    );
+    assert_eq!(wrapping.column_of(2, Affinity::default()), 2);
+    assert_eq!(wrapping.caret_at(0, 1).0, 1);
+    assert_eq!(wrapping.caret_at(2, 2).0, 6);
+}
+
+#[test]
+fn crlf_and_controls_round_trip_carets_through_narrow_wrapping() {
+    for body in ["\r\n\r\n", "e\u{301}日\r\na\tb\rc\n", "abc def\r\nghi jkl"] {
+        for width in 1..=9 {
+            let wrapping = Wrapping::of(body, width);
+            assert_eq!(
+                wrapping.end(),
+                unicode_segmentation::UnicodeSegmentation::graphemes(body, true).count()
+            );
+            for caret in 0..=wrapping.end() {
+                for affinity in [Affinity::AfterTheBreak, Affinity::BeforeTheBreak] {
+                    let row = wrapping.row_of(caret, affinity);
+                    let column = wrapping.column_of(caret, affinity);
+                    assert_eq!(
+                        wrapping.caret_at(row, column).0,
+                        caret,
+                        "body={body:?}, width={width}, caret={caret}"
+                    );
+                }
+            }
+        }
+    }
+}

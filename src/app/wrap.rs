@@ -75,8 +75,8 @@ impl Wrapping {
         let room = usize::from(width.max(1));
         let mut rows = Vec::new();
         let mut at = 0;
-        for line in body.split('\n') {
-            let glyphs: Vec<&str> = line.graphemes(true).collect();
+        let body_glyphs: Vec<&str> = body.graphemes(true).collect();
+        for glyphs in body_glyphs.split(|glyph| matches!(*glyph, "\n" | "\r\n" | "\r")) {
             let mut from = 0;
             loop {
                 // How many clusters of the rest the row has room for. A
@@ -116,8 +116,7 @@ impl Wrapping {
                 });
                 from += take;
             }
-            // The newline the split took off, which the next line starts
-            // one cluster after.
+            // LF, CRLF, and lone CR each occupy one original cluster.
             at += glyphs.len() + 1;
         }
         Self { rows }
@@ -212,5 +211,19 @@ pub fn viewport(first: usize, caret: usize, rows: usize, height: usize) -> usize
 /// characters are combining marks has no cell of its own; every other one
 /// has one or two.
 fn cells(glyph: &str) -> u16 {
-    UnicodeWidthStr::width(glyph) as u16
+    UnicodeWidthStr::width(display_glyph(glyph)) as u16
+}
+
+/// Display controls without sending them to terminal cells. One control
+/// grapheme stays one visible glyph; the original text remains untouched.
+/// Hard breaks are removed by wrapping before drawing. This also protects
+/// previews and other text rendered through the same canvas.
+pub fn display_glyph(glyph: &str) -> &str {
+    if glyph == "\t" {
+        "→"
+    } else if glyph.chars().any(char::is_control) {
+        "�"
+    } else {
+        glyph
+    }
 }

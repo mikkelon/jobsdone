@@ -65,3 +65,48 @@ fn a_service_delete_on_another_sqlite_connection_recovers_the_dirty_editor() {
     assert_ne!(recovery, original);
     assert_eq!(stored.note(recovery).unwrap().body, "baseline local");
 }
+
+#[test]
+fn a_cli_crlf_note_survives_editor_copy_and_database_reopen() {
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("import.txt");
+    let body = "abc\r\ndef\r\nghi\t\u{1b}";
+    std::fs::write(&file, body).unwrap();
+    let output = std::process::Command::new(env!("CARGO_BIN_EXE_jobsdone"))
+        .arg("--data-dir")
+        .arg(dir.path())
+        .args(["--json", "note", "create", "--file"])
+        .arg(&file)
+        .output()
+        .unwrap();
+    assert!(output.status.success(), "{:?}", output);
+    let created: serde_json::Value = serde_json::from_slice(&output.stdout).unwrap();
+    assert_eq!(created["data"]["note"]["body"], body);
+    let path = dir.path().join("jobsdone.db");
+    let mut app = App::new(
+        Box::new(Sqlite::open(&path).unwrap()),
+        Box::new(NoDesktop),
+        Locale::default(),
+        &Zoned::now(),
+    )
+    .unwrap();
+    app.update(Action::NotesPage);
+    app.update(Action::Confirm);
+    let mut terminal = ratatui::Terminal::new(ratatui::backend::TestBackend::new(120, 36)).unwrap();
+    let mut layout = None;
+    terminal
+        .draw(|frame| layout = Some(jobsdone::ui::draw(&app, frame)))
+        .unwrap();
+    app.set_layout(layout.unwrap());
+    app.update(Action::LineStart);
+    app.update(Action::Insert('X'));
+    let expected = "abc\r\ndef\r\nXghi\t\u{1b}";
+    assert_eq!(
+        app.update(Action::CopyNote),
+        jobsdone::app::Flow::CopyNote(expected.into())
+    );
+    assert_eq!(app.update(Action::Quit), jobsdone::app::Flow::Quit);
+    drop(app);
+    let stored = Sqlite::open(&path).unwrap().load().unwrap();
+    assert_eq!(stored.note(1).unwrap().body, expected);
+}

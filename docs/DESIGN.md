@@ -382,6 +382,14 @@ somewhere else. The body is wrapped one column short of the pane, because
 the caret at the end of a full row occupies that final column. Within
 the text, it reverses the character beneath it without shifting the text.
 
+Imported LF, CRLF, and lone CR each start a new note line. CRLF is one
+character for caret movement, selection, and deletion. Blank lines and a
+trailing line break keep their own rows. The editor preserves the original
+line-ending bytes when saving or copying. Tabs display as a single `→` cell;
+other control characters display as `�`, also one cell. These visible glyphs
+stand for the original characters: selecting or copying them retains the
+original bytes, and mouse hits and caret movement use those same cells.
+
 The status line distinguishes the notes list from editing. While editing,
 Escape returns to the list and Alt+h opens help; unmodified page shortcuts
 are not advertised because they type text. Leaving the list says "back to

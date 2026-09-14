@@ -3928,3 +3928,68 @@ fn page_headers_do_not_repeat_names_dates_or_note_counts() {
         assert!(drawn[0].contains("esc back"));
     }
 }
+
+#[test]
+fn imported_crlf_home_edits_the_visible_line_and_preserves_bytes() {
+    let mut app = note_open("abc\r\ndef\r\nghi", 120, 36);
+    app.update(Action::LineStart);
+    app.update(Action::Insert('X'));
+    assert_eq!(app.draft().unwrap().text, "abc\r\ndef\r\nXghi");
+    app.update(Action::Cancel);
+    app.update(Action::Confirm);
+    assert_eq!(app.draft().unwrap().text, "abc\r\ndef\r\nXghi");
+}
+
+#[test]
+fn imported_controls_draw_safe_cells_without_changing_the_note() {
+    let body = "a\tb\u{1b}c\u{7f}d\u{85}e\r\nlast";
+    let app = note_open(body, 120, 36);
+    let drawn = look(&app, 120, 36).join("\n");
+    assert!(drawn.contains("a→b�c�d�e"), "{drawn}");
+    assert_eq!(app.draft().unwrap().text, body);
+}
+
+#[test]
+fn crlf_navigation_mouse_and_selection_use_original_clusters() {
+    let mut app = note_open("abc\r\ne\u{301}\t日\r\nxyz", 120, 36);
+    app.update(Action::LineStart);
+    assert_eq!(app.draft().unwrap().caret, 8);
+    app.update(Action::Up);
+    assert_eq!(app.draft().unwrap().caret, 4);
+    app.update(Action::LineEnd);
+    assert_eq!(app.draft().unwrap().caret, 7);
+    let area = app.layout().note.unwrap().area;
+    app.update(Action::MouseDown {
+        column: area.x + 1,
+        row: area.y + 1,
+    });
+    assert_eq!(app.draft().unwrap().caret, 5);
+    app.update(Action::SelectRight);
+    assert_eq!(app.selection(), Some(5..6));
+    assert_eq!(
+        app.update(Action::CopyNote),
+        crate::app::Flow::CopyNote("\t".into())
+    );
+    app.update(Action::Insert('X'));
+    assert_eq!(app.draft().unwrap().text, "abc\r\ne\u{301}X日\r\nxyz");
+}
+
+#[test]
+fn consecutive_controls_advance_by_the_cells_the_canvas_draws() {
+    let area = ratatui::layout::Rect::new(0, 0, 16, 1);
+    let mut buffer = ratatui::buffer::Buffer::empty(area);
+    let mut canvas = Canvas {
+        selection: None,
+        text_cells: Vec::new(),
+        buffer: &mut buffer,
+        area,
+    };
+    let mut at = 0;
+    for glyph in ["\t", "\r\n", "\u{1b}", "\u{7f}", "X"] {
+        at = canvas.put(at, 0, glyph, plain());
+    }
+    assert_eq!(at, 5);
+    assert_eq!(count("\t\r\n\u{1b}\u{7f}X"), 5);
+    let text: String = (0..5).map(|x| buffer[(x, 0)].symbol()).collect();
+    assert_eq!(text, "→���X");
+}

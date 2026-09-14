@@ -129,6 +129,7 @@ impl Canvas<'_> {
     fn put(&mut self, x: u16, y: u16, text: &str, style: Style) -> u16 {
         let mut at = x;
         for symbol in text.graphemes(true) {
+            let symbol = wrap::display_glyph(symbol);
             let width = cells(symbol);
             if width == 0 {
                 continue;
@@ -272,14 +273,14 @@ fn counted(n: usize, one: &str, many: &str) -> String {
 /// How many cells a string takes, which is not how many characters it
 /// has: a CJK character or an emoji takes two, a combining mark none.
 fn count(text: &str) -> u16 {
-    UnicodeWidthStr::width(text) as u16
+    text.graphemes(true).map(cells).fold(0, u16::saturating_add)
 }
 
 /// The same for one grapheme cluster, which is how a string is walked a
 /// cell at a time. A cluster whose only characters are combining marks
 /// has no cell of its own; every other one has one or two.
 fn cells(glyph: &str) -> u16 {
-    UnicodeWidthStr::width(glyph) as u16
+    UnicodeWidthStr::width(wrap::display_glyph(glyph)) as u16
 }
 
 // ---- dates, rules and places, as words -------------------------------
