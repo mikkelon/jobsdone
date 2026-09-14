@@ -5860,3 +5860,19 @@ fn enter_adds_one_task_and_closes_the_input_in_either_pane() {
 
 #[path = "tests/note_recovery.rs"]
 mod note_recovery;
+
+#[test]
+fn oversized_relative_dates_leave_the_picker_open_without_changing_the_model() {
+    for text in ["+999999999", "-999999999", "--9223372036854775808"] {
+        let (mut app, _) = with_a_backlog_task("Keep my deadline");
+        let before = app.model().clone();
+        app.update(Action::DueBy);
+        type_in(&mut app, text);
+        app.update(Action::Confirm);
+        assert_eq!(hint(&app), "That is not a date I can read.");
+        assert!(app.popup().is_some());
+        assert_eq!(*app.model(), before);
+        app.update(Action::Cancel);
+        assert_eq!(*app.model(), before);
+    }
+}

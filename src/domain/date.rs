@@ -54,9 +54,17 @@ pub fn parse_date(text: &str, today: Date) -> Option<Date> {
     // A count of days is signed, so that "-3" is three days ago rather
     // than the third of a month.
     if let Some(days) = text.strip_prefix(['+', '-']) {
-        let days: i64 = days.trim().parse().ok()?;
-        let days = if text.starts_with('-') { -days } else { days };
-        return today.checked_add(Span::new().days(days)).ok();
+        let days = days.trim();
+        if days.is_empty() || !days.bytes().all(|byte| byte.is_ascii_digit()) {
+            return None;
+        }
+        let days: i64 = days.parse().ok()?;
+        let days = if text.starts_with('-') {
+            days.checked_neg()?
+        } else {
+            days
+        };
+        return today.checked_add(Span::new().try_days(days).ok()?).ok();
     }
     match text.as_str() {
         "today" => return Some(today),
@@ -193,4 +201,49 @@ fn named(text: &str, names: &[&str]) -> Option<usize> {
     names
         .iter()
         .position(|name| *name == text || name.starts_with(text) && text.len() == 3)
+}
+
+#[cfg(test)]
+mod boundary_tests {
+    use super::*;
+
+    #[test]
+    fn relative_dates_reject_extreme_counts_and_malformed_signs() {
+        let today = Date::new(2026, 9, 14).unwrap();
+        for text in [
+            "+999999999",
+            "-999999999",
+            "+7304483",
+            "-7304483",
+            "+7304484",
+            "-7304484",
+            "+7304485",
+            "-7304485",
+            "+9223372036854775807",
+            "-9223372036854775808",
+            "--9223372036854775808",
+            "+999999999999999999999999999999",
+            "++1",
+            "--1",
+            "+-1",
+            "-+1",
+            "+",
+            "-",
+            "+1.5",
+            "+1d",
+        ] {
+            assert_eq!(parse_date(text, today), None, "{text}");
+        }
+        for (text, offset) in [("+3", 3), ("-3", -3), ("+0", 0), ("-0", 0), (" + 1 ", 1)] {
+            assert_eq!(
+                parse_date(text, today),
+                today.checked_add(Span::new().days(offset)).ok(),
+                "{text}"
+            );
+        }
+        assert_eq!(parse_date("+1", Date::MAX), None);
+        assert_eq!(parse_date("-1", Date::MIN), None);
+        assert_eq!(parse_date("+0", Date::MAX), Some(Date::MAX));
+        assert_eq!(parse_date("-0", Date::MIN), Some(Date::MIN));
+    }
 }
