@@ -402,6 +402,10 @@ every running instance and surviving restarts.
 - After a reload (another instance wrote), the stack is reloaded with
   everything else.
 
+Note-editor undo/redo is separate application state: Ctrl+Z/Ctrl+Y restores
+local text snapshots and autosaves the restored body through EditNote. It
+does not add entries to this shared stack or survive a process restart.
+
 ## 12. Commands
 
 Every change to the model is one of these. The precondition is checked

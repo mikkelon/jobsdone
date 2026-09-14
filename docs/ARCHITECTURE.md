@@ -568,7 +568,11 @@ Each rule, and what breaking it looks like in a diff.
    whenever the note is left, so at most a quarter of a second of typing
    is ever at risk and no keystroke costs a write. The save follows the
    tick's reload, so a note another window threw away is not written
-   back; the draft is dropped instead. Broken by: a half-typed string
+   back; the draft is dropped instead. `app::note_history` holds up to 100
+   text undo entries per edited note in the window. Autosave does not reset
+   them; external replacement does, and recovery transfers the local history
+   to the recovery note. No text-history entry goes into the shared undo log.
+   Broken by: a half-typed string
    reaching `apply`.
 9. **The launch sequence belongs to `app`.** `main.rs` opens and migrates
    the database, builds the `App`, and calls `terminal::run`. Broken by:

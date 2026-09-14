@@ -66,6 +66,7 @@ The hint bar shows the keys available on the current screen.
 | `n` | Open notes |
 | `Ctrl+C` | Quit |
 
+In a note, Ctrl+Z undoes text edits and Ctrl+Y redoes them.
 In the review, j/k move and s leaves a surfaced task in the backlog unchanged.
 
 Settings let you choose your working days, when a day starts, and how far back

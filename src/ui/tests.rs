@@ -1579,7 +1579,7 @@ fn the_open_note_is_a_text_area_beside_the_list() {
     // Copying and spelling were added after the original scratchpad wireframe.
     assert_eq!(
         drawn[34],
-        " NOTE  alt-y copy note  alt-s fix spelling…  type to edit  esc back to the list        a new  x delete  n back to today"
+        " NOTE  esc back to the list  ctrl-z undo edit  ctrl-y redo edit  alt-y copy note  alt-s fix spelling…  type to edit"
     );
 }
 
@@ -1602,7 +1602,7 @@ fn one_tab_stacks_the_list_and_the_note() {
     assert_eq!(drawn[12], "  Mention to Anna:");
     assert_eq!(
         drawn[42],
-        " NOTE  alt-y copy note  alt-s spelling  type to edit  esc back"
+        " NOTE  esc back  ctrl-z undo edit  alt-y copy note  alt-s spelling"
     );
 }
 
@@ -3372,6 +3372,7 @@ fn the_open_note_names_the_key_that_fixes_a_spelling() {
     let mut app = empty();
     app.update(Action::NotesPage);
     app.update(Action::Add);
+    app.update(Action::Left);
 
     let bar = look(&app, 120, 36)[34].clone();
     assert!(bar.contains("alt-s fix spelling…"), "the wide bar: {bar:?}");

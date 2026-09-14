@@ -5730,3 +5730,111 @@ fn failed_quick_add_keeps_the_title_and_caret() {
     assert!(app.message().is_some());
     assert!(app.model().tasks.is_empty());
 }
+
+#[test]
+fn note_undo_survives_autosave_and_reopen_without_undoing_task_decisions() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    let note = note_saying(&mut app, "original");
+    app.update(Action::Tick);
+    app.update(Action::Cancel);
+    app.update(Action::Confirm);
+    let decisions = app.model().undo.len();
+    type_in(&mut app, " changed");
+    app.update(Action::Tick);
+    app.update(Action::UndoText);
+    assert_eq!(app.draft().unwrap().text, "original");
+    app.update(Action::Tick);
+    assert_eq!(app.model().note(note).unwrap().body, "original");
+    app.update(Action::Cancel);
+    app.update(Action::Confirm);
+    app.update(Action::RedoText);
+    assert_eq!(app.draft().unwrap().text, "original changed");
+    assert_eq!(app.model().undo.len(), decisions);
+}
+
+#[test]
+fn note_replacement_cut_and_new_typing_have_safe_text_history() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "café 界");
+    app.update(Action::SelectAll);
+    app.paste(Ok("replacement\nline".to_owned()));
+    app.update(Action::Tick);
+    app.update(Action::UndoText);
+    assert_eq!(app.draft().unwrap().text, "café 界");
+    assert_eq!(app.selection(), Some(0..6));
+    app.update(Action::RedoText);
+    assert_eq!(app.draft().unwrap().text, "replacement\nline");
+    app.update(Action::SelectAll);
+    app.copied_selection(true, Ok(()));
+    app.update(Action::UndoText);
+    assert_eq!(app.draft().unwrap().text, "replacement\nline");
+    app.update(Action::Insert('X'));
+    app.update(Action::RedoText);
+    assert_eq!(app.draft().unwrap().text, "X", "a new edit discards redo");
+}
+
+#[test]
+fn external_note_changes_reset_local_text_history() {
+    let store = MemStore::new();
+    let mut app = app_at(store.clone(), NOW);
+    app.update(Action::NotesPage);
+    let note = note_saying(&mut app, "mine");
+    app.update(Action::Tick);
+    elsewhere(
+        &store,
+        Command::EditNote {
+            note,
+            body: "external".to_owned(),
+        },
+    );
+    app.update(Action::Tick);
+    app.update(Action::UndoText);
+    assert_eq!(app.draft().unwrap().text, "external");
+    assert!(app.message().unwrap().text.contains("No note edit"));
+}
+
+#[test]
+fn recovery_note_inherits_local_undo_without_overwriting_the_external_version() {
+    let store = MemStore::new();
+    let mut app = app_at(store.clone(), NOW);
+    app.update(Action::NotesPage);
+    let note = note_saying(&mut app, "baseline");
+    app.update(Action::Tick);
+    app.update(Action::Left);
+    app.update(Action::Right);
+    type_in(&mut app, " local");
+    elsewhere(
+        &store,
+        Command::EditNote {
+            note,
+            body: "external".to_owned(),
+        },
+    );
+    app.update(Action::Tick);
+    let recovery = app.draft().unwrap().note;
+    assert_ne!(recovery, note);
+    app.update(Action::UndoText);
+    app.update(Action::Tick);
+    assert_eq!(app.model().note(recovery).unwrap().body, "baseline");
+    assert_eq!(app.model().note(note).unwrap().body, "external");
+    app.update(Action::RedoText);
+    assert_eq!(app.draft().unwrap().text, "baseline local");
+}
+
+#[test]
+fn spelling_replacements_are_single_undoable_note_edits() {
+    let mut app = spell_started();
+    app.update(Action::NotesPage);
+    note_saying(&mut app, "teh");
+    app.update(Action::FixSpelling);
+    let replacement = spelling_card(&app).suggestions[0].clone();
+    app.update(Action::Confirm);
+    assert_eq!(app.draft().unwrap().text, replacement);
+    app.update(Action::Tick);
+    app.update(Action::UndoText);
+    assert_eq!(app.draft().unwrap().text, "teh");
+    app.update(Action::RedoText);
+    assert_eq!(app.draft().unwrap().text, replacement);
+}

@@ -370,6 +370,15 @@ somewhere else. The body is wrapped one column short of the pane, because
 the caret at the end of a full row occupies that final column. Within
 the text, it reverses the character beneath it without shifting the text.
 
+`Ctrl+Z` undoes note edits and `Ctrl+Y` redoes them. This history is local to
+the window and separate from `u`, the task-decision undo stack. Consecutive
+typing or deletion groups together until navigation or another action;
+paste, cut, selection replacement and spelling changes are separate edits.
+Autosave preserves history. Each note retains up to 100 undo entries while
+the window is open, including across leaving and reopening it. New editing
+clears redo. Loading external text resets that note's local history; a
+recovery note inherits the history of the text being recovered.
+
 `y` or `Alt+y` on the notes list copies the selected note's entire body.
 While editing, `Alt+y` copies the selection, or the whole current text
 when nothing is selected, including unsaved typing,

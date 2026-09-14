@@ -261,6 +261,10 @@ fn event_for(name: &str) -> Event {
         Some(rest) => (rest, KeyModifiers::ALT),
         None => (name, KeyModifiers::NONE),
     };
+    let (name, alt) = match name.strip_prefix("ctrl-") {
+        Some(rest) => (rest, KeyModifiers::CONTROL),
+        None => (name, alt),
+    };
     let code = match name {
         "space" => KeyCode::Char(' '),
         "tab" => KeyCode::Tab,

@@ -206,6 +206,8 @@ pub enum Action {
     Pick,
     Keep,
     Undo,
+    UndoText,
+    RedoText,
     /// The two answers to the copy question.
     ThisCopy,
     ThisAndFuture,
@@ -844,6 +846,27 @@ const NOTES_LIST: &[Binding] = &[
 
 const NOTES_NOTE: &[Binding] = &[
     Binding {
+        keys: &[("esc", Action::Cancel)],
+        shown: "esc",
+        label: "back to the list",
+        bar: Bar::Left,
+        narrow: Bar::Short(Side::Left, "back"),
+    },
+    Binding {
+        keys: &[("ctrl-z", Action::UndoText)],
+        shown: "ctrl-z",
+        label: "undo edit",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("ctrl-y", Action::RedoText)],
+        shown: "ctrl-y",
+        label: "redo edit",
+        bar: Bar::Left,
+        narrow: Bar::Off,
+    },
+    Binding {
         keys: &[("alt-y", Action::CopyNote)],
         shown: "alt-y",
         label: "copy note",
@@ -867,13 +890,6 @@ const NOTES_NOTE: &[Binding] = &[
         bar: Bar::Left,
         narrow: Bar::Left,
     },
-    Binding {
-        keys: &[("esc", Action::Cancel)],
-        shown: "esc",
-        label: "back to the list",
-        bar: Bar::Left,
-        narrow: Bar::Short(Side::Left, "back"),
-    },
     // A note is a text area, so Enter is a line of it rather than
     // something to confirm.
     Binding {
@@ -895,43 +911,6 @@ const NOTES_NOTE: &[Binding] = &[
         shown: "tab",
         label: "pane",
         bar: Bar::Off,
-        narrow: Bar::Off,
-    },
-    // The list's keys, named but not bound: here every letter types, so
-    // these rows say where they work instead of claiming to work here.
-    Binding {
-        keys: &[],
-        shown: "in the list:",
-        label: "",
-        bar: Bar::Right,
-        narrow: Bar::Off,
-    },
-    Binding {
-        keys: &[],
-        shown: "⏎",
-        label: "open",
-        bar: Bar::Right,
-        narrow: Bar::Off,
-    },
-    Binding {
-        keys: &[],
-        shown: "a",
-        label: "new",
-        bar: Bar::Right,
-        narrow: Bar::Off,
-    },
-    Binding {
-        keys: &[],
-        shown: "x",
-        label: "delete",
-        bar: Bar::Right,
-        narrow: Bar::Off,
-    },
-    Binding {
-        keys: &[],
-        shown: "n",
-        label: "back to today",
-        bar: Bar::Right,
         narrow: Bar::Off,
     },
 ];
@@ -2149,6 +2128,13 @@ fn key_action(key: &KeyEvent, context: KeyContext) -> Option<Action> {
         return bound(context, &key_name(key)?);
     }
 
+    if key.modifiers == KeyModifiers::CONTROL {
+        match key.code {
+            KeyCode::Char('z') => return bound(context, "ctrl-z"),
+            KeyCode::Char('y') => return bound(context, "ctrl-y"),
+            _ => {}
+        }
+    }
     // The overlay: the editing keys first, then the few names a field
     // keeps, then typing.
     if let Some(action) = editing(key) {

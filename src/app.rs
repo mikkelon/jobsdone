@@ -23,8 +23,10 @@ use crate::input::{
     self, Action, Binding, Field, KeyContext, NotesPane, Pane, PopupKind, ReviewStep, Shown,
 };
 
+mod note_history;
 pub mod operations;
 mod spelling;
+use note_history::{EditKind, History};
 pub mod wrap;
 
 /// The spelling checker the notes are read by, so that anything checking
@@ -1014,6 +1016,7 @@ pub struct App {
     review: Option<Review>,
     /// The open note, while the keyboard is in it.
     draft: Option<Draft>,
+    note_history: BTreeMap<Id, History>,
     /// The misspellings of the note on screen, worked out once per
     /// change to it and read by every redraw until it changes again.
     spelling: Spelling,
@@ -1082,6 +1085,7 @@ impl App {
             editor: None,
             review: None,
             draft: None,
+            note_history: BTreeMap::new(),
             spelling: Spelling::default(),
             setting_draft: None,
             message: None,
@@ -1137,6 +1141,24 @@ impl App {
     /// a reload on a tick, and by the setting being turned off, and
     /// several of the arms in front of that return early.
     pub fn update(&mut self, action: Action) -> Flow {
+        let edit_kind = if self.popup.is_none() {
+            note_history::edit_kind(action, self.selection().is_some())
+        } else if action == Action::Confirm
+            && self
+                .popup
+                .as_ref()
+                .is_some_and(|p| p.kind == PopupKind::Spelling)
+        {
+            Some(EditKind::Separate)
+        } else {
+            None
+        };
+        let before_edit = edit_kind.and_then(|_| self.note_snapshot());
+        if edit_kind.is_none()
+            && !matches!(action, Action::Tick | Action::Resize | Action::FocusGained)
+        {
+            self.end_note_edit_group();
+        }
         let selecting = matches!(
             action,
             Action::SelectLeft
@@ -1189,6 +1211,9 @@ impl App {
             self.selection_anchor = None;
         }
         let flow = self.dispatch(action);
+        if let Some(kind) = edit_kind {
+            self.record_note_edit(before_edit, kind);
+        }
         // A window being closed has no next redraw to check a note for.
         if flow != Flow::Quit {
             self.check_the_spelling();
@@ -1327,6 +1352,8 @@ impl App {
             Action::ThisCopy => self.answer_the_question(false),
             Action::ThisAndFuture => self.answer_the_question(true),
             Action::Undo => self.undo(),
+            Action::UndoText => self.undo_note_edit(false),
+            Action::RedoText => self.undo_note_edit(true),
 
             Action::PrevDay => self.step_the_day(-1),
             Action::NextDay => self.step_the_day(1),
@@ -3067,7 +3094,13 @@ impl App {
         match result {
             Ok(()) => {
                 if cut {
+                    let before = if self.popup.is_none() {
+                        self.note_snapshot()
+                    } else {
+                        None
+                    };
                     self.erase_selection();
+                    self.record_note_edit(before, EditKind::Separate);
                     self.check_the_spelling();
                     self.follow_the_caret();
                     self.say("Selection cut", false);
@@ -3099,12 +3132,18 @@ impl App {
         if pasted.is_empty() {
             return;
         }
+        let before = if self.popup.is_none() {
+            self.note_snapshot()
+        } else {
+            None
+        };
         self.erase_selection();
         if let Some((text, caret)) = self.field() {
             let at = byte_at(text, *caret);
             text.insert_str(at, &pasted);
             *caret = glyphs(&text[..at + pasted.len()]);
         }
+        self.record_note_edit(before, EditKind::Separate);
         self.after_typing();
         self.check_the_spelling();
         self.follow_the_caret();
@@ -3145,6 +3184,9 @@ impl App {
         let Some(body) = self.model.note(note).map(|note| note.body.clone()) else {
             return;
         };
+        if let Some(history) = self.note_history.get_mut(&note) {
+            history.end_if_changed(&body);
+        }
         self.draft = Some(Draft {
             note,
             caret: glyphs(&body),
@@ -3173,6 +3215,7 @@ impl App {
         if !self.save_the_note() {
             return false;
         }
+        self.end_note_edit_group();
         self.draft = None;
         self.notes_pane = NotesPane::List;
         true
@@ -3305,6 +3348,9 @@ impl App {
             return false;
         }
         if let Some(draft) = &mut self.draft {
+            if let Some(history) = self.note_history.remove(&draft.note) {
+                self.note_history.insert(recovery, history);
+            }
             draft.note = recovery;
             draft.saved = body;
         }
@@ -3322,6 +3368,9 @@ impl App {
     /// anything forget it, because the rows under it are not the rows it
     /// was moving through.
     fn follow_the_note(&mut self, body: String) {
+        if let Some(draft) = &self.draft {
+            self.note_history.remove(&draft.note);
+        }
         let Some(draft) = &mut self.draft else {
             return;
         };
