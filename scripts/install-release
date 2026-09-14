@@ -115,6 +115,8 @@ if [ "${0##*/}" = jobsdone-update ] && [ "$current" = "jobsdone ${version#v}" ] 
 fi
 stage="$(mktemp -d)"
 trap 'rm -rf "$stage"' EXIT
+echo 'Installing for your user only; no sudo is needed.'
+echo 'Uninstalling later keeps your tasks, notes and settings.'
 name="jobsdone-$version-$target"
 archive="$name.tar.gz"
 printf 'Downloading Jobsdone %s...\n' "${version#v}"
@@ -129,6 +131,14 @@ tar -xzf "$stage/$archive" -C "$stage" --no-same-owner || die 'Could not unpack 
 [ "$("$stage/$name/jobsdone" --version)" = "jobsdone ${version#v}" ] || die 'downloaded binary version does not match the release'
 "$stage/$name/scripts/install" --binary "$stage/$name/jobsdone" "${options[@]}"
 printf 'Jobsdone %s is ready.\n' "${version#v}"
-echo 'Open Jobsdone from your app launcher, or run jobsdone in a terminal.'
-echo 'Update: jobsdone-update    Check: jobsdone-update --check    Remove: jobsdone-uninstall'
+case ":$PATH:" in
+    *":$HOME/.local/bin:"*)
+        echo 'Run: jobsdone'
+        echo 'Update: jobsdone-update    Check: jobsdone-update --check    Remove: jobsdone-uninstall' ;;
+    *)
+        echo 'Run: "$HOME/.local/bin/jobsdone"'
+        echo 'Update: "$HOME/.local/bin/jobsdone-update"'
+        echo 'Check: "$HOME/.local/bin/jobsdone-update" --check'
+        echo 'Remove: "$HOME/.local/bin/jobsdone-uninstall"' ;;
+esac
 if [ -n "$current" ]; then echo 'Restart any open Jobsdone windows to use this version.'; fi

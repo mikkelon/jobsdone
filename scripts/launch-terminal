@@ -25,6 +25,22 @@ if [ -z "$terminal_id" ]; then
     done
 fi
 terminal_id="${terminal_id,,}"
+# Share the launcher's selection with the installer without opening a window.
+if [ "${1:-}" = --check ]; then
+    case "$terminal_id" in
+        foot | foot.desktop) command -v foot >/dev/null ;;
+        kitty | kitty.desktop) command -v kitty >/dev/null ;;
+        alacritty | alacritty.desktop) command -v alacritty >/dev/null ;;
+        ghostty | ghostty.desktop | com.mitchellh.ghostty.desktop) command -v ghostty >/dev/null ;;
+        *)
+            if command -v xdg-terminal-exec >/dev/null; then
+                [ -n "$(xdg-terminal-exec --print-id 2>/dev/null || true)" ]
+            else
+                command -v "${TERMINAL:-xterm}" >/dev/null
+            fi ;;
+    esac
+    exit $?
+fi
 case "$terminal_id" in
     foot | foot.desktop)
         exec foot --config "$CONFIG_HOME/jobsdone/foot.ini" --app-id="$APP_ID" -e "$JOBSDONE"

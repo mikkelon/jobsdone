@@ -29,7 +29,45 @@ exit 0
 EOF
 chmod +x "$fake_bin/prebuilt"
 
-PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" XDG_CONFIG_HOME="$config_home" XDG_DATA_HOME="$data_home" OMARCHY_PATH="$scratch/no-omarchy" "$root/scripts/install" --binary "$fake_bin/prebuilt" --no-keybind
+PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" XDG_CONFIG_HOME="$config_home" XDG_DATA_HOME="$data_home" OMARCHY_PATH="$scratch/no-omarchy" "$root/scripts/install" --binary "$fake_bin/prebuilt" --no-keybind > "$scratch/install-output"
+grep -Fq 'Run now: "$HOME/.local/bin/jobsdone"' "$scratch/install-output"
+grep -Fq 'export PATH="$HOME/.local/bin:$PATH"' "$scratch/install-output"
+
+# Check availability in isolation from terminals installed on the test host.
+check_bin="$scratch/check-bin"
+mkdir -p "$check_bin"
+ln -s "$(command -v bash)" "$check_bin/bash"
+ln -s "$(command -v dirname)" "$check_bin/dirname"
+check_launcher() {
+    PATH="$check_bin" HOME="$home_dir" TERMINAL="" JOBSDONE_TERMINAL="${1:-}" "$home_dir/.local/bin/jobsdone-terminal" --check
+}
+if check_launcher; then
+    echo 'launcher check must fail when no terminal is available' >&2
+    exit 1
+fi
+cat > "$check_bin/kitty" <<'EOF'
+#!/usr/bin/env bash
+echo 'availability checks must not launch a terminal' >&2
+exit 99
+EOF
+chmod +x "$check_bin/kitty"
+check_launcher
+check_launcher kitty.desktop
+if check_launcher foot; then
+    echo 'launcher check must respect an unavailable explicit terminal' >&2
+    exit 1
+fi
+cat > "$check_bin/xdg-terminal-exec" <<'EOF'
+#!/usr/bin/env bash
+[ "$1" = --print-id ] || exit 99
+printf '%s' "${JOBSDONE_TEST_TERMINAL_ID:-}"
+EOF
+chmod +x "$check_bin/xdg-terminal-exec"
+JOBSDONE_TEST_TERMINAL_ID=custom.desktop check_launcher
+if check_launcher custom.desktop; then
+    echo 'launcher check must fail when the terminal resolver finds nothing' >&2
+    exit 1
+fi
 
 foot_profile="$config_home/jobsdone/foot.ini"
 grep -Fqx "include=$config_home/foot/foot.ini" "$foot_profile"

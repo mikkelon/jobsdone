@@ -16,18 +16,20 @@ Built for Linux, with floating windows and a keyboard shortcut on Omarchy.
 
 ## Install
 
-For Linux on x86-64 or ARM64:
+For Linux on x86-64 or ARM64. No sudo is needed. Uninstalling later keeps your
+tasks, notes and settings.
 
 ```sh
-curl -fsSL https://raw.githubusercontent.com/mikkelon/jobsdone/release-beta/scripts/install-release -o jobsdone-install.sh &&
-    bash jobsdone-install.sh --channel beta
+bash -c "$(curl -fsSL https://raw.githubusercontent.com/mikkelon/jobsdone/release-beta/scripts/install-release)" -- --channel beta
 ```
 
 Open **Jobsdone** from your app launcher, or run `jobsdone` in a terminal.
-You can delete `jobsdone-install.sh` afterward.
 
 The installer puts the app in `~/.local/bin`. On Omarchy, it sets up a floating
 window and offers **Super+Shift+J** as a shortcut if the key is free.
+If `~/.local/bin` is missing from your PATH, the installer shows how to run
+Jobsdone immediately and add it to your PATH. It also checks for a terminal
+for the desktop launcher and explains what to install if one is missing.
 
 <details>
 <summary>Requirements and installation options</summary>
@@ -38,15 +40,16 @@ find `curl`, install it with your package manager and try again.
 For optional clipboard support, install `wl-clipboard` on Wayland or `xclip`
 on X11. The desktop launcher supports Foot, Kitty, Alacritty and Ghostty.
 
-Choose a shortcut and window size:
+After installing, choose a shortcut and window size:
 
 ```sh
-bash jobsdone-install.sh --channel beta --keybind "SUPER + ALT + J" --size 1000x700
+jobsdone-update --keybind "SUPER + ALT + J" --size 1000x700
 ```
 
 Use `--no-keybind` to skip the shortcut, `--tiled` for a tiled window, or
 `--version v0.1.0-beta.1` to install a particular release. Run
-`bash jobsdone-install.sh --help` for all options.
+`jobsdone-update --help` for all options. You can also append these options to
+the install command above.
 
 On other Linux desktops, configure floating windows in your window manager.
 

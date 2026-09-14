@@ -117,8 +117,21 @@ else
 fi
 case ":$PATH:" in
     *":$HOME/.local/bin:"*) ;;
-    *) say "note: $HOME/.local/bin is not on your PATH in this shell" ;;
+    *)
+        say '~/.local/bin is not on your PATH in this shell.'
+        say 'Run now: "$HOME/.local/bin/jobsdone"'
+        say 'For Bash or Zsh, run: export PATH="$HOME/.local/bin:$PATH"'
+        say 'Add that line to ~/.bashrc (Bash) or ~/.zshrc (Zsh) to keep it for new shells.' ;;
 esac
+
+launcher_ready=no
+if "$LAUNCHER" --check; then
+    launcher_ready=yes
+else
+    say 'The desktop launcher needs a terminal that could not be found.'
+    say 'Install Kitty, Alacritty or Ghostty, or Foot on Wayland, and check your TERMINAL / JOBSDONE_TERMINAL setting if set.'
+    say 'You can still run Jobsdone in your current terminal: "$HOME/.local/bin/jobsdone"'
+fi
 
 # --- the launcher entry ------------------------------------------------------
 
@@ -211,7 +224,9 @@ command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q "$DATA_H
 # --- Omarchy: the keybind and the window ------------------------------------
 
 if ! on_omarchy; then
-    say 'Desktop launcher installed.'
+    if [ "$launcher_ready" = yes ]; then
+        say 'Open Jobsdone from your app launcher.'
+    fi
     exit 0
 fi
 
@@ -360,7 +375,7 @@ fi
 "$BINARY" desktop "${window[@]}"
 
 if hyprland_running; then
-    if [ "$want_keybind" = yes ]; then
+    if [ "$want_keybind" = yes ] && [ "$launcher_ready" = yes ]; then
         say "press $KEYBIND to open Jobsdone"
     fi
 else

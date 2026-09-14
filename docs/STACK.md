@@ -170,6 +170,11 @@ point to tested release commits, and `--channel` selects either channel explicit
 user; running it again updates in place. `scripts/uninstall` takes everything
 out and leaves the data. Both installation paths include the desktop launcher
 and terminal profiles, with additional integration on Omarchy.
+Installation needs no sudo. When `~/.local/bin` is absent from PATH, the
+installer prints an immediate launch command and Bash/Zsh PATH setup guidance.
+The launcher's `--check` mode checks its selected terminal without opening a
+window. Missing terminal support produces installation guidance while leaving
+the app available to run in the current terminal; it does not prevent installation.
 
     scripts/install [--keybind [KEYS] | --no-keybind] [--floating | --tiled] [--size WxH]
 
