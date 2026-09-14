@@ -196,12 +196,15 @@ Everywhere:
   `xdg-terminal-exec`, a bare executable in `$TERMINAL`, or an installed
   supported terminal.
   Foot, Kitty, Alacritty, and Ghostty get app-specific profiles under
-  `~/.config/jobsdone/`, including their normal user configuration when
-  present at installation. The profiles forward copy/cut chords to the app
+  `~/.config/jobsdone/`. Foot, Kitty, and Alacritty include their normal user
+  configuration when present at installation. Ghostty automatically loads
+  its normal configuration before the app profile, so its profile does not
+  include it again. The profiles forward copy/cut chords to the app
   and use the terminal's bracketed paste. Alacritty 0.13 and earlier use
   top-level imports; later versions use `general.import`. Ordinary terminal
   configurations are not edited. Reinstall after adding a user terminal
-  configuration so its include is added to the generated profile.
+  configuration so its include is added to the generated profile; Ghostty
+  picks up its normal configuration without reinstalling.
 
 On Omarchy, recognised by `/usr/share/omarchy` and `omarchy-launch-tui`:
 

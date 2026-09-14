@@ -175,11 +175,9 @@ EOF
 
 sed 's/^general\.import = /import = /' "$ALACRITTY_CONFIG" > "$ALACRITTY_013_CONFIG"
 
-{
-    if [ -f "$CONFIG_HOME/ghostty/config" ]; then
-        printf 'config-file = %s\n' "$CONFIG_HOME/ghostty/config"
-    fi
-    cat <<'EOF'
+# Ghostty loads its default config before the CLI --config-file profile.
+# Including it again here can load nested theme files twice and trigger a cycle.
+cat > "$GHOSTTY_CONFIG" <<'EOF'
 keybind = ctrl+insert=text:\x1b[99;6u
 keybind = ctrl+shift+c=text:\x1b[99;6u
 keybind = ctrl+x=text:\x1b[120;6u
@@ -187,7 +185,6 @@ keybind = ctrl+shift+x=text:\x1b[120;6u
 keybind = shift+insert=paste_from_clipboard
 keybind = ctrl+shift+v=paste_from_clipboard
 EOF
-} > "$GHOSTTY_CONFIG"
 
 exec_line="$LAUNCHER"
 exec_line="$(quoted_string "$exec_line")"

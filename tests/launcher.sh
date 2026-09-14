@@ -42,7 +42,10 @@ grep -Fqx 'map ctrl+shift+c send_text all \x1b[99;6u' "$config_home/jobsdone/kit
 grep -Fqx "general.import = [ \"$scratch/home with \\\"quote/config with space/alacritty/alacritty.toml\" ]" "$config_home/jobsdone/alacritty.toml"
 grep -Fqx '{ key = "C", mods = "Control|Shift", chars = "\u001B[99;6u" },' "$config_home/jobsdone/alacritty.toml"
 grep -Fqx '[keyboard]' "$config_home/jobsdone/alacritty-0.13.toml"
-grep -Fqx "config-file = $config_home/ghostty/config" "$config_home/jobsdone/ghostty.conf"
+if grep -qE '^[[:space:]]*config-file[[:space:]]*=' "$config_home/jobsdone/ghostty.conf"; then
+    echo 'Ghostty profile must not reload the automatically loaded user config' >&2
+    exit 1
+fi
 grep -Fqx 'keybind = ctrl+shift+c=text:\x1b[99;6u' "$config_home/jobsdone/ghostty.conf"
 grep -Fqx "Exec=\"$scratch/home with \\\"quote/.local/bin/jobsdone-terminal\"" "$data_home/applications/jobsdone.desktop"
 grep -Fqx 'Terminal=false' "$data_home/applications/jobsdone.desktop"
