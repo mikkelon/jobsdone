@@ -87,11 +87,18 @@ not one this can catch.
 `uat/demo` records the README's demo: a scripted morning in the app,
 seeded with a day that has passed so the recording opens on the review.
 Every keystroke is a frame, drawn by `render.py` in a theme's colours
-inside a bordered window over that theme's wallpaper, and ffmpeg makes
+cropped to the terminal with no wallpaper or window border, and ffmpeg makes
 `assets/demo.mp4` and `assets/demo.gif` from them. The storyboard is the
 `STORY` list at the top of the script; `--theme NAME` draws it in another
 Omarchy theme and `--out DIR` puts the files elsewhere. It takes about
-half a minute and leaves its frames under `uat/out/demo/`.
+half a minute of playback and leaves its frames under `.scratch/demo/`.
+The flow carries a report forward, defers a passport renewal, brings a due
+task and reminder into today, adds a report follow-up, focuses the report,
+and completes the dentist task.
+
+The recorder uses Playwright from the same mise install as `render.py`.
+For a different installation, set `NODE_PATH` to its `node_modules` directory;
+set `DEMO_CHROMIUM` to use an existing Chromium executable.
 
 ## What to look at
 

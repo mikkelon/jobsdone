@@ -6,16 +6,15 @@
 The app runs in a tmux session on scratch data, the way uat/tui runs it,
 seeded with a day that has already passed so the recording opens on the
 morning review. Every keystroke is one frame, captured with tmux and drawn
-with render.py in the theme's colours, in a bordered window over the
-theme's wallpaper, which is how the README's still was framed. ffmpeg
-turns the frames into demo.mp4 and demo.gif under --out, assets/ by
-default. Frames and the working files stay under uat/out/demo/.
+with render.py in the theme's colours, cropped to the terminal with no
+wallpaper or window border. ffmpeg turns the frames into demo.mp4 and
+demo.gif under --out, assets/ by default. Frames and working files stay
+under .scratch/demo/.
 
 The theme is tokyo-night unless --theme says otherwise; a theme needs a
-colors.toml or foot.ini and a backgrounds/ directory under
-/usr/share/omarchy/themes.
+colors.toml or foot.ini under /usr/share/omarchy/themes.
 """
-import os, re, shutil, subprocess, sys, time
+import os, shutil, subprocess, sys, time
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
@@ -24,15 +23,12 @@ import render  # noqa: E402
 HERE = Path(__file__).resolve().parent
 ROOT = HERE.parent
 TUI = HERE / "tui"
-WORK = HERE / "out" / "demo"
+WORK = ROOT / ".scratch" / "demo"
 SESSION = "jobsdone-demo"
 SIZE = "120x36"
 COLS, ROWS = 120, 36
-MARGIN = 40        # wallpaper showing around the window, in CSS pixels
-BORDER = 2         # Hyprland's border, in CSS pixels
 SCALE = 2          # device pixels per CSS pixel in the rendered frames
-GIF_WIDTH = 976    # the canvas at one device pixel per CSS pixel
-WALLPAPER = "3-sunset-lake.png"   # the README's still was taken over this one
+GIF_WIDTH = 976    # readable at the README's display width
 
 
 # --- The storyboard -------------------------------------------------------
@@ -40,40 +36,32 @@ WALLPAPER = "3-sunset-lake.png"   # the README's still was taken over this one
 # still. "type" holds after every character, "keys" after the last key.
 
 STORY = [
-    ("hold", None, 2.4),                   # the review opens itself
-    ("keys", ["t"], 1.0),                  # the weekly report onto today
-    ("keys", ["t"], 1.0),                  # Anna's pull request too
-    ("keys", ["b"], 1.4),                  # the passport back to the backlog
-    ("keys", ["Enter"], 2.2),              # step 2: what surfaced today
-    ("keys", ["t"], 1.0),                  # the accountant is due today
-    ("keys", ["t"], 1.4),                  # the dentist reminder too
-    ("keys", ["Enter"], 2.2),              # the day
-    ("keys", ["a"], 0.8),
-    ("type", "Fix the flaky migration test", 0.055),
-    ("keys", ["Enter"], 0.8),
-    ("keys", ["Escape"], 0.8),
-    ("keys", ["K"], 0.6),                  # order the plan by hand
-    ("keys", ["K"], 0.9),
-    ("keys", ["f"], 1.6),                  # a second focus for the day
-    ("keys", ["j"], 0.6),
-    ("keys", ["Space"], 1.8),              # done, with the time
-    ("keys", ["l"], 0.8),                  # over to the backlog
-    ("keys", ["d"], 1.8),                  # a due date
-    ("type", "fri", 0.14),
-    ("hold", None, 0.9),
-    ("keys", ["Enter"], 1.6),
-    ("keys", ["j"], 0.6),
-    ("keys", ["w"], 1.8),                  # waiting on someone
-    ("keys", ["h"], 0.8),
-    ("keys", ["?"], 3.0),                  # the whole map
-    ("keys", ["Escape"], 3.5),
+    ("hold", None, 3.0),                   # yesterday's unfinished work
+    ("keys", ["t"], 1.5),                  # carry the report into today
+    ("keys", ["b"], 1.5),                  # passport can wait in the backlog
+    ("keys", ["Enter"], 3.0),              # today's due task and reminder
+    ("keys", ["t"], 1.5),                  # call the accountant today
+    ("keys", ["t"], 1.5),                  # make the dentist appointment
+    ("keys", ["Enter"], 2.5),              # a manageable plan for today
+    ("keys", ["a"], 0.7),
+    ("type", "Send report to the team", 0.065),
+    ("keys", ["Enter"], 0.7),
+    ("keys", ["Escape"], 1.2),
+    ("keys", ["k", "k", "k"], 0.8),        # back to the report
+    ("keys", ["f"], 2.5),                  # choose the day's main priority
+    ("keys", ["j", "j"], 1.0),             # book the dentist: a quick win
+    ("keys", ["Space"], 4.0),              # finish with focus, plan and done
 ]
 
 
 # --- Driving --------------------------------------------------------------
 
 def sh(*args, **kw):
-    return subprocess.run(args, check=True, text=True, capture_output=True, **kw).stdout
+    try:
+        return subprocess.run(args, check=True, text=True, capture_output=True, **kw).stdout
+    except subprocess.CalledProcessError as error:
+        print(error.stderr, file=sys.stderr)
+        raise
 
 
 def tui(*args):
@@ -96,16 +84,15 @@ def seed():
     """A backlog and a day that has passed, written the way a person would
     have written them, then moved back a day with SQL."""
     tui("start", "--fresh", "--size", SIZE)
-    add("Write the weekly report", "Review Anna's pull request", "Renew the passport")
+    add("Write the weekly report", "Renew the passport")
     send_keys("l")
-    add("Call the accountant about Q3", "Book the dentist", "Learn Lua for the Hyprland config",
-        "Read the Omarchy manual", "Quote from the electrician")
+    add("Call the accountant about Q3", "Book the dentist",
+        "Plan the autumn holiday", "Quote from the electrician")
     tui("stop")
     tui("sql", "update tasks set day = date('now', '-1 day') where day is not null")
     tui("sql", "update placements set day = date('now', '-1 day')")
     tui("sql", "update tasks set due_on = date('now') where title like 'Call the accountant%'")
     tui("sql", "update tasks set remind_on = date('now') where title like 'Book the dentist%'")
-    tui("sql", "update tasks set focus = 1 where title like 'Write the weekly%'")
     tui("sql", "update tasks set waiting = 1 where title like 'Quote from%'")
     tui("sql", "delete from meta")
 
@@ -130,6 +117,7 @@ class Recorder:
     def capture(self, hold):
         time.sleep(0.12)
         ansi = tmux("capture-pane", "-t", f"{SESSION}:", "-p", "-e")
+        (WORK / f"capture-{len(self.frames):03d}.ansi").write_text(ansi)
         self.frames.append((ansi, hold))
 
     def run(self):
@@ -153,64 +141,28 @@ class Recorder:
 
 # --- Drawing --------------------------------------------------------------
 
-def wallpaper(theme, canvas_w, canvas_h):
-    """WALLPAPER from the theme, or its first background when the theme has
-    no file of that name, scaled to cover a 1920x1080 desktop at SCALE and
-    cropped to the canvas around the centre, where the floating window
-    sits."""
-    backgrounds = sorted((Path("/usr/share/omarchy/themes") / theme / "backgrounds").iterdir())
-    if not backgrounds:
-        sys.exit(f"demo: theme {theme!r} has no backgrounds")
-    chosen = next((b for b in backgrounds if b.name == WALLPAPER), backgrounds[0])
-    out = WORK / "wallpaper.png"
-    desk_w, desk_h = 1920 * SCALE, 1080 * SCALE
-    x, y = (desk_w - canvas_w) // 2, (desk_h - canvas_h) // 2
-    sh("magick", str(chosen),
-       "-resize", f"{desk_w}x{desk_h}^", "-gravity", "center", "-extent", f"{desk_w}x{desk_h}",
-       "-crop", f"{canvas_w}x{canvas_h}+{x}+{y}", "+repage", str(out))
-    return out
-
-
-def page(body, fg, bg, accent, wall):
-    return f"""<!doctype html><meta charset=utf-8>
-<style>
-body{{margin:0;background:url(file://{wall}) 0 0/100% 100% no-repeat}}
-.win{{position:absolute;left:{MARGIN}px;top:{MARGIN}px;border:{BORDER}px solid {accent};background:{bg}}}
-{render.PRE_STYLE.format(fg=fg, bg=bg)}
-</style><div class=win><pre>{body}</pre></div>"""
-
-
-def accent_of(theme):
-    text = (Path("/usr/share/omarchy/themes") / theme / "colors.toml").read_text()
-    m = re.search(r'^\s*accent\s*=\s*"(#[0-9a-fA-F]{6})"', text, re.M)
-    return m.group(1) if m else "#7aa2f7"
-
-
 def draw(frames, theme):
     """Every distinct screen once, as a PNG; returns the file per frame."""
     slots, fg, bg = render.palette(theme)
-    accent = accent_of(theme)
     frame_dir = WORK / "frames"
     shutil.rmtree(frame_dir, ignore_errors=True)
     frame_dir.mkdir(parents=True)
-    # The canvas is measured from the first page, so the wallpaper is
-    # cropped to fit whatever the font makes of 120 by 36 cells.
+    # Measure the terminal itself; every edge uses the theme background.
     distinct, files = {}, []
     for ansi, _ in frames:
         if ansi not in distinct:
             distinct[ansi] = frame_dir / f"{len(distinct):04d}.html"
         files.append(distinct[ansi])
     probe = frame_dir / "probe.html"
-    probe.write_text(page(render.screen(frames[0][0], COLS, ROWS, slots, fg, bg), fg, bg, accent, ""))
+    probe.write_text(render.render(frames[0][0], COLS, ROWS, slots, fg, bg))
     w, h = (int(v) for v in node(f"""
         const p = await b.newPage({{deviceScaleFactor: {SCALE}}});
         await p.goto('file://{probe}');
-        const r = await (await p.$('.win')).boundingBox();
-        console.log(Math.round((r.width + 2*{MARGIN}) * {SCALE}), Math.round((r.height + 2*{MARGIN}) * {SCALE}));
+        const r = await (await p.$('pre')).boundingBox();
+        console.log(Math.ceil(r.width) * {SCALE}, Math.ceil(r.height) * {SCALE});
     """).split())
-    wall = wallpaper(theme, w, h)
     for ansi, path in distinct.items():
-        path.write_text(page(render.screen(ansi, COLS, ROWS, slots, fg, bg), fg, bg, accent, wall))
+        path.write_text(render.render(ansi, COLS, ROWS, slots, fg, bg))
     node(f"""
         const p = await b.newPage({{deviceScaleFactor: {SCALE}, viewport: {{width: {w // SCALE}, height: {h // SCALE}}}}});
         for (const f of {[str(p) for p in distinct.values()]!r}) {{
@@ -225,13 +177,15 @@ def node(body):
     script = f"""
 const {{ chromium }} = require('playwright');
 (async () => {{
-  const b = await chromium.launch();
+  const b = await chromium.launch({{
+    executablePath: process.env.DEMO_CHROMIUM || undefined,
+  }});
   {body}
   await b.close();
 }})();
 """
-    env = dict(os.environ, NODE_PATH=str(render.PLAYWRIGHT))
-    return subprocess.run(["node", "-e", script], env=env, check=True, text=True, capture_output=True).stdout
+    env = dict(os.environ, NODE_PATH=os.environ.get("NODE_PATH", str(render.PLAYWRIGHT)))
+    return sh("node", "-e", script, env=env)
 
 
 # --- Encoding -------------------------------------------------------------

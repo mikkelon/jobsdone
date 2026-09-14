@@ -6,7 +6,7 @@ list, and review what yesterday left behind.
 > **Public beta.** Tested primarily on the maintainer’s devices. Feedback and
 > bug reports from other setups are welcome.
 
-![A morning in the app: the review, planning the day, working through it, in a floating terminal on Omarchy](assets/demo.gif)
+![A morning in jobsdone: review yesterday, plan today, focus the report, and complete a task](assets/demo.gif)
 
 - Organize tasks by day, set reminders, and schedule recurring work.
 - Keep notes with optional offline spell checking.
