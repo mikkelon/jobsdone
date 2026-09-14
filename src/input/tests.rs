@@ -109,8 +109,7 @@ fn typing(typed: char) -> Event {
 
 #[test]
 fn every_list_of_rows_moves_with_j_and_k() {
-    // Every list but the review's, where `k` is "keep" and the arrows
-    // stand in for it (DESIGN.md section 4).
+    // Ordinary lists share navigation keys; review has additional tests below.
     let lists = [
         home(Pane::Day),
         home(Pane::Backlog),
@@ -197,7 +196,7 @@ fn the_step_that_asks_nothing_offers_no_outcome() {
 
     for outcome in [
         KeyCode::Char('t'),
-        KeyCode::Char('k'),
+        KeyCode::Char('s'),
         KeyCode::Char('d'),
         KeyCode::Char('w'),
         KeyCode::Char(' '),
@@ -692,8 +691,10 @@ fn keep_is_the_surfaced_steps_word_and_not_the_piles() {
         asks: true,
         text_field: false,
     };
-    assert_eq!(action_for(&typing('k'), pile), None);
-    assert_eq!(action_for(&typing('k'), surfaced), Some(Action::Keep));
+    assert_eq!(action_for(&typing('k'), pile), Some(Action::Up));
+    assert_eq!(action_for(&typing('s'), pile), None);
+    assert_eq!(action_for(&typing('k'), surfaced), Some(Action::Up));
+    assert_eq!(action_for(&typing('s'), surfaced), Some(Action::Keep));
 }
 
 #[test]

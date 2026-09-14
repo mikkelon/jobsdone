@@ -157,9 +157,9 @@ Conventions, so the map is guessable:
   extra actions a text field needs are on Alt plus a key (`alt-t` re-add
   from search, `alt-1` to `alt-4` quick dates). `Tab` moves focus to the
   next control, where single keys work again.
-- One collision, and its resolution: in the review `k` is "keep", so the
-  cursor moves there with `j` and the arrow keys and `k` does not move it.
-  Everywhere else `j` and `k` move.
+- `j` and `k`, or the arrow keys, navigate every review step just as they
+  navigate other lists. In the surfaced step, `s` means "leave in backlog":
+  acknowledge the row in this review without changing or snoozing it.
 - The command palette lists every action with its direct key beside it,
   in two sections: what the key would do to the row the cursor is on,
   under that row's own title, and then what it does to the app. A pane
@@ -196,11 +196,12 @@ The main screen is today's plan beside the backlog, because the core loop is
 
 The review takes the whole window in two steps: the pile (unfinished tasks
 from past days) and surfaced tasks (due, reminded, and new recurring
-copies). Keep is the surfaced step's word, for a dated backlog task that
-is to stay where it is; a pile task leaves the pile only by being closed,
-moved or deleted (PRODUCT.md), so `k` does nothing on the pile and the
-panel there lists what it does. An empty step is skipped; when both are empty the app opens
-straight to Today. The review is never an empty ceremony, and it is never
+copies). "Leave in backlog" (`s`) acknowledges a surfaced task for this
+review session without changing its dates or other properties. It is not
+a snooze: due tasks can surface again tomorrow, while reminders retain
+their original date. A pile task leaves only by being closed, moved or
+deleted; `k` moves up in both steps. An empty step is skipped; when both
+are empty the app opens straight to Today. The review is never an empty ceremony, and it is never
 shown twice in a day. Whether it opens itself at all is a setting: off,
 the app opens on Today and `M` is the way in, for someone who would
 rather choose the moment.

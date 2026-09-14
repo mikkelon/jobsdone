@@ -5680,6 +5680,39 @@ fn word_navigation_moves_task_popup_and_note_carets_without_editing() {
 // ---- UX polish regressions ------------------------------------------
 
 #[test]
+fn informational_rows_in_mixed_review_cannot_be_acknowledged() {
+    let (original, copy) = with_a_recurring_copy();
+    let mut model = original.model().clone();
+    let mut due = model.task(copy).unwrap().clone();
+    due.id = 99;
+    due.title = "Due backlog task".to_owned();
+    due.day = None;
+    due.due_on = Some(on(NOW_DAY));
+    due.schedule_id = None;
+    due.scheduled_on = None;
+    model.tasks.insert(due.id, due);
+    model.meta.remove("review_on");
+    let mut app = app_at(MemStore::holding(model), NOW);
+    assert_eq!(app.review().unwrap().progress(), (0, 1));
+    app.update(Action::Down);
+    assert_eq!(app.cursor(List::Review), Some(RowId::Task(copy)));
+    assert!(matches!(
+        app.page_context(),
+        KeyContext::Review { asks: false, .. }
+    ));
+    app.update(Action::Keep);
+    assert_eq!(app.review().unwrap().decision(copy), None);
+    assert_eq!(app.cursor(List::Review), Some(RowId::Task(copy)));
+    app.update(Action::Up);
+    assert!(matches!(
+        app.page_context(),
+        KeyContext::Review { asks: true, .. }
+    ));
+    app.update(Action::Keep);
+    assert_eq!(app.review().unwrap().decision(99), Some(Decided::Kept));
+}
+
+#[test]
 fn failed_quick_add_keeps_the_title_and_caret() {
     let mut app = App::new(
         Box::new(Broken(MemStore::new())),

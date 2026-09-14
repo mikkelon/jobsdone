@@ -450,9 +450,9 @@ is the task being unlinked.
 |---------------|--------------|----------------------------------------------------------------------------|---------|
 | StartReview   | system       | If `review_on` ≠ today: `review_before` = `review_on`, `review_on` = today. | none    |
 
-Every decision in the review (`d`, `t`, `b`, `m`, `x`, `k`, `w`, `space`)
+Every decision in the review (`d`, `t`, `b`, `m`, `x`, `s`, `w`, `space`)
 is one of the task commands above, or nothing at all in the case of
-`k keep`. The review adds no state to tasks.
+`s leave in backlog`. The review adds no state to tasks.
 
 ### Notes
 

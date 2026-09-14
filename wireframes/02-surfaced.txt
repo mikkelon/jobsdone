@@ -6,7 +6,7 @@
                                                                                  MIGRATE CI TO THE NEW RUNNERS
 ───────────────────────────────────────────────────────────────────────────────┬────────────────────────────────────────
  DUE 2 ─────────────────────────────────────────────────────────────────────── │  t     Pull onto today        to plan
- [ ] Migrate CI to the new runners                   [due 3 Sep · 2 days over] │  k     Keep in backlog       tomorrow
+ [ ] Migrate CI to the new runners                   [due 3 Sep · 2 days over] │  s     Leave in backlog     unchanged
  [ ] Submit the expense report                                     [due today] │  d     Change due date…
                                                                                │  w     Mark waiting            no nag
  REMINDERS 2 ───────────────────────────────────────────────────────────────── │  space Done
@@ -34,5 +34,5 @@
                                                                                │ │ Start the day ⏎                    │
                                                                                │ └────────────────────────────────────┘
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- SURFACED  t today  k keep  d due…  r remind…  w waiting  space done                          ⏎ start the day  esc skip
+ SURFACED  t today  s leave in backlog  d due…  r remind…  w waiting  space done              ⏎ start the day  esc skip
 

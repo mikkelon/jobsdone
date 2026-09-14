@@ -373,17 +373,17 @@ def p01():
     group(g, lx, lw, y, 'Tue 12 Aug · 3 weeks ago', 1); y += 1
     task(g, lx, lw, y, 'Book the team dinner'); y += 1
     y = 4
-    for k, lbl, d in [('d', 'Done', 'was finished'), ('t', 'Move to today', 'end of plan'), ('b', 'Back to backlog', ''),
+    for k, lbl, d in [('space', 'Done', 'was finished'), ('t', 'Move to today', 'end of plan'), ('b', 'Back to backlog', ''),
                       ('m', 'Move to a day…', ''), ('x', 'Delete', 'undo: u')]:
         item(g, sx, sw, y, k, lbl, d); y += 1
     g.callout(sx + sw - 1, 2, 4)
     y += 1
     g.put(sx + 2, y, '2 of 7 handled', 'd'); g.callout(sx + sw - 1, y, 5); y += 1
     progress(g, sx + 2, y, sw - 4, 2 / 7); y += 1
-    g.put(sx + 2, y, 'j ↑/↓ any order · u undo last', 'd')
+    g.put(sx + 2, y, 'j/k ↑/↓ any order · u undo last', 'd')
     y = g.h - 5
     g.box(sx + 1, y, sw - 2, 3, 'd'); g.put(sx + 3, y + 1, 'Continue, 5 left on the pile ⏎'); g.callout(sx + sw - 1, y - 1, 6)
-    hints(g, g.h - 1, 'Review', [('d', 'done'), ('t', 'today'), ('b', 'backlog'), ('m', 'move…'), ('x', 'delete'), ('u', 'undo'), ('e', 'edit')],
+    hints(g, g.h - 1, 'Review', [('space', 'done'), ('t', 'today'), ('b', 'backlog'), ('m', 'move…'), ('x', 'delete'), ('u', 'undo'), ('e', 'edit')],
           [('⏎', 'next step'), ('esc', 'skip')])
     page('01-review', 'Morning review: the pile', [('120×36 · floating window', g)], '''
 <h2>Morning review, step 1: the pile</h2>
@@ -413,7 +413,7 @@ def p02():
     task(g, lx, lw, y, 'Ship invoice export', chips=[('rep', '↻ every Fri')], meta='on today\'s plan'); y += 1
     task(g, lx, lw, y, 'Write standup notes', chips=[('rep', '↻ work days')], meta='on today\'s plan'); y += 1
     y = 4
-    for k, lbl, d in [('t', 'Pull onto today', 'to plan'), ('k', 'Keep in backlog', 'tomorrow'), ('d', 'Change due date…', ''),
+    for k, lbl, d in [('t', 'Pull onto today', 'to plan'), ('s', 'Leave in backlog', 'unchanged'), ('d', 'Change due date…', ''),
                       ('w', 'Mark waiting', 'no nag'), ('space', 'Done', '')]:
         item(g, sx, sw, y, k, lbl, d); y += 1
     g.callout(sx + sw - 1, 2, 5)
@@ -422,7 +422,7 @@ def p02():
     progress(g, sx + 2, y, sw - 4, 0)
     y = g.h - 5
     g.box(sx + 1, y, sw - 2, 3, 'A'); g.put(sx + 3, y + 1, 'Start the day ⏎', 'A b'); g.callout(sx + sw - 1, y - 1, 6)
-    hints(g, g.h - 1, 'Surfaced', [('t', 'today'), ('k', 'keep'), ('d', 'due…'), ('r', 'remind…'), ('w', 'waiting'), ('space', 'done')],
+    hints(g, g.h - 1, 'Surfaced', [('t', 'today'), ('s', 'leave in backlog'), ('d', 'due…'), ('r', 'remind…'), ('w', 'waiting'), ('space', 'done')],
           [('⏎', 'start the day'), ('esc', 'skip')])
     page('02-surfaced', 'Morning review: surfaced', [('120×36 · floating window', g)], '''
 <h2>Morning review, step 2: surfaced</h2>
@@ -797,7 +797,7 @@ def p11():
             (61, 'Backlog', [[('t', 'to today'), ('m', 'move…')], [('d', 'due by'), ('r', 'remind on')],
                              [('w', 'waiting'), ('R', 'repeat')], [],
                              'REVIEW', [('d', 'done'), ('t', 'today')], [('b', 'backlog'), ('m', 'move…')],
-                             [('k', 'keep'), ('⏎', 'next step')]]),
+                             [('s', 'leave in backlog'), ('⏎', 'next step')]]),
             (89, 'Settings', [[('h/l', 'adjust')], [('space ⏎', 'change')], [('esc ,', 'back')]])]
     for x, title, lines in cols:
         h.put(x, 3, title.upper(), 'd')

@@ -1000,15 +1000,15 @@ const REVIEW_PILE: &[Binding] = &[
         bar: Bar::Right,
         narrow: Bar::Right,
     },
-    // `k` is keep here, so the cursor moves with `j` and the arrows
-    // (DESIGN.md section 4).
+    // Review navigation uses the same keys as other lists.
     Binding {
         keys: &[
             ("j", Action::Down),
+            ("k", Action::Up),
             ("down", Action::Down),
             ("up", Action::Up),
         ],
-        shown: "j ↑/↓",
+        shown: "j/k ↑/↓",
         label: "move",
         bar: Bar::Off,
         narrow: Bar::Off,
@@ -1038,9 +1038,9 @@ const REVIEW_SURFACED: &[Binding] = &[
         narrow: Bar::Left,
     },
     Binding {
-        keys: &[("k", Action::Keep)],
-        shown: "k",
-        label: "keep",
+        keys: &[("s", Action::Keep)],
+        shown: "s",
+        label: "leave in backlog",
         bar: Bar::Left,
         narrow: Bar::Left,
     },
@@ -1097,10 +1097,11 @@ const REVIEW_SURFACED: &[Binding] = &[
     Binding {
         keys: &[
             ("j", Action::Down),
+            ("k", Action::Up),
             ("down", Action::Down),
             ("up", Action::Up),
         ],
-        shown: "j ↑/↓",
+        shown: "j/k ↑/↓",
         label: "move",
         bar: Bar::Off,
         narrow: Bar::Off,
@@ -1139,15 +1140,15 @@ const REVIEW_INFORMATION: &[Binding] = &[
         bar: Bar::Right,
         narrow: Bar::Right,
     },
-    // `k` keeps its silence here too: the review is one set of keys
-    // whether or not the step in front of you asks anything.
+    // Navigation stays available even when there is nothing to decide.
     Binding {
         keys: &[
             ("j", Action::Down),
+            ("k", Action::Up),
             ("down", Action::Down),
             ("up", Action::Up),
         ],
-        shown: "j ↑/↓",
+        shown: "j/k ↑/↓",
         label: "move",
         bar: Bar::Off,
         narrow: Bar::Off,
@@ -1233,10 +1234,10 @@ const SURFACED_DECISIONS: &[Decision] = &[
         note: "to plan",
     },
     Decision {
-        key: "k",
+        key: "s",
         action: Action::Keep,
-        label: "Keep in backlog",
-        note: "tomorrow",
+        label: "Leave in backlog",
+        note: "unchanged",
     },
     Decision {
         key: "d",

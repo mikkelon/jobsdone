@@ -1715,7 +1715,7 @@ impl App {
         }
     }
 
-    /// `k`: the row is answered by leaving it exactly as it is, which is
+    /// `s`: the row is answered by leaving it exactly as it is, which is
     /// the one decision the model keeps no record of (DOMAIN.md section
     /// 12).
     fn keep(&mut self) {
@@ -1725,6 +1725,11 @@ impl App {
         let Some(id) = self.task_at_cursor() else {
             return;
         };
+        if !self.review.as_ref().is_some_and(|review| {
+            review.step == ReviewStep::Surfaced && review.asked().contains(&id)
+        }) {
+            return;
+        }
         self.note_the_decision(id, Decided::Kept);
     }
 
@@ -3872,10 +3877,12 @@ impl App {
         if let Some(review) = &self.review {
             return KeyContext::Review {
                 step: review.step,
-                // A step of copies that only started this morning asks
-                // nothing, and a key that would answer it acts on the
-                // wrong thing (DESIGN.md section 5).
-                asks: review.progress().1 > 0,
+                // Recurring copies are informational even in a mixed
+                // step that also contains due tasks and reminders.
+                asks: self
+                    .cursor(List::Review)
+                    .and_then(RowId::task)
+                    .is_some_and(|task| review.asked().contains(&task)),
                 text_field: self.editor.is_some(),
             };
         }
