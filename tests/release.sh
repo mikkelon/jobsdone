@@ -87,7 +87,7 @@ if env -u JOBSDONE_TEST_STABLE_VERSION "$HOME/.local/bin/jobsdone-update" --chan
     echo 'an unavailable stable channel must fail without changing files' >&2; exit 1
 fi
 [ "$(sha256sum "$binary")" = "$before" ]
-JOBSDONE_TEST_BETA_VERSION=0.1.0-beta.10 "$HOME/.local/bin/jobsdone-update" --check | grep -F '0.1.0-beta.10'
+JOBSDONE_TEST_BETA_VERSION=0.1.0-beta.10 "$HOME/.local/bin/jobsdone-update" --channel beta --check | grep -F '0.1.0-beta.10'
 printf '#!/usr/bin/env bash\necho "jobsdone 0.1.0-beta.10"\n' > "$binary"
 if JOBSDONE_TEST_BETA_VERSION=0.1.0-beta.2 "$HOME/.local/bin/jobsdone-update"; then
     echo 'beta updates must not downgrade beta.10 to beta.2' >&2; exit 1
