@@ -62,11 +62,30 @@ impl Sqlite {
     /// Opens or creates the database, sets the pragmas, applies pending
     /// migrations.
     pub fn open(path: &Path) -> Result<Sqlite, StoreError> {
-        let conn = Connection::open(path)?;
+        let mut conn = Connection::open(path)?;
         conn.busy_timeout(BUSY_TIMEOUT)?;
-        conn.pragma_update(None, "journal_mode", "WAL")?;
+        // Changing journal mode can report BUSY immediately during simultaneous
+        // first opens, even with SQLite's busy handler installed.
+        let started = std::time::Instant::now();
+        loop {
+            let remaining = BUSY_TIMEOUT.saturating_sub(started.elapsed());
+            conn.busy_timeout(remaining)?;
+            match conn.pragma_update(None, "journal_mode", "WAL") {
+                Ok(()) => break,
+                Err(rusqlite::Error::SqliteFailure(error, _))
+                    if matches!(
+                        error.code,
+                        ErrorCode::DatabaseBusy | ErrorCode::DatabaseLocked
+                    ) && started.elapsed() < BUSY_TIMEOUT =>
+                {
+                    std::thread::sleep(Duration::from_millis(10).min(remaining));
+                }
+                Err(error) => return Err(error.into()),
+            }
+        }
+        conn.busy_timeout(BUSY_TIMEOUT)?;
         conn.pragma_update(None, "foreign_keys", "ON")?;
-        migrate(&conn)?;
+        migrate(&mut conn)?;
         Ok(Sqlite {
             conn,
             snapshot: RefCell::new(None),
@@ -80,8 +99,9 @@ impl Sqlite {
 /// binary writing rows against a schema it does not understand is the one
 /// way this design can lose data, and downgrades are not supported
 /// (DOMAIN.md section 17).
-fn migrate(conn: &Connection) -> Result<(), StoreError> {
-    let current: u32 = conn.query_row("PRAGMA user_version", [], |row| row.get(0))?;
+fn migrate(conn: &mut Connection) -> Result<(), StoreError> {
+    let tx = conn.transaction_with_behavior(TransactionBehavior::Immediate)?;
+    let current: u32 = tx.query_row("PRAGMA user_version", [], |row| row.get(0))?;
     let latest = MIGRATIONS.last().map_or(0, |(number, _)| *number);
 
     if current > latest {
@@ -93,9 +113,10 @@ fn migrate(conn: &Connection) -> Result<(), StoreError> {
 
     for (number, sql) in MIGRATIONS {
         if *number > current {
-            conn.execute_batch(&format!("BEGIN;\n{sql}\nCOMMIT;"))?;
+            tx.execute_batch(sql)?;
         }
     }
+    tx.commit()?;
     Ok(())
 }
 

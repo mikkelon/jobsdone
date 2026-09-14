@@ -1033,3 +1033,70 @@ fn the_writer_a_kill_stops() {
         model.apply(&change);
     }
 }
+
+#[test]
+fn simultaneous_open_migrates_once() {
+    for version in [0, 1, 2, 3] {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("race.db");
+        let conn = Connection::open(&path).unwrap();
+        for (_, sql) in MIGRATIONS.iter().filter(|(n, _)| *n <= version) {
+            conn.execute_batch(sql).unwrap();
+        }
+        drop(conn);
+        let barrier = std::sync::Arc::new(std::sync::Barrier::new(12));
+        std::thread::scope(|scope| {
+            let handles: Vec<_> = (0..12)
+                .map(|_| {
+                    let barrier = barrier.clone();
+                    let path = path.clone();
+                    scope.spawn(move || {
+                        barrier.wait();
+                        let store = Sqlite::open(&path).expect("concurrent open");
+                        assert_eq!(store.load().unwrap(), Model::empty());
+                    })
+                })
+                .collect();
+            for handle in handles {
+                handle.join().unwrap();
+            }
+        });
+    }
+}
+
+#[test]
+fn migration_failure_rolls_back_the_whole_sequence() {
+    let mut conn = Connection::open_in_memory().unwrap();
+    conn.execute_batch("CREATE TABLE settings (collision TEXT)")
+        .unwrap();
+    assert!(migrate(&mut conn).is_err());
+    assert_eq!(
+        conn.query_row("PRAGMA user_version", [], |r| r.get::<_, u32>(0))
+            .unwrap(),
+        0
+    );
+    assert_eq!(
+        conn.query_row(
+            "SELECT count(*) FROM sqlite_master WHERE name = 'tasks'",
+            [],
+            |r| r.get::<_, u32>(0)
+        )
+        .unwrap(),
+        0
+    );
+    assert!(conn.is_autocommit());
+}
+
+#[test]
+fn opening_under_a_held_write_lock_returns_a_bounded_conflict() {
+    let (dir, mut store) = scratch();
+    let path = dir.path().join("jobsdone.db");
+    let _held = store
+        .conn
+        .transaction_with_behavior(TransactionBehavior::Immediate)
+        .unwrap();
+    let started = std::time::Instant::now();
+    assert!(matches!(Sqlite::open(&path), Err(StoreError::Conflict)));
+    assert!(started.elapsed() >= Duration::from_secs(2));
+    assert!(started.elapsed() < Duration::from_secs(6));
+}

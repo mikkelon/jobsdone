@@ -666,6 +666,12 @@ The third migration adds `personal_dictionary`, with a canonical `key` primary
 key and a `word` display value. Entries are written individually, so changing
 one word does not replace the other entries.
 
+Opening a database acquires a SQLite immediate transaction before reading its
+schema version. All pending migrations and version updates commit together;
+failure rolls back the entire sequence. Concurrent openers reread the version
+after acquiring the lock. Journal-mode setup retries transient contention within
+the same bounded three-second wait used for database locks.
+
 Notes on the schema:
 
 - `tasks.day` NULL is the backlog. Position density is the domain's
