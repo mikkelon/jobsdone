@@ -527,7 +527,7 @@ fn with(first: Option<Item>, rest: Vec<Item>) -> Vec<Item> {
     first.into_iter().chain(rest).collect()
 }
 
-/// Which day, how to move between days, and the only global indicators.
+/// Navigation and global indicators; pane headers and tabs own page names.
 ///
 /// A narrow window keeps the indicators and drops the words around them.
 fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
@@ -542,12 +542,6 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
         return;
     }
     let browsing = app.shown() != Shown::Today;
-    let day = if browsing {
-        day_label(app.showing(), app.dates())
-    } else {
-        format!("Today · {}", day_label(app.today(), app.dates()))
-    };
-    let day = vec![words("‹", dim()), words(&day, bold()), words("›", dim())];
     let notes = vec![
         words(&counted(app.notes().count, "note", "notes"), dim()),
         Part::Key("n".to_owned()),
@@ -573,12 +567,15 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
     // back, which leaves the right end no room for its own words.
     let (left, right) = match (app.page(), narrow) {
         (Page::Home, true) => (
-            vec![day],
+            if browsing {
+                vec![key(".", "today")]
+            } else {
+                vec![quiet(&day_label(app.today(), app.dates()))]
+            },
             with(alert(""), vec![key("/", ""), key(":", ""), key("?", "")]),
         ),
         (Page::Home, false) if browsing => (
             vec![
-                day,
                 quiet(&ago(app.showing(), app.today())),
                 key(".", "back to today"),
             ],
@@ -588,7 +585,7 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
             ),
         ),
         (Page::Home, false) => (
-            vec![day, key("[/]", "day"), key("g", "go to date")],
+            vec![key("[/]", "day"), key("g", "go to date")],
             with(
                 alert(" on the pile"),
                 vec![
@@ -600,18 +597,14 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
             ),
         ),
         (Page::Notes, _) if app.draft().is_some() => (
-            vec![vec![
-                words("Notes", bold()),
-                words(&counted(app.notes().count, "note", "notes"), dim()),
-                words(
-                    if canvas.width() >= 80 {
-                        "editing · autosave"
-                    } else {
-                        ""
-                    },
-                    dim(),
-                ),
-            ]],
+            with(
+                (!narrow).then(|| quiet(&counted(app.notes().count, "note", "notes"))),
+                vec![quiet(if canvas.width() >= 80 {
+                    "editing · autosave"
+                } else {
+                    "editing"
+                })],
+            ),
             vec![keys(&[
                 (
                     "esc",
@@ -625,10 +618,11 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
             ])],
         ),
         (Page::Notes, _) => (
-            vec![vec![
-                words("Notes", bold()),
-                words(&counted(app.notes().count, "note", "notes"), dim()),
-            ]],
+            if narrow {
+                vec![]
+            } else {
+                vec![quiet(&counted(app.notes().count, "note", "notes"))]
+            },
             vec![
                 keys(&[("n", "or"), ("esc", "back to tasks")]),
                 key("/", ""),
@@ -640,10 +634,7 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
         // the indicators the other pages carry mean nothing here. The way
         // out is where the notes page puts its own.
         (Page::Settings, _) => (
-            vec![vec![
-                words("Settings", bold()),
-                words("kept in the database, beside the tasks", dim()),
-            ]],
+            vec![],
             vec![
                 keys(&[(",", "or"), ("esc", "back")]),
                 key(":", ""),

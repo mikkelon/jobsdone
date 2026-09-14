@@ -302,7 +302,7 @@ def pile(review, words=' on the pile'):
 
 
 def today_strip(g, review=2):
-    strip(g, [[('‹', 'd'), ('Today · Fri 5 Sep', 'b'), ('›', 'd')], key('[/]', 'day'), key('g', 'go to date')],
+    strip(g, [key('[/]', 'day'), key('g', 'go to date')],
           pile(review) + [[('4 notes', 'd'), ('n', 'k')], key('/', 'search'), key(':', 'commands'), key('?')])
 
 
@@ -441,7 +441,7 @@ def p02():
 # 04 --------------------------------------------------------------------
 def p04():
     g = Grid(80, 44)
-    strip(g, [[('‹', 'd'), ('Today · Fri 5 Sep', 'b'), ('›', 'd')]], pile(2, '') + [key('/'), key(':'), key('?')])
+    strip(g, [[('Fri 5 Sep', 'd')]], pile(2, '') + [key('/'), key(':'), key('?')])
     x = g.put(1, 2, ' TODAY 6 ', 'A b r')
     x = g.put(x + 1, 2, ' BACKLOG 12 ', 'd')
     x = g.put(x + 1, 2, ' NOTES 4 ', 'd')
@@ -639,7 +639,7 @@ def p07():
 # 08 --------------------------------------------------------------------
 def p08():
     g = Grid(120, 36)
-    strip(g, [[('‹', 'd'), ('Mon 1 Sep', 'b'), ('›', 'd')], [('4 days ago', 'd')], key('.', 'back to today')],
+    strip(g, [[('4 days ago', 'd')], key('.', 'back to today')],
           pile(5) + [[('4 notes', 'd'), ('n', 'k')], key('/'), key(':'), key('?')])
     g.callout(48, 0, 1)
     lx, lw, rx, rw, y0, y1 = frame2(g, ('Mon 1 Sep', 'past day', '8 planned · 3 done · 2 open · 3 moved'), ('Days', '', key('g', 'go to date')), 'left')
@@ -726,7 +726,7 @@ def p09():
 # 10 --------------------------------------------------------------------
 def p10():
     g = Grid(120, 36)
-    strip(g, [[('Notes', 'b'), ('4 notes', 'd')]], [key('n', 'or') + key('esc', 'back to today'), key('/'), key(':'), key('?')])
+    strip(g, [[('4 notes', 'd')]], [key('n', 'or') + key('esc', 'back to today'), key('/'), key(':'), key('?')])
     g.callout(20, 0, 1)
     lx, lw, rx, rw, y0, y1 = frame2(g, ('Notes', '', key('a', 'new')), ('Note', 'Thu 4 Sep 16:40', key('esc', 'back')), 'right', div=44)
     g.callout(rx + 24, 2, 3)
@@ -752,7 +752,7 @@ def p10():
 <h2>Scratchpad</h2>
 <p>A post-it block, on its own page. <kbd>n</kbd> switches the whole window to Notes and back, so a note gets real width; the day and backlog are one key away, not squeezed beside it. Text only.</p>
 <ol>
-<li>The status line says where you are and how to get back. Search, commands and help still work here.</li>
+<li>The pane header names Notes; the status line counts them and says how to get back. Search, commands and help still work here.</li>
 <li>Notes are a list, newest first: first line and age. No titles, no folders, no search. Create, open, throw away; delete has no confirmation, only undo. Nothing expires on its own.</li>
 <li>An open note takes the wide pane and shows when it was made, so a stale note is easy to spot and bin.</li>
 <li>The note is a plain multi-line text area with a cursor. No formatting, no toolbar. Every key types; <kbd>esc</kbd> returns focus to the list, where <kbd>a</kbd>, <kbd>x</kbd> and <kbd>n</kbd> work as keys.</li>
@@ -827,7 +827,7 @@ def p12():
     g = Grid(60, 11); header(g, 0, 60, 0, 'Backlog', '', '0'); g.hl(0, 1, 60)
     g.put(14, 4, 'Backlog is empty.', 'd'); g.seg(8, 5, key('a', 'add ·') + key('b', 'on a day task sends it here'), gap=1)
     grids.append(('B · Empty backlog', g))
-    g = Grid(60, 7); strip(g, [[('‹', 'd'), ('Today · Fri 5 Sep', 'b'), ('›', 'd')]], [[('4 notes', 'd'), ('n', 'k')], key('?')])
+    g = Grid(60, 7); strip(g, [[('Fri 5 Sep', 'd')]], [[('4 notes', 'd'), ('n', 'k')], key('?')])
     g.put(1, 3, 'Opens straight to Today. Nothing on the pile, so no count.', 'd')
     grids.append(('C · Nothing to review: the review is skipped, not shown', g))
     g = Grid(60, 11); header(g, 0, 60, 0, 'Sun 31 Aug', 'past day', 'nothing was planned', focus=True); g.hl(0, 1, 60)
@@ -855,7 +855,7 @@ def p12():
 # 13 --------------------------------------------------------------------
 def p13():
     g = Grid(120, 36)
-    strip(g, [[('Settings', 'b'), ('kept in the database, beside the tasks', 'd')]],
+    strip(g, [],
           [key(',', 'or') + key('esc', 'back'), key(':'), key('?')])
     lx, lw, rx, rw, y0, y1 = frame2(g, ('Settings', '', 'colour and font come from the terminal'),
                                     ('Day starts at',), 'left', div=79)
@@ -920,7 +920,7 @@ def p13():
 <h2>Settings</h2>
 <p>Fourteen settings on one page, reached with <kbd>,</kbd> from either other page and left with <kbd>,</kbd> or <kbd>esc</kbd>. They are kept in the database beside the tasks, so a second window picks a change up the way it picks up any other.</p>
 <ol>
-<li>The status line names the page and the two keys that leave it. There is no review count and no notes count here: the settings are about the program, not about a day.</li>
+<li>The pane header names the page; the status line offers the two keys that leave it. There is no review count and no notes count here: the settings are about the program, not about a day.</li>
 <li>What the app does not hold, said where somebody looking for it would look: colour, font and size come from the terminal, which Omarchy themes.</li>
 <li>Every row is a label dotted across to its value, in six groups. A toggle reads <em>on</em> or <em>off</em>; a number carries its unit, and the number that means "none of it" is written as what none of it does: <em>on its day</em>, <em>every missed day</em>, <em>never</em>, <em>until the next key</em>. The cursor row's value is in the accent colour, because it is the one value a key would change.</li>
 <li>Beside the list, what the cursor row does, in the words DOMAIN.md gives it. Under 100 columns this pane goes and the list has the window, the way the review's panel does.</li>

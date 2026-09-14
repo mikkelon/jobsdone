@@ -1,7 +1,7 @@
 == 120×36 · floating window, settings page
 
 
- Settings kept in the database, beside the tasks                                                  , or esc back   :   ?
+                                                                                                  , or esc back   :   ?
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  Settings                               colour and font come from the terminal   Day starts at
 ───────────────────────────────────────────────────────────────────────────────┬────────────────────────────────────────

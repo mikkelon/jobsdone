@@ -66,6 +66,12 @@ like it belongs to the first two.
   A compact date card keeps typing and quick picks but has no calendar
   focus. Dialogs below 40×12 show a resize message and accept only Escape
   and quitting until they fit. Below 24×9 the app shows a resize message.
+- Page names and selected dates appear once in the pane headers or narrow
+  tabs. The status line holds navigation, alerts, and counts, without
+  repeating those headings. Narrow Today keeps its date in the status
+  line because its tab only names Today; browsed dates live in the tab.
+  Notes counts appear in the wide status line or narrow tab, once. Settings
+  keeps its return/help controls in the status line with no repeated title.
 - No window chrome of its own: the top line is a status line, the bottom
   line a hint bar.
 

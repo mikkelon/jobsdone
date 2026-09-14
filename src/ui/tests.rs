@@ -1237,7 +1237,7 @@ fn an_empty_list_names_the_keys_that_fill_it() {
         "nothing on the pile is no alert, so the line does not count to zero"
     );
     assert!(
-        text.contains("›  [/] day  g go to date"),
+        text.contains("[/] day  g go to date"),
         "the two keys stand apart, so they do not read as one phrase"
     );
 }
@@ -1513,7 +1513,7 @@ fn a_month_first_locale_writes_the_month_first() {
     );
     let drawn = look(&app, 120, 36);
 
-    assert!(drawn[1].contains("Today · Fri Sep 5"));
+    assert!(drawn[3].contains("Today Fri Sep 5"));
     assert!(
         !drawn.join("\n").contains("Fri 5 Sep"),
         "no date is written the other way round"
@@ -1532,7 +1532,7 @@ fn the_date_order_setting_overrules_the_locale() {
     settings.set_date_style(DateStyle::DayFirst);
     app.change_settings(settings);
 
-    assert!(look(&app, 120, 36)[1].contains("Today · Fri 5 Sep"));
+    assert!(look(&app, 120, 36)[3].contains("Today Fri 5 Sep"));
 }
 
 #[test]
@@ -1557,7 +1557,7 @@ fn the_notes_list_is_newest_first_with_the_age_of_each_note() {
     let drawn = look(&app, 120, 36);
     let wanted = wireframe("10-scratchpad", 0, 36);
 
-    assert!(drawn[1].contains("Notes 4 notes"));
+    assert!(drawn[1].contains("4 notes"));
     assert!(drawn[1].contains("n or esc back to tasks"));
     let divider = drawn[4].chars().position(|glyph| glyph == '┬');
     assert_eq!(
@@ -1641,13 +1641,13 @@ fn a_page_with_no_notes_on_it_names_the_key_that_makes_one() {
     app.update(Action::NotesPage);
     let drawn = look(&app, 120, 36);
 
-    assert!(drawn[1].starts_with(" Notes 0 notes"));
+    assert!(drawn[1].starts_with(" 0 notes"));
     assert!(drawn[6].starts_with("  +  new note"), "{:?}", drawn[6]);
     assert!(drawn.join("\n").contains("No notes yet."));
 
     // And one note in is one note, not "1 notes".
     app.update(Action::Add);
-    assert!(look(&app, 120, 36)[1].starts_with(" Notes 1 note "));
+    assert!(look(&app, 120, 36)[1].starts_with(" 1 note "));
 }
 
 /// Everything to the right of the divider, which is the open note.
@@ -1960,7 +1960,8 @@ fn the_narrow_tab_row_marks_the_tab_the_keyboard_is_on() {
     app.update(Action::PaneRight);
     let notes = look(&app, 80, 44);
     assert_eq!(app.page(), Page::Notes);
-    assert!(notes[1].starts_with(" Notes 4 notes"));
+    assert!(!notes[1].contains("notes"));
+    assert!(notes[3].contains("NOTES 4"));
     assert!(notes[5].contains("▪ Mention to Anna:"));
 }
 
@@ -3859,4 +3860,55 @@ fn note_editor_status_only_advertises_actions_that_do_not_type() {
     assert!(!drawn[1].contains("n or esc"));
     app.update(Action::Cancel);
     assert!(look(&app, 80, 24)[1].contains("back to tasks"));
+}
+
+#[test]
+fn page_headers_do_not_repeat_names_dates_or_note_counts() {
+    for width in [80, 120, 160] {
+        let mut app = empty();
+        for action in [
+            None,
+            Some(Action::PrevDay),
+            Some(Action::NextDay),
+            Some(Action::NextDay),
+        ] {
+            if let Some(action) = action {
+                app.update(action);
+            }
+            let drawn = look(&app, width, 36);
+            let headings = drawn[1..=3].join("\n").to_lowercase();
+            let date = day_label(app.showing(), app.dates()).to_lowercase();
+            assert_eq!(headings.matches(&date).count(), 1, "{width}: {headings}");
+            if app.shown() == Shown::Today {
+                assert_eq!(headings.matches("today").count(), 1, "{headings}");
+            } else {
+                assert!(drawn[1].contains(". "), "return to today stays visible");
+            }
+        }
+        app.update(Action::NotesPage);
+        for editing in [false, true] {
+            if editing {
+                app.update(Action::Add);
+            }
+            let drawn = look(&app, width, 36);
+            assert!(!drawn[1].contains("Notes"), "{drawn:?}");
+            assert!(drawn[3].to_lowercase().contains("notes"));
+            if width < NARROW {
+                assert!(!drawn[1].contains("note"), "count belongs to tab");
+            } else {
+                assert!(drawn[1].contains(if editing { "1 note" } else { "0 notes" }));
+            }
+            if editing {
+                assert!(drawn[1].contains("editing · autosave"));
+                assert!(drawn[1].contains("esc back to list"));
+                assert!(drawn[1].contains("alt-h help"));
+            }
+        }
+        app.update(Action::Cancel);
+        app.update(Action::SettingsPage);
+        let drawn = look(&app, width, 36);
+        let headings = drawn[1..=3].join("\n");
+        assert_eq!(headings.matches("Settings").count(), 1, "{headings}");
+        assert!(drawn[1].contains("esc back"));
+    }
 }
