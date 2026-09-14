@@ -1162,7 +1162,10 @@ fn reading_makes_no_copies_and_does_not_spend_the_review() {
 
     let model = world.model();
     assert_eq!(model.tasks.len(), 1, "no copy was made by looking");
-    assert!(model.meta.is_empty(), "the gate was not written");
+    assert!(
+        !model.meta.contains_key("review_on"),
+        "the gate was not written"
+    );
 }
 
 #[test]
@@ -1267,4 +1270,19 @@ fn there_is_nothing_to_undo_on_an_empty_stack() {
     let error = world.err(json!({"op": "undo.apply"}));
     assert_eq!(error.code, "not_found");
     assert_eq!(error.exit_code, 3);
+}
+
+#[test]
+fn a_guarded_undo_rejects_an_identity_popped_before_a_new_action() {
+    let mut world = World::new();
+    world.task("First");
+    let id = world.ok(json!({"op": "undo.get"}))["entry"]["id"]
+        .as_i64()
+        .unwrap();
+    world.ok(json!({"op": "undo.apply", "expected_id": id}));
+    world.task("Second");
+    let before = world.model();
+    let error = world.err(json!({"op": "undo.apply", "expected_id": id}));
+    assert_eq!(error.exit_code, 5);
+    assert_eq!(world.model(), before);
 }

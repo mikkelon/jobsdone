@@ -697,3 +697,20 @@ fn the_personal_dictionary_is_kept_by_the_word_it_was_written_as() {
         0
     );
 }
+
+#[test]
+fn a_popped_undo_identity_cannot_target_a_new_action() {
+    let dir = TempDir::new().unwrap();
+    let data = dir.path();
+    let added = ok(data, &["--json", "task", "add", "A"]).json();
+    let entry = added["data"]["undo"]["id"].as_i64().unwrap().to_string();
+    ok(data, &["undo", "apply", "--entry", &entry]);
+    let added = ok(data, &["--json", "task", "add", "B"]).json();
+    let stale = run(data, &["--json", "undo", "apply", "--entry", &entry], None);
+    assert_eq!(stale.code, 5, "{}", stale.err);
+    let id = added["data"]["task"]["id"].as_i64().unwrap().to_string();
+    assert_eq!(
+        ok(data, &["--json", "task", "get", &id]).json()["data"]["task"]["title"],
+        "B"
+    );
+}

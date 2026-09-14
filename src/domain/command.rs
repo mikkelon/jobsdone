@@ -11,7 +11,8 @@ use serde::{Deserialize, Serialize};
 
 use super::date::day_label;
 use super::model::{
-    Change, FromPlace, Id, Model, Note, Place, Placement, Schedule, Task, UndoEntry, Write, diff,
+    Change, FromPlace, Id, Model, Note, Place, Placement, Schedule, Task, UNDO_HIGH_WATER,
+    UndoEntry, Write, diff,
 };
 use super::rule::Rule;
 use super::settings::DateOrder;
@@ -244,12 +245,25 @@ pub fn apply_many(
 
     let mut writes = diff(model, &after);
     if let Some(Entry { label, inverse }) = one_entry(entries) {
+        let high_water = model
+            .meta
+            .get(UNDO_HIGH_WATER)
+            .and_then(|value| value.parse::<Id>().ok())
+            .filter(|value| *value >= 0)
+            .ok_or_else(|| Rejected("The undo identity counter is invalid.".to_owned()))?;
+        let id = high_water
+            .checked_add(1)
+            .ok_or_else(|| Rejected("The undo identity counter is exhausted.".to_owned()))?;
         writes.push(Write::PushUndo(UndoEntry {
-            id: next_id(model.undo.iter().map(|entry| entry.id)),
+            id,
             at: now.clone(),
             label,
             inverse,
         }));
+        writes.push(Write::SetMeta {
+            key: UNDO_HIGH_WATER.to_owned(),
+            value: id.to_string(),
+        });
         writes.push(Write::TruncateUndo(ctx.undo_cap));
     }
     Ok(Change { writes })

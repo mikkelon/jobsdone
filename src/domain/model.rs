@@ -10,8 +10,8 @@ use serde::{Deserialize, Serialize};
 use super::rule::Rule;
 use super::settings::Settings;
 
-/// The id of a row. New ids come from the domain: the largest one in the
-/// model plus one (ARCHITECTURE.md section 3).
+/// The id of a row. Tasks, notes and schedules use their largest id plus
+/// one; undo entries use a durable counter (ARCHITECTURE.md section 3).
 pub type Id = i64;
 
 /// Where a task lives: the backlog, or one day.
@@ -146,12 +146,14 @@ pub struct UndoEntry {
 }
 
 /// The `meta` keys DOMAIN.md section 17 names.
+pub const UNDO_HIGH_WATER: &str = "undo_high_water";
+
 pub const REVIEW_ON: &str = "review_on";
 pub const REVIEW_BEFORE: &str = "review_before";
 
 /// The whole state as a value, loaded from storage in one go. Views are
 /// pure functions of a model and a date.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Model {
     /// Every task, deleted ones included: a deleted copy keeps its row so
     /// that generation never makes it again.
@@ -161,7 +163,7 @@ pub struct Model {
     pub notes: BTreeMap<Id, Note>,
     /// The undo stack, oldest first. Shared by every running instance.
     pub undo: Vec<UndoEntry>,
-    /// The `meta` table: `review_on`, `review_before`.
+    /// The `meta` table: `review_on`, `review_before`, `undo_high_water`.
     pub meta: BTreeMap<String, String>,
     /// The `settings` table, read into one typed value (DOMAIN.md
     /// section 19).
@@ -170,6 +172,21 @@ pub struct Model {
     /// typed, so that a checker can ask about a word in any
     /// capitalisation and the manager can show the one written here.
     pub personal_dictionary: BTreeMap<String, String>,
+}
+
+impl Default for Model {
+    fn default() -> Self {
+        Self {
+            tasks: BTreeMap::new(),
+            placements: BTreeMap::new(),
+            schedules: BTreeMap::new(),
+            notes: BTreeMap::new(),
+            undo: Vec::new(),
+            meta: BTreeMap::from([(UNDO_HIGH_WATER.to_owned(), "0".to_owned())]),
+            settings: Settings::default(),
+            personal_dictionary: BTreeMap::new(),
+        }
+    }
 }
 
 impl Model {

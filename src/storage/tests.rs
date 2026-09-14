@@ -115,7 +115,7 @@ fn a_fresh_database_is_migrated_to_the_latest_schema() {
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user_version");
 
-    assert_eq!(user_version, 3);
+    assert_eq!(user_version, 4);
     assert_eq!(store.load().expect("load"), Model::empty());
 }
 
@@ -427,7 +427,7 @@ fn a_database_without_the_dictionary_gains_it_and_keeps_what_it_had() {
         .conn
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user_version");
-    assert_eq!(user_version, 3);
+    assert_eq!(user_version, 4);
 
     let model = store.load().expect("load");
     assert_eq!(
@@ -461,7 +461,7 @@ fn a_database_at_the_latest_schema_is_opened_without_migrating_it_again() {
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user_version");
 
-    assert_eq!(user_version, 3);
+    assert_eq!(user_version, 4);
     assert_eq!(
         again.load().expect("load").personal_dictionary,
         world.model.personal_dictionary
@@ -541,7 +541,7 @@ fn a_change_that_cannot_be_written_writes_none_of_itself() {
     assert_eq!(world.store.commit(&broken), Err(StoreError::Conflict));
 
     let reopened = world.reopened();
-    assert!(reopened.meta.is_empty());
+    assert!(!reopened.meta.contains_key("review_on"));
     assert_eq!(reopened.placements.len(), 1);
     assert!(reopened.task(id).is_some());
 }
@@ -1088,6 +1088,95 @@ fn migration_failure_rolls_back_the_whole_sequence() {
 }
 
 #[test]
+fn undo_identity_survives_pop_reopen_and_truncation() {
+    let mut world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
+    world.add("A", Place::Backlog);
+    let first = world.model.undo.last().unwrap().id;
+    let undone = domain::undo(&world.model, &ctx(&world.now)).unwrap();
+    world.commit(&undone.change);
+    world.store = Sqlite::open(&world.path).unwrap();
+    world.model = world.store.load().unwrap();
+    world.add("B", Place::Backlog);
+    assert!(world.model.undo.last().unwrap().id > first);
+    let second = world.model.undo.last().unwrap().id;
+    world.commit(&Change {
+        writes: vec![Write::TruncateUndo(0)],
+    });
+    world.add("C", Place::Backlog);
+    assert!(world.model.undo.last().unwrap().id > second);
+}
+
+#[test]
+fn undo_migration_preserves_existing_rows_and_initializes_from_stack() {
+    let mut world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
+    let task = world.add("Scheduled sentinel", day("2026-09-07"));
+    world.run(Command::CreateSchedule {
+        task,
+        rule: Rule::Weekly {
+            weekdays: vec![domain::Weekday::Mon],
+        },
+    });
+    world.run(Command::CreateNote);
+    world.run(Command::EditNote {
+        note: 1,
+        body: "Sentinel note".to_owned(),
+    });
+    let change = domain::add_dictionary_word(&world.model, "Sentinel").unwrap();
+    world.commit(&change);
+    world.commit(&set_meta("review_on", "2026-09-07"));
+    // Recreate the immediately preceding schema with representative real data.
+    world
+        .store
+        .conn
+        .execute_batch("DROP TRIGGER undo_identity_guard; DROP TRIGGER undo_identity_advance; DELETE FROM meta WHERE key = 'undo_high_water'; PRAGMA user_version = 3;")
+        .unwrap();
+    let before = world.model.clone();
+    let upgraded = Sqlite::open(&world.path).unwrap();
+    assert_eq!(upgraded.load().unwrap(), before);
+    assert_eq!(
+        upgraded
+            .conn
+            .query_row("PRAGMA integrity_check", [], |r| r.get::<_, String>(0))
+            .unwrap(),
+        "ok"
+    );
+    assert!(
+        !upgraded
+            .conn
+            .prepare("PRAGMA foreign_key_check")
+            .unwrap()
+            .exists([])
+            .unwrap()
+    );
+}
+
+#[test]
+fn failed_writes_do_not_consume_undo_identities() {
+    let mut world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
+    world.add("Before", Place::Backlog);
+    let before = world.model.clone();
+    let mut change = domain::apply(
+        &world.model,
+        Command::AddTask {
+            title: "Rejected".to_owned(),
+            place: Place::Backlog,
+        },
+        &ctx(&world.now),
+    )
+    .unwrap();
+    change.writes.push(Write::PutPlacement(Placement {
+        task_id: 404,
+        day: "2026-09-07".parse().unwrap(),
+        placed_at: world.now.clone(),
+        from_place: FromPlace::New,
+    }));
+    assert!(world.store.commit(&change).is_err());
+    assert_eq!(world.store.load().unwrap(), before);
+    world.add("After", Place::Backlog);
+    assert_eq!(world.model.undo.last().unwrap().id, 2);
+}
+
+#[test]
 fn opening_under_a_held_write_lock_returns_a_bounded_conflict() {
     let (dir, mut store) = scratch();
     let path = dir.path().join("jobsdone.db");
@@ -1099,4 +1188,99 @@ fn opening_under_a_held_write_lock_returns_a_bounded_conflict() {
     assert!(matches!(Sqlite::open(&path), Err(StoreError::Conflict)));
     assert!(started.elapsed() >= Duration::from_secs(2));
     assert!(started.elapsed() < Duration::from_secs(6));
+}
+
+#[test]
+fn an_already_open_old_client_cannot_reuse_an_undo_identity_after_upgrade() {
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("upgrade.db");
+    let old = Connection::open(&path).unwrap();
+    for (_, sql) in MIGRATIONS.iter().filter(|(n, _)| *n < 4) {
+        old.execute_batch(sql).unwrap();
+    }
+    let mut new = Sqlite::open(&path).unwrap();
+    let now = at("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
+    let change = domain::apply(
+        &new.load().unwrap(),
+        Command::AddTask {
+            title: "A".to_owned(),
+            place: Place::Backlog,
+        },
+        &ctx(&now),
+    )
+    .unwrap();
+    new.commit(&change).unwrap();
+    // Keep the old connection open across migration, then mimic its SQL.
+    let entry = new.load().unwrap().undo[0].clone();
+    let inverse = serde_json::to_string(&entry.inverse).unwrap();
+    old.execute("DELETE FROM undo_log", []).unwrap();
+    assert!(
+        old.execute(
+            "INSERT INTO undo_log (id, at, label, inverse) VALUES (1, ?1, ?2, ?3)",
+            params![entry.at.to_string(), entry.label, inverse]
+        )
+        .is_err()
+    );
+    assert!(new.load().unwrap().undo.is_empty());
+    old.execute(
+        "INSERT INTO undo_log (id, at, label, inverse) VALUES (2, ?1, ?2, ?3)",
+        params![entry.at.to_string(), entry.label, inverse],
+    )
+    .unwrap();
+    let model = new.load().unwrap();
+    assert_eq!(model.meta["undo_high_water"], "2");
+    let change = domain::apply(
+        &model,
+        Command::AddTask {
+            title: "B".to_owned(),
+            place: Place::Backlog,
+        },
+        &ctx(&now),
+    )
+    .unwrap();
+    new.commit(&change).unwrap();
+    assert_eq!(new.load().unwrap().undo.last().unwrap().id, 3);
+}
+
+#[test]
+fn a_missing_or_invalid_persisted_counter_never_becomes_a_fresh_allocator() {
+    for value in [None, Some("bad"), Some("-1"), Some("9223372036854775808")] {
+        let (_dir, store) = scratch();
+        store
+            .conn
+            .execute("DELETE FROM meta WHERE key = 'undo_high_water'", [])
+            .unwrap();
+        if let Some(value) = value {
+            store
+                .conn
+                .execute(
+                    "INSERT INTO meta (key, value) VALUES ('undo_high_water', ?1)",
+                    [value],
+                )
+                .unwrap();
+        }
+        let model = store.load().unwrap();
+        let now = at("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
+        assert!(
+            domain::apply(
+                &model,
+                Command::AddTask {
+                    title: "Rejected".to_owned(),
+                    place: Place::Backlog
+                },
+                &ctx(&now)
+            )
+            .is_err()
+        );
+        assert!(
+            store
+                .conn
+                .execute(
+                    "INSERT INTO undo_log (id, at, label, inverse) VALUES (1, '', '', '')",
+                    []
+                )
+                .is_err()
+        );
+        assert!(store.load().unwrap().undo.is_empty());
+    }
 }

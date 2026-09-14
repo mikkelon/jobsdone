@@ -30,6 +30,7 @@ const MIGRATIONS: &[(u32, &str)] = &[
         3,
         include_str!("../migrations/0003_personal_dictionary.sql"),
     ),
+    (4, include_str!("../migrations/0004_undo_identity.sql")),
 ];
 
 /// `placements.from_place` is `new`, `backlog`, or the date the task came
@@ -200,6 +201,8 @@ impl Store for Sqlite {
 /// The whole model, from whatever connection or transaction is reading.
 fn read_model(conn: &Connection) -> Result<Model, StoreError> {
     let mut model = Model::empty();
+    // A missing persisted allocator is invalid, not a fresh counter.
+    model.meta.clear();
 
     let mut tasks = conn.prepare(
         "SELECT id, title, day, position, focus, waiting, closed_at, due_on, remind_on,

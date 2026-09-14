@@ -355,7 +355,8 @@ fn q_quits_and_a_tick_does_not() {
 fn a_tick_picks_up_what_another_window_did() {
     let store = MemStore::new();
     let mut app = app_at(store.clone(), NOW);
-    assert!(app.model().meta.is_empty());
+    assert!(!app.model().meta.contains_key("review_on"));
+    assert!(!app.model().meta.contains_key("review_before"));
 
     let mut elsewhere = store;
     elsewhere

@@ -272,6 +272,8 @@ fn visible(model: &Model) -> Model {
     model.tasks.retain(|_, task| task.is_live());
     model.placements.retain(|(task, _), _| !gone.contains(task));
     model.notes.retain(|_, note| note.is_live());
+    // Allocation history is intentionally not rolled back by undo.
+    model.meta.remove("undo_high_water");
     model
 }
 
@@ -3373,4 +3375,53 @@ fn a_date_is_written_the_way_round_it_is_asked_for() {
         stamp_label(&stamp, DateOrder::MonthFirst),
         "Fri Sep 5 08:12"
     );
+}
+
+#[test]
+fn undo_identity_exhaustion_and_invalid_counters_reject_without_changes() {
+    for counter in [i64::MAX.to_string(), "-1".to_owned(), "bad".to_owned()] {
+        let mut world = World::at("2026-09-07T09:00:00");
+        world
+            .model
+            .meta
+            .insert("undo_high_water".to_owned(), counter);
+        let before = world.model.clone();
+        assert!(
+            world
+                .run(Command::AddTask {
+                    title: "No write".to_owned(),
+                    place: Place::Backlog
+                })
+                .is_err()
+        );
+        assert_eq!(world.model, before);
+    }
+}
+
+#[test]
+fn compound_commands_allocate_one_durable_undo_identity() {
+    let world = World::at("2026-09-07T09:00:00");
+    let change = apply_many(
+        &world.model,
+        vec![
+            Command::AddTask {
+                title: "A".to_owned(),
+                place: Place::Backlog,
+            },
+            Command::AddTask {
+                title: "B".to_owned(),
+                place: Place::Backlog,
+            },
+        ],
+        &world.ctx(),
+    )
+    .unwrap();
+    let mut model = world.model.clone();
+    model.apply(&change);
+    assert_eq!(model.undo.len(), 1);
+    assert_eq!(model.meta["undo_high_water"], "1");
+    let undone = undo(&model, &world.ctx()).unwrap();
+    model.apply(&undone.change);
+    assert!(model.undo.is_empty());
+    assert_eq!(model.meta["undo_high_water"], "1");
 }

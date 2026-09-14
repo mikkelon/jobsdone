@@ -81,7 +81,11 @@ list ordering requires exactly the current open IDs, each once. History and
 completed entries remain intact.
 
 Undo history is shared with the UI. Read `jobsdone undo get`, then use
-`jobsdone undo apply --entry ID` to avoid undoing an intervening action. Settings,
+`jobsdone undo apply --entry ID` to avoid undoing an intervening action. Entry IDs
+are never reused by the schema-4 allocator, even after undo empties the stack or
+the application restarts. Reread undo state after upgrading: older versions may
+already have recycled IDs, and the migration cannot reconstruct that history.
+A stale ID returns conflict (exit 5) without changing data. Settings,
 dictionary edits, recurrence refresh and review gate changes are not undoable.
 
 Deletion respects `confirm_delete`: when enabled, explicitly pass `--yes`.

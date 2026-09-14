@@ -384,7 +384,11 @@ Notes are deleted the same way.
 ### Undo
 
 The undo stack is part of the data, one stack per database, shared by
-every running instance and surviving restarts.
+every running instance and surviving restarts. Each entry has an integer identity
+allocated from the persistent `meta.undo_high_water` counter. Allocation and the
+entry commit atomically; undo, rejected inverses, and stack truncation never
+reduce the counter. Compound operations allocate one identity. Exhaustion of the
+signed 64-bit counter rejects the operation without writes.
 
 - Every user command in section 12 pushes one entry: an instant, a
   label for the hint bar, and the inverse command as JSON.
@@ -666,6 +670,16 @@ The third migration adds `personal_dictionary`, with a canonical `key` primary
 key and a `word` display value. Entries are written individually, so changing
 one word does not replace the other entries.
 
+The fourth migration initializes `meta.undo_high_water` from the largest surviving
+undo ID, or zero for an empty stack. New IDs are never reused after this upgrade,
+including across restarts. Identities already recycled by older versions cannot
+be reconstructed; clients must reread undo state after upgrading. The schema
+version bump refuses older binaries when they open the database. Already-running
+older connections are also protected: an insert trigger rejects an ID at or below
+the persisted counter (and rejects missing or invalid counters), then an after-insert
+trigger advances the counter in the same transaction. An old client may append a
+fresh ID, but an attempted reuse fails atomically as a conflict.
+
 Opening a database acquires a SQLite immediate transaction before reading its
 schema version. All pending migrations and version updates commit together;
 failure rolls back the entire sequence. Concurrent openers reread the version
@@ -682,7 +696,7 @@ Notes on the schema:
 - `undo_log.inverse` is the JSON of a command from section 12. Rows are
   popped by deleting them; the cap is enforced by deleting the lowest
   ids.
-- `meta` keys: `review_on`, `review_before`.
+- `meta` keys: `review_on`, `review_before`, `undo_high_water`.
 - `settings` keys are the ones in section 19, every value text. A
   `PutSettings` writes the whole table: the rows are deleted and written
   again in one transaction, because the settings are one value in the

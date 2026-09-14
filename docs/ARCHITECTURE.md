@@ -197,7 +197,11 @@ the rule.
 
 ### Ids
 
-New rows get ids from the domain: the largest id in the model plus one.
+New tasks, notes and schedules get ids from the domain: the largest id in
+their collection plus one. Undo entries use the durable
+`meta.undo_high_water` counter instead, so removing entries cannot reuse their
+identities. The counter and entry commit together. SQLite triggers also reject
+reused undo identities and advance the counter for already-running older clients.
 SQLite checks the loaded snapshot while holding the write transaction before it
 applies a change. If another connection has changed it, the command fails with
 `Conflict`; the caller reloads before constructing another change. The same
