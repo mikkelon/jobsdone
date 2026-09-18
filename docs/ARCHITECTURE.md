@@ -420,11 +420,12 @@ adds it here first, the way a new dependency is added to section 2 first.
   review. What comes back is the line the command prints, or what the
   window manager said, the settings being saved either way.
 - `App::update(&mut self, Action) -> Flow`: dispatches keys and ticks and
-  returns continuation, quit, or a clipboard request. `CopyNote`,
-  `CopySelection`, and `CutSelection` carry the text to write;
+  returns continuation, quit, or a clipboard request. `CopyTask`,
+  `CopyNote`, `CopySelection`, and `CutSelection` carry the text to write;
   `ReadClipboard` requests text to paste. The terminal adapter uses
   `wl-copy`/`wl-paste` on Wayland or `xclip` on X11 and reports the result
-  through `App::copied_note`, `App::copied_selection`, or `App::paste`.
+  through `App::copied_task`, `App::copied_note`, `App::copied_selection`,
+  or `App::paste`.
   Clipboard operations complete synchronously before the next input event;
   a cut deletes its selection only after the write succeeds.
 - The terminal enables bracketed paste and restores it on exit. Paste events

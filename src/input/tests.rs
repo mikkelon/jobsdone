@@ -733,6 +733,22 @@ fn notes_yank_without_intercepting_plain_y_in_the_editor() {
 }
 
 #[test]
+fn y_copies_a_task_wherever_the_rows_are_tasks() {
+    for context in [home(Pane::Day), home(Pane::Backlog), browsing(Pane::Day)] {
+        assert_eq!(
+            action_for(&typing('y'), context),
+            Some(Action::CopyTask),
+            "{context:?}"
+        );
+    }
+    assert_eq!(action_for(&typing('y'), browsing(Pane::Backlog)), None);
+    assert_eq!(
+        action_for(&typing('y'), writing(Field::Adding)),
+        Some(Action::Insert('y'))
+    );
+}
+
+#[test]
 fn the_open_note_offers_alt_s_where_plain_s_types() {
     let list = KeyContext::Notes {
         pane: NotesPane::List,

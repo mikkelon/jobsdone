@@ -54,3 +54,13 @@ The settings page, the thirteen settings, and the install script's flags.
 | N.04 | Repeat at 80×24 with a note longer than the viewport | Copy hints fit; the clipboard includes offscreen text. |
 | N.05 | Delete all scratch notes, then `y` | "There is no note here yet."; clipboard unchanged. |
 | N.06 | Run with the clipboard helper unavailable and copy a note | Failure feedback; app stays usable and the note stays intact. |
+
+## Tasks: copy a task's title
+
+| Id | Steps | Expected |
+|----|-------|----------|
+| T.01 | On today, add a task whose title has quotes and Unicode; press `y`; read the clipboard with `wl-paste --no-newline` (Wayland) | Exact title, no trailing newline; "Task copied" feedback; the list and the cursor are unchanged. |
+| T.02 | Repeat in the backlog and on a past day; open `:` and select "Copy task" | Each copies the title of the task under the cursor. |
+| T.03 | `y` on a moved row, on a day row while browsing history, and on an empty pane | The hint bar says why; clipboard unchanged. |
+| T.04 | `a`, then type `y` | Plain `y` types into the title. |
+| T.05 | Run with the clipboard helper unavailable and press `y` on a task | Failure feedback; app stays usable. |

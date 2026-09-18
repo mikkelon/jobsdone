@@ -4578,6 +4578,47 @@ fn copying_without_a_note_leaves_the_clipboard_alone() {
 }
 
 #[test]
+fn copying_a_task_asks_for_its_title_and_changes_nothing() {
+    let mut app = started();
+    let title = "Send \"Q3\" tal til Søren 🦀";
+    add(&mut app, title);
+    let before = titles(&app, List::Day);
+
+    assert_eq!(
+        app.update(Action::CopyTask),
+        Flow::CopyTask(title.to_owned())
+    );
+    assert!(app.message().is_none(), "wait for the clipboard result");
+    app.copied_task(Ok(()));
+    assert_eq!(app.message().unwrap().text, "Task copied");
+    assert!(!app.message().unwrap().undo);
+    assert_eq!(titles(&app, List::Day), before);
+
+    app.copied_task(Err("Could not copy: test failure".to_owned()));
+    assert_eq!(hint(&app), "Could not copy: test failure");
+}
+
+#[test]
+fn copying_without_a_task_leaves_the_clipboard_alone() {
+    let mut app = started();
+    assert_eq!(app.update(Action::CopyTask), Flow::Continue);
+    assert_eq!(hint(&app), "There is no task here yet.");
+
+    add(&mut app, "Chase the hosting invoice");
+    app.update(Action::ToBacklog);
+    assert_eq!(groups(&app, List::Day), [Group::Moved]);
+    assert_eq!(app.update(Action::CopyTask), Flow::Continue);
+    assert_eq!(
+        hint(&app),
+        "That row only points at the task; it has moved."
+    );
+
+    app.update(Action::NotesPage);
+    assert_eq!(app.update(Action::CopyTask), Flow::Continue);
+    assert_eq!(hint(&app), "That key is for tasks, and this page is notes.");
+}
+
+#[test]
 fn selection_copy_and_cut_preserve_whole_graphemes_and_failed_cuts() {
     let mut app = started();
     app.update(Action::NotesPage);

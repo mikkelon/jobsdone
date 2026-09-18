@@ -83,6 +83,7 @@ fn go_round(
         if let Some(action) = action {
             match app.update(action) {
                 Flow::Quit => return Ok(()),
+                Flow::CopyTask(text) => app.copied_task(copy_to_clipboard(&text)),
                 Flow::CopyNote(text) => app.copied_note(copy_to_clipboard(&text)),
                 Flow::CopySelection(text) => app.copied_selection(false, copy_to_clipboard(&text)),
                 Flow::CutSelection(text) => app.copied_selection(true, copy_to_clipboard(&text)),

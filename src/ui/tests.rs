@@ -1105,6 +1105,7 @@ fn the_palette_lists_the_commands_of_the_page_beneath_it() {
         "the group label names the context"
     );
     assert!(text.contains("Move to day…"), "a command, capitalised");
+    assert!(text.contains("Copy task"), "a key the bar has no room for");
     assert!(text.contains("⏎ run"), "and the footer");
     assert!(!drawn[35].is_empty(), "the hint bar stays visible");
 }

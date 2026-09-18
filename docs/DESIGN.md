@@ -126,7 +126,8 @@ Conventions, so the map is guessable:
   reorder.
 - Lowercase acts on the cursor row: `space` done, `f` focus, `a` add,
   `e` edit, `x` delete, `t` to today, `b` to backlog, `m` move to a day,
-  `d` due by, `r` remind on, `w` waiting. `R` opens the repeat schedule.
+  `d` due by, `r` remind on, `w` waiting, `y` copy. `R` opens the repeat
+  schedule.
 - Punctuation navigates: `[` `]` previous and next day, `.` today, `g` go
   to a date, `/` search, `:` command palette, `?` help, `n` notes page,
   `,` settings, `q` quit. `n` and `,` are also the way back off the page
@@ -145,6 +146,11 @@ Conventions, so the map is guessable:
   row of the group it left, so a list is worked down without moving the
   cursor by hand. Everything else leaves the cursor on the task it acted
   on, which is how a reordered row is followed up or down the list.
+- `y` copies the title of the task under the cursor to the desktop
+  clipboard, as it copies a note on the notes list (section 9). The hint
+  bar says "Task copied", or explains a clipboard failure; the palette
+  offers it as "copy task". On a row that is not a task it says why and
+  leaves the clipboard alone.
 - `x` deletes on the spot and offers `u`; with `confirm_delete` on it
   asks first, and `Enter` deletes where `Escape` keeps (section 8).
 - After `u` the cursor goes to the task the undo brought back or changed,

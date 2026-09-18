@@ -166,6 +166,7 @@ pub enum Action {
     Add,
     Edit,
     Delete,
+    CopyTask,
     CopyNote,
     CopySelection,
     CutSelection,
@@ -338,6 +339,7 @@ impl Binding {
                     | Action::Focus
                     | Action::Edit
                     | Action::Delete
+                    | Action::CopyTask
                     | Action::ToToday
                     | Action::ToBacklog
                     | Action::MoveToDay
@@ -559,6 +561,13 @@ const HOME_DAY: &[Binding] = home_table![
         bar: Bar::Off,
         narrow: Bar::Off,
     },
+    Binding {
+        keys: &[("y", Action::CopyTask)],
+        shown: "y",
+        label: "copy task",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
     // Today has a Moved group as readily as a past day does, so the key
     // that follows a pointer belongs here too.
     Binding {
@@ -654,6 +663,13 @@ const HOME_BACKLOG: &[Binding] = home_table![
         bar: Bar::Left,
         narrow: Bar::Short(Side::Left, "del"),
     },
+    Binding {
+        keys: &[("y", Action::CopyTask)],
+        shown: "y",
+        label: "copy task",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
 ];
 
 /// A day that is not today. Stepping is what the pane is for, so the day
@@ -722,6 +738,13 @@ const HOME_OTHER_DAY: &[Binding] = home_table![
         label: "delete",
         bar: Bar::Off,
         narrow: Bar::Short(Side::Left, "del"),
+    },
+    Binding {
+        keys: &[("y", Action::CopyTask)],
+        shown: "y",
+        label: "copy task",
+        bar: Bar::Off,
+        narrow: Bar::Off,
     },
 ];
 

@@ -82,6 +82,7 @@ pub struct Locale {
 pub enum Flow {
     Continue,
     Quit,
+    CopyTask(String),
     CopyNote(String),
     CopySelection(String),
     CutSelection(String),
@@ -1358,6 +1359,7 @@ impl App {
             Action::Close => self.close_or_reopen(),
             Action::Focus => self.turn_focus_over(),
             Action::Delete => self.delete(),
+            Action::CopyTask => return self.copy_task(),
             Action::CopyNote => return self.copy_note(),
             Action::CopySelection => return self.copy_selection(false),
             Action::CutSelection => return self.copy_selection(true),
@@ -2129,6 +2131,24 @@ impl App {
             return None;
         };
         Some(task)
+    }
+
+    /// The title of the task on the cursor row, for the clipboard.
+    fn copy_task(&mut self) -> Flow {
+        let Some(id) = self.task_at_cursor() else {
+            return Flow::Continue;
+        };
+        self.model
+            .task(id)
+            .map_or(Flow::Continue, |task| Flow::CopyTask(task.title.clone()))
+    }
+
+    /// Clipboard failures stay in the app, just like storage failures.
+    pub fn copied_task(&mut self, result: Result<(), String>) {
+        match result {
+            Ok(()) => self.say("Task copied", false),
+            Err(message) => self.say(message, false),
+        }
     }
 
     /// The row the cursor lands on when the one it is on leaves the list:
