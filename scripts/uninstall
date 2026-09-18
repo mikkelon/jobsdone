@@ -33,6 +33,7 @@ GHOSTTY_CONFIG="$CONFIG_HOME/jobsdone/ghostty.conf"
 # program's own; some machines have a single block holding both.
 BLOCKS=(
     "-- jobsdone: keybind (begin)"  "-- jobsdone: keybind (end)"
+    "-- jobsdone: notes keybind (begin)"  "-- jobsdone: notes keybind (end)"
     "-- jobsdone: window (begin)"   "-- jobsdone: window (end)"
     "-- jobsdone: begin"            "-- jobsdone: end"
 )

@@ -43,10 +43,10 @@ if [ "${1:-}" = --check ]; then
 fi
 case "$terminal_id" in
     foot | foot.desktop)
-        exec foot --config "$CONFIG_HOME/jobsdone/foot.ini" --app-id="$APP_ID" -e "$JOBSDONE"
+        exec foot --config "$CONFIG_HOME/jobsdone/foot.ini" --app-id="$APP_ID" -e "$JOBSDONE" "$@"
         ;;
     kitty | kitty.desktop)
-        exec kitty --config "$CONFIG_HOME/jobsdone/kitty.conf" --class "$APP_ID" "$JOBSDONE"
+        exec kitty --config "$CONFIG_HOME/jobsdone/kitty.conf" --class "$APP_ID" "$JOBSDONE" "$@"
         ;;
     alacritty | alacritty.desktop)
         if alacritty --version | grep -qE ' 0\.(1[0-3]|[0-9])\.'; then
@@ -54,15 +54,15 @@ case "$terminal_id" in
         else
             config="$CONFIG_HOME/jobsdone/alacritty.toml"
         fi
-        exec alacritty --config-file "$config" --class "$APP_ID" -e "$JOBSDONE"
+        exec alacritty --config-file "$config" --class "$APP_ID" -e "$JOBSDONE" "$@"
         ;;
     ghostty | ghostty.desktop | com.mitchellh.ghostty.desktop)
-        exec ghostty --config-file="$CONFIG_HOME/jobsdone/ghostty.conf" --class="$APP_ID" -e "$JOBSDONE"
+        exec ghostty --config-file="$CONFIG_HOME/jobsdone/ghostty.conf" --class="$APP_ID" -e "$JOBSDONE" "$@"
         ;;
     *)
         if command -v xdg-terminal-exec >/dev/null; then
-            exec xdg-terminal-exec --app-id="$APP_ID" -e "$JOBSDONE"
+            exec xdg-terminal-exec --app-id="$APP_ID" -e "$JOBSDONE" "$@"
         fi
-        exec "${TERMINAL:-xterm}" -e "$JOBSDONE"
+        exec "${TERMINAL:-xterm}" -e "$JOBSDONE" "$@"
         ;;
 esac

@@ -2482,6 +2482,15 @@ fn notes_is_the_third_tab_only_when_the_window_is_narrow() {
 }
 
 #[test]
+fn an_app_opened_on_the_notes_starts_in_the_list_of_notes() {
+    let mut app = started();
+    app.open_on_the_notes();
+
+    assert_eq!(app.page(), Page::Notes);
+    assert_eq!(app.notes_pane(), NotesPane::List);
+}
+
+#[test]
 fn n_turns_the_page_and_turns_it_back() {
     let mut app = started();
     app.update(Action::NotesPage);

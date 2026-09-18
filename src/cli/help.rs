@@ -11,6 +11,7 @@ const OPENING: &str = "\
 jobsdone, a keyboard-first daily task manager for the terminal
 
     jobsdone                          open the app
+    jobsdone --notes                  open the app on the notes page
     jobsdone COMMAND [ARGUMENTS]      one operation, without the app
     jobsdone help [COMMAND]           what a command takes
 ";

@@ -23,7 +23,10 @@ bash -c "$(curl -fsSL https://raw.githubusercontent.com/mikkelon/jobsdone/releas
 Open **Jobsdone** from your app launcher, or run `jobsdone` in a terminal.
 
 The installer puts the app in `~/.local/bin`. On Omarchy, it sets up a floating
-window and offers **Super+Shift+J** as a shortcut if the key is free.
+window and offers two shortcuts: **Super+Shift+J** opens the app and
+**Super+Shift+N** opens it on the notes page. If something else already uses a
+shortcut, such as Omarchy's editor on Super+Shift+N, the installer names it and
+asks before replacing it.
 If `~/.local/bin` is missing from your PATH, the installer shows how to run
 Jobsdone immediately and add it to your PATH. It also checks for a terminal
 for the desktop launcher and explains what to install if one is missing.
@@ -43,7 +46,8 @@ After installing, choose a shortcut and window size:
 jobsdone-update --keybind "SUPER + ALT + J" --size 1000x700
 ```
 
-Use `--no-keybind` to skip the shortcut, `--tiled` for a tiled window, or
+Use `--notes-keybind "SUPER + ALT + N"` to choose the notes shortcut,
+`--no-keybind` or `--no-notes-keybind` to skip one, `--tiled` for a tiled window, or
 `--version v1.0.0` to install a particular release. Run
 `jobsdone-update --help` for all options. You can also append these options to
 the install command above.

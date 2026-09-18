@@ -4513,6 +4513,12 @@ impl App {
         self.reorder_to(task, position);
     }
 
+    /// Turns a freshly launched app to the notes page. The launch sequence
+    /// has already run, so a review it opened lies over the page.
+    pub fn open_on_the_notes(&mut self) {
+        self.focus_on(List::Notes);
+    }
+
     fn focus_on(&mut self, list: List) {
         if !self.leave_the_note() {
             return;

@@ -44,8 +44,11 @@ pub enum Format {
 /// What a command line asks the program to do.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub enum Plan {
-    /// Nothing on the command line: open the app.
-    Run,
+    /// No command on the line: open the app, on the notes page when
+    /// `--notes` asks for it.
+    Run {
+        notes: bool,
+    },
     /// `desktop`, with the window the flags asked for. `None` where a flag
     /// was left off and the setting stands.
     Desktop {

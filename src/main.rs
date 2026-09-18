@@ -53,7 +53,7 @@ fn main() -> ExitCode {
     };
 
     match parsed.plan {
-        Plan::Run => match start(parsed.data_dir.as_deref()) {
+        Plan::Run { notes } => match start(parsed.data_dir.as_deref(), notes) {
             Ok(()) => ExitCode::SUCCESS,
             Err(message) => {
                 fail(&message);
@@ -215,7 +215,7 @@ fn window_rule(
     app::set_window(&mut store, &Hyprland::here(), floating, size)
 }
 
-fn start(data_dir: Option<&Path>) -> Result<(), String> {
+fn start(data_dir: Option<&Path>, notes: bool) -> Result<(), String> {
     let state = xdg::BaseDirectories::with_prefix("jobsdone")
         .create_state_directory("")
         .map_err(|error| format!("the state directory could not be made: {error}"))?;
@@ -223,13 +223,16 @@ fn start(data_dir: Option<&Path>) -> Result<(), String> {
 
     let (database, store) = open_the_store(data_dir)?;
 
-    let app = App::new(
+    let mut app = App::new(
         Box::new(store),
         Box::new(Hyprland::here()),
         locale(),
         &Zoned::now(),
     )
     .map_err(|error| format!("{} could not be read: {error}", database.display()))?;
+    if notes {
+        app.open_on_the_notes();
+    }
 
     terminal::run(app).map_err(|error| format!("the terminal could not be driven: {error}"))
 }

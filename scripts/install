@@ -2,11 +2,16 @@
 # Install jobsdone for the current user: the binary, a launcher entry, and
 # on Omarchy the keybind and the window the app asks Hyprland for.
 #
-#   scripts/install [--binary PATH] [--keybind [KEYS] | --no-keybind] [--floating | --tiled] [--size WxH]
+#   scripts/install [--binary PATH] [--keybind [KEYS] | --no-keybind]
+#                   [--notes-keybind [KEYS] | --no-notes-keybind]
+#                   [--floating | --tiled] [--size WxH]
 #
-# --keybind binds KEYS, or SUPER + SHIFT + J when none are given, if the
-# keys are free; --no-keybind binds nothing. With neither, the keybind is
-# offered at the prompt when a terminal is attached and skipped otherwise.
+# --keybind binds KEYS, or SUPER + SHIFT + J when none are given, to open
+# the app; --notes-keybind binds KEYS, or SUPER + SHIFT + N, to open it on
+# the notes page. --no-keybind and --no-notes-keybind bind nothing. With
+# neither, a keybind is offered at the prompt when a terminal is attached
+# and skipped otherwise. Keys that something else is bound to are taken
+# over only on a yes at the prompt, never unasked.
 # --binary copies an executable built elsewhere instead of running Cargo.
 # --floating, --tiled and --size are the window the app opens in: they are
 # settings, and the app writes the Hyprland rule for them itself. A window
@@ -20,23 +25,28 @@ DATA_HOME="${XDG_DATA_HOME:-$HOME/.local/share}"
 CONFIG_HOME="${XDG_CONFIG_HOME:-$HOME/.config}"
 
 APP_ID="org.omarchy.jobsdone"       # Omarchy's app-id convention for TUIs
-BIND_NAME="Jobsdone"                # what the keybind calls itself in Hyprland
+BIND_NAME="Jobsdone"                # what the keybinds call themselves in Hyprland
+NOTES_BIND_NAME="Jobsdone notes"
 BINARY="$HOME/.local/bin/jobsdone"
 LAUNCHER="$HOME/.local/bin/jobsdone-terminal"
 DESKTOP_FILE="$DATA_HOME/applications/jobsdone.desktop"
 ICON_FILE="$DATA_HOME/icons/hicolor/scalable/apps/jobsdone.svg"
 BINDINGS="$CONFIG_HOME/hypr/bindings.lua"
+OMARCHY_BINDINGS="${OMARCHY_PATH:-/usr/share/omarchy}/default/hypr/bindings"
 FOOT_CONFIG="$CONFIG_HOME/jobsdone/foot.ini"
 KITTY_CONFIG="$CONFIG_HOME/jobsdone/kitty.conf"
 ALACRITTY_CONFIG="$CONFIG_HOME/jobsdone/alacritty.toml"
 ALACRITTY_013_CONFIG="$CONFIG_HOME/jobsdone/alacritty-0.13.toml"
 GHOSTTY_CONFIG="$CONFIG_HOME/jobsdone/ghostty.conf"
 
-# The keybind is the script's; the window rule is the program's, in a
-# block of its own that `jobsdone desktop` writes. Some machines have a
-# single block holding both, which is taken out when it is found.
+# The keybinds are the script's, a block each; the window rule is the
+# program's, in a block of its own that `jobsdone desktop` writes. Some
+# machines have a single block holding a keybind and the window rule,
+# which is taken out when it is found.
 KEYBIND_BEGIN="-- jobsdone: keybind (begin)"
 KEYBIND_END="-- jobsdone: keybind (end)"
+NOTES_KEYBIND_BEGIN="-- jobsdone: notes keybind (begin)"
+NOTES_KEYBIND_END="-- jobsdone: notes keybind (end)"
 BOTH_BEGIN="-- jobsdone: begin"
 BOTH_END="-- jobsdone: end"
 
@@ -61,6 +71,9 @@ hyprland_running() { [ -n "${HYPRLAND_INSTANCE_SIGNATURE:-}" ] && command -v hyp
 KEYBIND="SUPER + SHIFT + J"
 keys_given=no
 keybind_choice=""        # yes, no, or empty for "ask"
+NOTES_KEYBIND="SUPER + SHIFT + N"
+notes_keys_given=no
+notes_keybind_choice=""
 window=()                # the flags `jobsdone desktop` is given
 source_binary=""
 
@@ -80,6 +93,14 @@ while [ $# -gt 0 ]; do
             esac
             ;;
         --no-keybind) keybind_choice=no ;;
+        --notes-keybind)
+            notes_keybind_choice=yes
+            case "${2:-}" in
+                "" | -*) ;;
+                *) NOTES_KEYBIND="$2"; notes_keys_given=yes; shift ;;
+            esac
+            ;;
+        --no-notes-keybind) notes_keybind_choice=no ;;
         --floating | --tiled) window+=("$1") ;;
         --size)
             case "${2:-}" in
@@ -221,7 +242,7 @@ EOF
 command -v update-desktop-database >/dev/null && update-desktop-database "$(dirname "$DESKTOP_FILE")" 2>/dev/null || true
 command -v gtk-update-icon-cache >/dev/null && gtk-update-icon-cache -q "$DATA_HOME/icons/hicolor" 2>/dev/null || true
 
-# --- Omarchy: the keybind and the window ------------------------------------
+# --- Omarchy: the keybinds and the window -----------------------------------
 
 if ! on_omarchy; then
     if [ "$launcher_ready" = yes ]; then
@@ -261,11 +282,12 @@ key_of() {
 same_keys() { [ "$(modmask_of "$1")+$(key_of "$1")" = "$(modmask_of "$2")+$(key_of "$2")" ]; }
 
 # What the keys are bound to now, or nothing. Hyprland answers exactly
-# while it is running; otherwise the bindings file is the best witness
-# there is. A bind of our own is not an answer: it is the one about to be
+# while it is running; otherwise the person's bindings file and the
+# bindings Omarchy ships are the best witnesses there are. The bind named
+# in the second argument is not an answer: it is the one about to be
 # written again.
 keybind_taken_by() {
-    local taken=""
+    local keys="$1" own="$2" taken=""
     if hyprland_running; then
         taken="$( (hyprctl binds -j 2>/dev/null || true) | python3 -c '
 import json, sys
@@ -274,15 +296,21 @@ for bind in json.load(sys.stdin):
     if bind["modmask"] == mask and bind["key"].lower() == key:
         print(bind["description"] or bind["dispatcher"] + " " + bind["arg"])
         break
-' "$(modmask_of "$KEYBIND")" "$(key_of "$KEYBIND")" || true)"
-    elif [ -f "$BINDINGS" ]; then
-        local pattern
-        pattern="$(printf '%s' "$KEYBIND" | sed -E 's/[[:space:]]*\+[[:space:]]*/[[:space:]]*\\+[[:space:]]*/g')"
-        taken="$(grep -v '^[[:space:]]*--' "$BINDINGS" |
-            grep -ioE "o\.bind\(\"$pattern\",[[:space:]]*\"[^\"]*\"" |
-            head -1 | sed -E 's/.*,[[:space:]]*"([^"]*)"/\1/' || true)"
+' "$(modmask_of "$keys")" "$(key_of "$keys")" || true)"
+    else
+        local pattern file witnesses=()
+        pattern="$(printf '%s' "$keys" | sed -E 's/[[:space:]]*\+[[:space:]]*/[[:space:]]*\\+[[:space:]]*/g')"
+        [ -f "$BINDINGS" ] && witnesses+=("$BINDINGS")
+        for file in "$OMARCHY_BINDINGS"/*.lua; do
+            [ -f "$file" ] && witnesses+=("$file")
+        done
+        if [ ${#witnesses[@]} -gt 0 ]; then
+            taken="$(cat "${witnesses[@]}" | grep -v '^[[:space:]]*--' |
+                grep -ioE "o\.bind(_toggle)?\(\"$pattern\",[[:space:]]*\"[^\"]*\"" |
+                head -1 | sed -E 's/.*,[[:space:]]*"([^"]*)"/\1/' || true)"
+        fi
     fi
-    [ "$taken" = "$BIND_NAME" ] || printf '%s' "$taken"
+    [ "$taken" = "$own" ] || printf '%s' "$taken"
 }
 
 # The keys a block of ours binds, if it is there and binds any.
@@ -293,6 +321,24 @@ block_keys() {
         index($0, end) == 1 { inside = 0 }
         inside
     ' "$BINDINGS" | grep -oE 'o\.bind\("[^"]*"' | head -1 | sed -E 's/o\.bind\("([^"]*)"/\1/' || true
+}
+
+# A block of ours as it stands in the file, markers included.
+block_text() {
+    awk -v begin="$1" -v end="$2" '
+        index($0, begin) == 1 { inside = 1 }
+        inside
+        index($0, end) == 1 { inside = 0 }
+    ' "$BINDINGS"
+}
+
+# Whether a block of ours unbinds its keys before binding them.
+block_unbinds() {
+    awk -v begin="$1" -v end="$2" '
+        index($0, begin) == 1 { inside = 1; next }
+        index($0, end) == 1 { inside = 0 }
+        inside
+    ' "$BINDINGS" | grep -qF 'hl.unbind('
 }
 
 remove_block() {
@@ -315,8 +361,10 @@ remove_block() {
 write_block() {
     local begin="$1" end="$2" body="$3"
     if grep -qF -- "$begin" "$BINDINGS"; then
-        awk -v begin="$begin" -v end="$end" -v body="$body" '
-            index($0, begin) == 1 { print body; inside = 1; next }
+        # The body goes through the environment: -v would read the
+        # backslashes of a quoted path as escapes and drop them.
+        BODY="$body" awk -v begin="$begin" -v end="$end" '
+            index($0, begin) == 1 { print ENVIRON["BODY"]; inside = 1; next }
             index($0, end) == 1 { inside = 0; next }
             !inside { print }
         ' "$BINDINGS" > "$BINDINGS.jobsdone"
@@ -326,49 +374,106 @@ write_block() {
     fi
 }
 
+# Settles one keybind: NAME as Hyprland lists it, the KEYS and whether
+# they were GIVEN on the command line, the CHOICE the flags made, the
+# block's BEGIN and END, the ARGUMENTS the launcher is run with, what the
+# keys OPEN, and the keys an earlier block of ours INHERITED to this one.
+# Leaves the keys in $settled_keys and yes or no in $settled.
+settle_keybind() {
+    local name="$1" keys="$2" given="$3" choice="$4" begin="$5" end="$6"
+    local arguments="$7" opens="$8" inherited="${9:-}"
+    local ours taken answer unbind=no want=no command
+
+    command="o.shell_quote(\"$lua_launcher\")"
+    [ -z "$arguments" ] || command="$command .. \" $arguments\""
+
+    ours="$(block_keys "$begin" "$end")"
+    [ -n "$ours" ] || ours="$inherited"
+    # The keys already bound stand unless another set was asked for.
+    [ "$given" = yes ] || [ -z "$ours" ] || keys="$ours"
+
+    if [ "$choice" = no ]; then
+        want=no
+    elif [ -n "$reserved_keys" ] && same_keys "$reserved_keys" "$keys"; then
+        say "$keys opens Jobsdone, so it cannot also open $opens; that keybind is not added"
+    elif [ -n "$ours" ] && same_keys "$ours" "$keys"; then
+        # Already ours. Hyprland lists only our bind once another has been
+        # unbound for it, so the block is what remembers the unbind.
+        want=yes
+        ! block_unbinds "$begin" "$end" || unbind=yes
+    else
+        taken="$(keybind_taken_by "$keys" "$name")"
+        if [ -n "$taken" ] && [ -t 0 ] && [ -t 1 ]; then
+            printf "%s is already bound to '%s'. Overwrite '%s' to open %s? [y/N] " "$keys" "$taken" "$taken" "$opens"
+            read -r answer
+            case "$answer" in y* | Y*) want=yes; unbind=yes ;; esac
+        elif [ -n "$taken" ]; then
+            say "$keys is already bound to '$taken', and there is no terminal to ask about overwriting it on."
+        elif [ -n "$choice" ]; then
+            want="$choice"
+        elif [ -t 0 ] && [ -t 1 ]; then
+            printf '%s is free. Bind it to open %s? [Y/n] ' "$keys" "$opens"
+            read -r answer
+            case "$answer" in n* | N*) want=no ;; *) want=yes ;; esac
+        else
+            say "no terminal to ask on; the keybind for $opens is not added (pass --keybind or --notes-keybind to add it)"
+        fi
+        if [ -n "$taken" ] && [ "$want" = no ]; then
+            if [ -n "$ours" ]; then
+                say "$ours stays the keybind for $opens."
+                keys="$ours"
+                want=yes
+                ! block_unbinds "$begin" "$end" || unbind=yes
+            else
+                say "No keybind is added for $opens. Bind one yourself with"
+                say "    o.bind(\"<keys>\", \"$name\", $command)"
+                say "in $BINDINGS."
+            fi
+        fi
+    fi
+
+    if [ "$want" = yes ]; then
+        local body="$begin"
+        [ "$unbind" = no ] || body="$body
+hl.unbind(\"$keys\")"
+        body="$body
+o.bind(\"$keys\", \"$name\", $command)
+$end"
+        if [ "$(block_text "$begin" "$end")" = "$body" ]; then
+            say "$keys is already bound to open $opens"
+        else
+            write_block "$begin" "$end" "$body"
+            say "wrote the $keys keybind to $BINDINGS"
+        fi
+    else
+        remove_block "$begin" "$end"
+    fi
+    settled_keys="$keys"
+    settled="$want"
+}
+
 mkdir -p "$(dirname "$BINDINGS")"
 touch "$BINDINGS"
 
-ours="$(block_keys "$KEYBIND_BEGIN" "$KEYBIND_END")"
+inherited=""
 if grep -qF -- "$BOTH_BEGIN" "$BINDINGS"; then
-    [ -n "$ours" ] || ours="$(block_keys "$BOTH_BEGIN" "$BOTH_END")"
+    inherited="$(block_keys "$BOTH_BEGIN" "$BOTH_END")"
     remove_block "$BOTH_BEGIN" "$BOTH_END"
     say "took the single block an earlier install left out of $BINDINGS"
 fi
-# The keys already bound stand unless another set was asked for.
-[ "$keys_given" = yes ] || [ -z "$ours" ] || KEYBIND="$ours"
 
-want_keybind=no
 lua_launcher="$(quoted_string "$LAUNCHER")"
-if [ "$keybind_choice" = no ]; then
-    want_keybind=no
-elif [ -n "$ours" ] && same_keys "$ours" "$KEYBIND"; then
-    want_keybind=yes   # already ours; keep it
-else
-    taken="$(keybind_taken_by)"
-    if [ -n "$taken" ]; then
-        say "$KEYBIND is already bound to '$taken', so no keybind is added. Bind one yourself with"
-        say "    o.bind(\"<keys>\", \"$BIND_NAME\", o.shell_quote(\"$lua_launcher\"))"
-        say "in $BINDINGS."
-    elif [ -n "$keybind_choice" ]; then
-        want_keybind="$keybind_choice"
-    elif [ -t 0 ] && [ -t 1 ]; then
-        printf '%s is free. Bind it to open Jobsdone? [Y/n] ' "$KEYBIND"
-        read -r answer
-        case "$answer" in n* | N*) want_keybind=no ;; *) want_keybind=yes ;; esac
-    else
-        say "no terminal to ask on; the keybind is not added (pass --keybind to add it)"
-    fi
-fi
+reserved_keys=""
+settle_keybind "$BIND_NAME" "$KEYBIND" "$keys_given" "$keybind_choice" \
+    "$KEYBIND_BEGIN" "$KEYBIND_END" "" "Jobsdone" "$inherited"
+KEYBIND="$settled_keys"
+want_keybind="$settled"
 
-if [ "$want_keybind" = yes ]; then
-    write_block "$KEYBIND_BEGIN" "$KEYBIND_END" "$KEYBIND_BEGIN
-o.bind(\"$KEYBIND\", \"$BIND_NAME\", o.shell_quote(\"$lua_launcher\"))
-$KEYBIND_END"
-    say "wrote the $KEYBIND keybind to $BINDINGS"
-else
-    remove_block "$KEYBIND_BEGIN" "$KEYBIND_END"
-fi
+[ "$want_keybind" = no ] || reserved_keys="$KEYBIND"
+settle_keybind "$NOTES_BIND_NAME" "$NOTES_KEYBIND" "$notes_keys_given" "$notes_keybind_choice" \
+    "$NOTES_KEYBIND_BEGIN" "$NOTES_KEYBIND_END" "--notes" "Jobsdone on the notes page"
+NOTES_KEYBIND="$settled_keys"
+want_notes_keybind="$settled"
 
 # The window rule is the program's own block, written from the settings
 # these flags change, and it is what reloads Hyprland.
@@ -377,6 +482,9 @@ fi
 if hyprland_running; then
     if [ "$want_keybind" = yes ] && [ "$launcher_ready" = yes ]; then
         say "press $KEYBIND to open Jobsdone"
+    fi
+    if [ "$want_notes_keybind" = yes ] && [ "$launcher_ready" = yes ]; then
+        say "press $NOTES_KEYBIND to open Jobsdone on the notes page"
     fi
 else
     say "Hyprland is not running here; what was written takes effect at the next login"

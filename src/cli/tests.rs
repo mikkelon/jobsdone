@@ -37,14 +37,28 @@ fn refused(arguments: &[&str]) -> String {
 
 #[test]
 fn nothing_on_the_command_line_opens_the_app() {
-    assert_eq!(read(&[]).unwrap().plan, Plan::Run);
+    assert_eq!(read(&[]).unwrap().plan, Plan::Run { notes: false });
 }
 
 #[test]
 fn a_data_directory_opens_the_app_on_that_database() {
     let parsed = read(&["--data-dir", "/tmp/scratch"]).unwrap();
-    assert_eq!(parsed.plan, Plan::Run);
+    assert_eq!(parsed.plan, Plan::Run { notes: false });
     assert_eq!(parsed.data_dir, Some(PathBuf::from("/tmp/scratch")));
+}
+
+#[test]
+fn notes_opens_the_app_on_the_notes_page() {
+    assert_eq!(read(&["--notes"]).unwrap().plan, Plan::Run { notes: true });
+    let parsed = read(&["--notes", "--data-dir", "/tmp/scratch"]).unwrap();
+    assert_eq!(parsed.plan, Plan::Run { notes: true });
+    assert_eq!(parsed.data_dir, Some(PathBuf::from("/tmp/scratch")));
+}
+
+#[test]
+fn notes_beside_a_command_is_refused() {
+    let said = refused(&["--notes", "note", "list"]);
+    assert!(said.contains("--notes"), "{said}");
 }
 
 #[test]

@@ -176,11 +176,15 @@ The launcher's `--check` mode checks its selected terminal without opening a
 window. Missing terminal support produces installation guidance while leaving
 the app available to run in the current terminal; it does not prevent installation.
 
-    scripts/install [--keybind [KEYS] | --no-keybind] [--floating | --tiled] [--size WxH]
+    scripts/install [--keybind [KEYS] | --no-keybind]
+                    [--notes-keybind [KEYS] | --no-notes-keybind]
+                    [--floating | --tiled] [--size WxH]
 
-`--keybind` binds KEYS, or `SUPER + SHIFT + J` when none are given;
-`--no-keybind` binds nothing; with neither, the keybind is offered at the
-prompt when a terminal is attached and skipped otherwise. The window flags
+`--keybind` binds KEYS, or `SUPER + SHIFT + J` when none are given, to
+open the app; `--notes-keybind` binds KEYS, or `SUPER + SHIFT + N`, to
+open it on the notes page, which is `jobsdone --notes`. `--no-keybind`
+and `--no-notes-keybind` bind nothing; with neither, a keybind is offered
+at the prompt when a terminal is attached and skipped otherwise. The window flags
 are settings rather than script arguments: they are passed to `jobsdone
 desktop`, and a flag left off keeps the setting as it is, so a second
 install does not undo what the settings page said.
@@ -220,21 +224,41 @@ On Omarchy, recognised by `/usr/share/omarchy` and `omarchy-launch-tui`:
   copy and cut to the app's selection; paste delivers a bracketed string.
   Unrecognized terminal choices use `xdg-terminal-exec` when available and
   retain that terminal's own clipboard behavior.
-- The keybind, in the install script's own block in
+- The two keybinds, each in a block of the install script's own in
   `~/.config/hypr/bindings.lua`, the file Omarchy keeps for personal
-  bindings, between `-- jobsdone: keybind (begin)` and
-  `-- jobsdone: keybind (end)`:
+  bindings: `-- jobsdone: keybind (begin)` to `-- jobsdone: keybind (end)`
+  and `-- jobsdone: notes keybind (begin)` to
+  `-- jobsdone: notes keybind (end)`:
 
       o.bind("SUPER + SHIFT + J", "Jobsdone", o.shell_quote(os.getenv("HOME") .. "/.local/bin/jobsdone-terminal"))
+      o.bind("SUPER + SHIFT + N", "Jobsdone notes", o.shell_quote(os.getenv("HOME") .. "/.local/bin/jobsdone-terminal") .. " --notes")
 
-  The line is written only when the keys are free, as `hyprctl binds`
-  reports them (or the bindings file, when Hyprland is not running), and
-  the person says yes at the prompt or passes `--keybind`. The keys asked
-  about are the keys given: the script reads them into the modmask and key
-  Hyprland answers with (SUPER 64, ALT 8, CTRL 4, CAPS 2, SHIFT 1), so any
-  keys are checked as exactly as the default ones. A bind of our own is not
-  somebody else's, and neither is one the person already has in this
-  block, whose keys a plain re-install keeps.
+  The launcher hands its arguments to the program, so both open the same
+  window under the same rule.
+
+  What the keys are bound to is looked up, never assumed: `hyprctl binds`
+  answers while Hyprland is running, and otherwise the bindings file and
+  the bindings Omarchy ships under `default/hypr/bindings/`. The keys
+  asked about are the keys given: the script reads them into the modmask
+  and key Hyprland answers with (SUPER 64, ALT 8, CTRL 4, CAPS 2,
+  SHIFT 1), so any keys are checked as exactly as the default ones. A bind
+  of our own is not somebody else's, and neither is one the person
+  already has in the block, whose keys a plain re-install keeps.
+
+  Free keys are bound when the person says yes at the prompt or passes
+  the flag. Taken keys are named with what holds them, Omarchy's "Editor"
+  on `SUPER + SHIFT + N` for one, and are taken over only on a yes at the
+  prompt; a flag alone does not overwrite, and with no terminal to ask on
+  nothing is overwritten. Omarchy's bindings load before the personal
+  file, where a second bind on the same keys would run beside the first,
+  so a block that takes keys over unbinds them first:
+
+      hl.unbind("SUPER + SHIFT + N")
+
+  Hyprland then lists only our bind, so the block is what remembers the
+  unbind on later installs. When new keys are refused, a keybind already
+  in the block stays. The two keybinds never share keys: the notes
+  keybind is refused on the keys that open the app.
 - The window rule, in the program's own block, between
   `-- jobsdone: window (begin)` and `-- jobsdone: window (end)`:
 
@@ -264,9 +288,9 @@ On Omarchy, recognised by `/usr/share/omarchy` and `omarchy-launch-tui`:
   program trusts the answer, not the exit code, which is clean either way.
 
 Some machines have one block instead, `-- jobsdone: begin` to
-`-- jobsdone: end`, holding both. An install that finds it takes it out,
-keeping the keys it bound, and writes the two blocks in its place;
-`scripts/uninstall` removes all three.
+`-- jobsdone: end`, holding a keybind and the window rule. An install
+that finds it takes it out, keeping the keys it bound, and writes the
+separate blocks in its place; `scripts/uninstall` removes every one.
 
 Foot is the reference terminal. Alacritty, Ghostty, and Kitty are also
 supported by the launcher, and all four float the app at 870 by 650 on a

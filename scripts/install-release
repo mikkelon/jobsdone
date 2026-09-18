@@ -14,7 +14,7 @@ while [ "$#" -gt 0 ]; do
         --channel)
             case "${2:-}" in beta | stable) channel="$2"; shift 2 ;; *) die 'Use --channel beta or --channel stable.' ;; esac ;;
         --check) check=yes; shift ;;
-        --keybind)
+        --keybind | --notes-keybind)
             options+=("$1"); shift
             if [ "$#" -gt 0 ] && [[ "$1" != -* ]]; then options+=("$1"); shift; fi ;;
         --size)
@@ -22,7 +22,7 @@ while [ "$#" -gt 0 ]; do
                 die 'Use --size with a width and height, such as --size 1000x700.'
             fi
             options+=("$1" "$2"); shift 2 ;;
-        --no-keybind | --floating | --tiled) options+=("$1"); shift ;;
+        --no-keybind | --no-notes-keybind | --floating | --tiled) options+=("$1"); shift ;;
         -h | --help)
             cat <<'EOF'
 Install or update Jobsdone from a published Linux release.
@@ -35,6 +35,11 @@ Usage: install.sh [OPTIONS]
   --version vX.Y.Z Install a specific release
   --keybind [KEYS] Set an Omarchy shortcut (default: SUPER + SHIFT + J)
   --no-keybind     Do not bind an Omarchy shortcut
+  --notes-keybind [KEYS]
+                   Set an Omarchy shortcut for the notes page
+                   (default: SUPER + SHIFT + N)
+  --no-notes-keybind
+                   Do not bind an Omarchy shortcut for the notes page
   --floating      Use a floating window
   --tiled         Use a tiled window
   --size WxH      Set the window size in pixels
@@ -43,7 +48,7 @@ Usage: install.sh [OPTIONS]
 Updates follow the installed version's channel. Fresh installs default to stable;
 use --channel beta to try beta releases.
 
-Installs into ~/.local/bin. Updates preserve your tasks, settings and shortcut
+Installs into ~/.local/bin. Updates preserve your tasks, settings and shortcuts
 unless you explicitly request a different window or shortcut here.
 EOF
             exit 0 ;;

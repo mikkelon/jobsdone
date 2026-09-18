@@ -66,7 +66,7 @@ cat > "$scratch/bin/pacman" <<'EOF'
 EOF
 chmod +x "$scratch/bin/"*
 
-"$root/scripts/install-release" --channel beta --no-keybind
+"$root/scripts/install-release" --channel beta --no-keybind --no-notes-keybind
 binary="$HOME/.local/bin/jobsdone"
 [ "$("$binary" --version)" = "jobsdone ${JOBSDONE_TEST_VERSION#v}" ]
 test -x "$HOME/.local/bin/jobsdone-update"
@@ -120,14 +120,14 @@ cp "$scratch/installed-binary" "$binary"
 if TZDIR="$scratch/no-zoneinfo" "$HOME/.local/bin/jobsdone-update"; then
     echo 'missing time-zone data must produce an installation error' >&2; exit 1
 fi
-if JOBSDONE_TEST_DOWNLOAD_FAIL=yes "$HOME/.local/bin/jobsdone-update" --no-keybind; then
+if JOBSDONE_TEST_DOWNLOAD_FAIL=yes "$HOME/.local/bin/jobsdone-update" --no-keybind --no-notes-keybind; then
     echo 'failed downloads must fail installation' >&2; exit 1
 fi
 [ "$(sha256sum "$binary")" = "$before" ]
 [ "$(sha256sum "$XDG_DATA_HOME/applications/jobsdone.desktop")" = "$desktop_before" ]
 cp "$scratch/downloads/SHA256SUMS" "$scratch/checksums"
 printf '%064d  %s.tar.gz\n' 0 "$name" > "$scratch/downloads/SHA256SUMS"
-if "$HOME/.local/bin/jobsdone-update" --no-keybind; then
+if "$HOME/.local/bin/jobsdone-update" --no-keybind --no-notes-keybind; then
     echo 'invalid checksums must fail installation' >&2; exit 1
 fi
 [ "$(sha256sum "$binary")" = "$before" ]
@@ -137,7 +137,7 @@ if JOBSDONE_TEST_PACKAGE_INSTALLED=yes "$HOME/.local/bin/jobsdone-update"; then
     echo 'package-managed installations must not be overwritten' >&2; exit 1
 fi
 [ "$(sha256sum "$binary")" = "$before" ]
-"$HOME/.local/bin/jobsdone-update" --version "$JOBSDONE_TEST_VERSION" --no-keybind
+"$HOME/.local/bin/jobsdone-update" --version "$JOBSDONE_TEST_VERSION" --no-keybind --no-notes-keybind
 [ "$(sha256sum "$binary")" = "$before" ]
 
 if [ "$#" -gt 0 ]; then
@@ -155,7 +155,7 @@ tar -xzf "$scratch/downloads/$name.tar.gz" -C "$scratch"
 cp /usr/bin/sleep "$binary"
 "$binary" 60 &
 busy_pid=$!
-"$scratch/$name/scripts/install" --binary "$scratch/$name/jobsdone" --no-keybind
+"$scratch/$name/scripts/install" --binary "$scratch/$name/jobsdone" --no-keybind --no-notes-keybind
 kill -0 "$busy_pid"
 [ "$("$binary" --version)" = "jobsdone ${JOBSDONE_TEST_VERSION#v}" ]
 "$HOME/.local/bin/jobsdone-uninstall"

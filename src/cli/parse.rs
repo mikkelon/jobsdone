@@ -20,6 +20,7 @@ const GLOBAL: &[(&str, bool)] = &[
     ("--version", false),
     ("-V", false),
     ("--skill", false),
+    ("--notes", false),
 ];
 
 /// The format a command line asks for, read on its own so that a command
@@ -236,24 +237,32 @@ fn build(
             return Err(Failure::usage(format!("{first} is not a command")));
         }
         // Nothing on the command line opens the app. `--data-dir` chooses
-        // the database whatever runs against it, so it opens the app too;
-        // the rest are about an operation, and an operation nobody named
-        // is a command line to answer rather than a window to open.
+        // the database whatever runs against it, so it opens the app too,
+        // and `--notes` chooses the page it opens on; the rest are about
+        // an operation, and an operation nobody named is a command line
+        // to answer rather than a window to open.
         if let Some(stray) = options
             .iter()
             .map(Given::name)
-            .find(|name| *name != "--data-dir")
+            .find(|name| !matches!(*name, "--data-dir" | "--notes"))
         {
             return Err(Failure::usage(format!(
                 "{stray} is about a command, and there is no command here"
             )));
         }
         return Ok(Parsed {
-            plan: Plan::Run,
+            plan: Plan::Run {
+                notes: present(options, "--notes"),
+            },
             format,
             data_dir,
         });
     };
+    if present(options, "--notes") {
+        return Err(Failure::usage(
+            "--notes is about opening the app, and there is a command here",
+        ));
+    }
 
     if spec.name == "help" {
         let asked = command_named(&positionals).ok();

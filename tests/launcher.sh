@@ -96,6 +96,8 @@ chmod +x "$fake_bin/foot"
 output="$scratch/foot-arguments"
 PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" XDG_CONFIG_HOME="$config_home" JOBSDONE_TERMINAL=foot JOBSDONE_TEST_OUTPUT="$output" "$home_dir/.local/bin/jobsdone-terminal"
 grep -Fqx -- "--config $config_home/jobsdone/foot.ini --app-id=org.omarchy.jobsdone -e $home_dir/.local/bin/jobsdone" "$output"
+PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" XDG_CONFIG_HOME="$config_home" JOBSDONE_TERMINAL=foot JOBSDONE_TEST_OUTPUT="$output" "$home_dir/.local/bin/jobsdone-terminal" --notes
+grep -Fqx -- "--config $config_home/jobsdone/foot.ini --app-id=org.omarchy.jobsdone -e $home_dir/.local/bin/jobsdone --notes" "$output"
 
 cat > "$fake_bin/kitty" <<'EOF'
 #!/usr/bin/env bash
@@ -143,10 +145,95 @@ cat > "$fake_bin/omarchy-launch-tui" <<'EOF'
 exit 0
 EOF
 chmod +x "$fake_bin/omarchy-launch-tui"
-env -u HYPRLAND_INSTANCE_SIGNATURE PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" XDG_CONFIG_HOME="$config_home" XDG_DATA_HOME="$data_home" OMARCHY_PATH="$scratch/omarchy" "$root/scripts/install" --binary "$home_dir/.local/bin/jobsdone" --keybind
-grep -Fqx "o.bind(\"SUPER + SHIFT + J\", \"Jobsdone\", o.shell_quote(\"$scratch/home with \\\"quote/.local/bin/jobsdone-terminal\"))" "$config_home/hypr/bindings.lua"
+bindings="$config_home/hypr/bindings.lua"
+launcher_lua="$scratch/home with \\\"quote/.local/bin/jobsdone-terminal"
+home_bind="o.bind(\"SUPER + SHIFT + J\", \"Jobsdone\", o.shell_quote(\"$launcher_lua\"))"
+notes_bind="o.bind(\"SUPER + SHIFT + N\", \"Jobsdone notes\", o.shell_quote(\"$launcher_lua\") .. \" --notes\")"
+# Without a terminal on either end, so that nothing here can stop to ask.
+install_on_omarchy() {
+    env -u HYPRLAND_INSTANCE_SIGNATURE PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" XDG_CONFIG_HOME="$config_home" XDG_DATA_HOME="$data_home" OMARCHY_PATH="$scratch/omarchy" \
+        "$root/scripts/install" --binary "$home_dir/.local/bin/jobsdone" "$@" < /dev/null > "$scratch/install-output"
+}
+
+# Free keys are bound as they are, with nothing to unbind.
+install_on_omarchy --keybind --notes-keybind
+grep -Fqx "$home_bind" "$bindings"
+grep -Fqx "$notes_bind" "$bindings"
+if grep -Fq 'hl.unbind(' "$bindings"; then
+    echo 'free keys must be bound without an unbind' >&2
+    exit 1
+fi
+
+# One set of keys opens one thing.
+install_on_omarchy --keybind "SUPER + ALT + K" --notes-keybind "SUPER + ALT + K"
+grep -Fq 'o.bind("SUPER + ALT + K", "Jobsdone",' "$bindings"
+grep -Fq 'cannot also open' "$scratch/install-output"
+if grep -Fq 'Jobsdone notes' "$bindings"; then
+    echo 'the notes keybind must not share the keys that open the app' >&2
+    exit 1
+fi
+install_on_omarchy --keybind "SUPER + SHIFT + J" --no-notes-keybind
+
+# Keys that Omarchy binds are found with Hyprland not running, and are not
+# taken over without somebody to ask.
+mkdir -p "$scratch/omarchy/default/hypr/bindings"
+printf '%s\n' 'o.bind("SUPER + SHIFT + N", "Editor", { omarchy = "editor" })' > "$scratch/omarchy/default/hypr/bindings/applications.lua"
+install_on_omarchy --notes-keybind
+grep -Fq "SUPER + SHIFT + N is already bound to 'Editor'" "$scratch/install-output"
+grep -Fqx "$home_bind" "$bindings"
+if grep -Fq 'Jobsdone notes' "$bindings"; then
+    echo 'taken keys must not be bound without asking' >&2
+    exit 1
+fi
+
+# A yes at the prompt takes the keys over, and the unbind survives the
+# installs that come after it.
+cat > "$scratch/install-at-a-terminal" <<EOF
+#!/usr/bin/env bash
+exec "$root/scripts/install" --binary "\$HOME/.local/bin/jobsdone"
+EOF
+chmod +x "$scratch/install-at-a-terminal"
+printf 'y\n' | env -u HYPRLAND_INSTANCE_SIGNATURE PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" XDG_CONFIG_HOME="$config_home" XDG_DATA_HOME="$data_home" OMARCHY_PATH="$scratch/omarchy" \
+    script -qec "$scratch/install-at-a-terminal" /dev/null > "$scratch/install-output"
+grep -Fq "SUPER + SHIFT + N is already bound to 'Editor'. Overwrite 'Editor'" "$scratch/install-output"
+grep -Fx -A1 'hl.unbind("SUPER + SHIFT + N")' "$bindings" | grep -Fqx "$notes_bind"
+install_on_omarchy
+grep -Fx -A1 'hl.unbind("SUPER + SHIFT + N")' "$bindings" | grep -Fqx "$notes_bind"
+grep -Fqx 'SUPER + SHIFT + J is already bound to open Jobsdone' "$scratch/install-output"
+grep -Fqx 'SUPER + SHIFT + N is already bound to open Jobsdone on the notes page' "$scratch/install-output"
+if grep -Fq 'wrote the' "$scratch/install-output"; then
+    echo 'an install that changes no keybind must not say it wrote one' >&2
+    exit 1
+fi
+grep -Fqx "$home_bind" "$bindings"
+
+# A running Hyprland is the one asked, by modmask and key.
+install_on_omarchy --no-notes-keybind
+live_bin="$scratch/live-bin"
+mkdir -p "$live_bin"
+cat > "$live_bin/hyprctl" <<'EOF'
+#!/usr/bin/env bash
+[ "$*" = "binds -j" ] || exit 0
+printf '%s\n' '[{"modmask": 65, "key": "J", "description": "Jobsdone", "dispatcher": "__lua", "arg": "1"},
+{"modmask": 65, "key": "N", "description": "Editor", "dispatcher": "__lua", "arg": "2"}]'
+EOF
+chmod +x "$live_bin/hyprctl"
+rm "$scratch/omarchy/default/hypr/bindings/applications.lua"
+HYPRLAND_INSTANCE_SIGNATURE=test PATH="$live_bin:$fake_bin:/usr/bin:/bin" HOME="$home_dir" XDG_CONFIG_HOME="$config_home" XDG_DATA_HOME="$data_home" OMARCHY_PATH="$scratch/omarchy" \
+    "$root/scripts/install" --binary "$home_dir/.local/bin/jobsdone" --notes-keybind < /dev/null > "$scratch/install-output"
+grep -Fq "SUPER + SHIFT + N is already bound to 'Editor'" "$scratch/install-output"
+if grep -Fq 'Jobsdone notes' "$bindings"; then
+    echo 'keys Hyprland reports as taken must not be bound without asking' >&2
+    exit 1
+fi
+install_on_omarchy --notes-keybind
+grep -Fqx "$notes_bind" "$bindings"
 
 env -u HYPRLAND_INSTANCE_SIGNATURE PATH="$fake_bin:/usr/bin:/bin" HOME="$home_dir" XDG_CONFIG_HOME="$config_home" XDG_DATA_HOME="$data_home" XDG_STATE_HOME="$home_dir/state" "$root/scripts/uninstall"
 test -f "$config_home/foot/foot.ini"
 test ! -e "$config_home/jobsdone/foot.ini"
 test ! -e "$home_dir/.local/bin/jobsdone-terminal"
+if grep -Fq 'jobsdone' "$bindings"; then
+    echo 'uninstall must take every Jobsdone block out of the bindings' >&2
+    exit 1
+fi

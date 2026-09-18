@@ -36,7 +36,7 @@ install`, then `uat/vm seal`); everything after is scripted.
 
 1. `uat/vm fresh` boots headless and returns when the desktop is up. `uat/vm status` says whether a base exists.
 2. `uat/vm push` puts the working tree in the guest's `~/jobsdone`. `uat/vm ssh 'cd jobsdone && make install'` runs there with passwordless sudo, `hyprctl` and `grim` working.
-3. Prove the desktop side the way a person would experience it: `uat/vm keys super-shift-j` presses the real keybind, `uat/vm ssh hyprctl clients -j` reports the window's class, floating state and size, `uat/vm shot NAME` captures the whole screen to `uat/out/vm/NAME.png`.
+3. Prove the desktop side the way a person would experience it: `uat/vm keys super-shift-j` presses the real keybind (`super-shift-n` is the one that opens on the notes page), `uat/vm ssh hyprctl clients -j` reports the window's class, floating state and size, `uat/vm shot NAME` captures the whole screen to `uat/out/vm/NAME.png`.
 4. `uat/vm stop`, then `uat/vm save NAME` to keep a state worth returning to (a guest with rustup already installed saves minutes per run); `uat/vm restore NAME` boots it again.
 
 Facts about the guest that no command confesses:
