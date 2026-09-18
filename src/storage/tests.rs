@@ -1,6 +1,7 @@
 use super::*;
 
 use std::process::Stdio;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::Duration;
 
 use jiff::Zoned;
@@ -885,62 +886,90 @@ fn a_window_can_commit_twice_running_without_loading_in_between() {
 #[test]
 fn a_load_reads_one_moment_of_the_database() {
     let world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
-    let path = world.path.clone();
-    let now = world.now.clone();
+    let path = &world.path;
+    let now = &world.now;
+    let stop = AtomicBool::new(false);
+    let reader = Sqlite::open(path).expect("the reader");
 
-    let writer = std::thread::spawn(move || {
-        let mut store = Sqlite::open(&path).expect("the writer");
-        let mut model = store.load().expect("load");
-        for number in 0..WRITES {
-            let mut change = domain::apply(
-                &model,
-                Command::AddTask {
-                    title: format!("Task {number}"),
-                    place: Place::Backlog,
-                },
-                &ctx(&now),
-            )
-            .expect("the task");
-            // A row in another table, written in the same transaction,
-            // saying how many tasks there are once this one is in.
-            change.writes.push(Write::SetMeta {
-                key: TASK_COUNT.to_owned(),
-                value: (number + 1).to_string(),
-            });
-            store.commit(&change).expect("the writer's change");
-            model.apply(&change);
+    std::thread::scope(|scope| {
+        // The writer goes on until the reader has what it came for, so
+        // the two overlap however the threads are scheduled.
+        let writer = scope.spawn(|| {
+            let mut store = Sqlite::open(path).expect("the writer");
+            let mut model = store.load().expect("load");
+            let mut number = 0;
+            while !stop.load(Ordering::Relaxed) {
+                let mut change = domain::apply(
+                    &model,
+                    Command::AddTask {
+                        title: format!("Task {number}"),
+                        place: Place::Backlog,
+                    },
+                    &ctx(now),
+                )
+                .expect("the task");
+                number += 1;
+                // A row in another table, written in the same transaction,
+                // saying how many tasks there are once this one is in.
+                change.writes.push(Write::SetMeta {
+                    key: TASK_COUNT.to_owned(),
+                    value: number.to_string(),
+                });
+                store.commit(&change).expect("the writer's change");
+                model.apply(&change);
+            }
+        });
+        // The scope joins the writer on the way out, so the flag has to
+        // go up even when the reader panics.
+        let _stop = StopOnDrop(&stop);
+
+        let mut sightings = 0;
+        let mut last = 0;
+        // A writer that finishes unasked has panicked, which the scope
+        // reports once the reader lets go.
+        while sightings < SIGHTINGS && !writer.is_finished() {
+            let model = reader.load().expect("load");
+            assert_eq!(
+                model.tasks.len(),
+                task_count(&model),
+                "a model from two moments of the database"
+            );
+            if model.tasks.len() > last {
+                last = model.tasks.len();
+                sightings += 1;
+            }
         }
     });
 
-    let reader = Sqlite::open(&world.path).expect("the reader");
-    let mut seen = 0;
-    while !writer.is_finished() {
-        let model = reader.load().expect("load");
-        let counted = model
-            .meta
-            .get(TASK_COUNT)
-            .map_or(0, |count| count.parse().expect("a count"));
-        assert_eq!(
-            model.tasks.len(),
-            counted,
-            "a model from two moments of the database"
-        );
-        seen = seen.max(model.tasks.len());
-    }
-    writer.join().expect("the writer");
-
     let model = reader.load().expect("load");
-    assert_eq!(model.tasks.len(), WRITES);
-    assert!(seen > 0, "the reader never saw the writer at work");
+    assert_eq!(model.tasks.len(), task_count(&model));
+    assert!(model.tasks.len() >= SIGHTINGS);
 }
 
 /// The `meta` key the coherence test keeps its count under. Storage does
 /// not care what a key means, and no build reads this one.
 const TASK_COUNT: &str = "tasks_written";
 
-/// Enough changes for the reader to land between two of them, and few
-/// enough that the test is over in well under a second.
-const WRITES: usize = 300;
+/// How many different moments of the writer's run the reader loads before
+/// it lets the writer stop. Each is a load that landed between two commits.
+const SIGHTINGS: usize = 20;
+
+/// The number of tasks the writer says there are.
+fn task_count(model: &Model) -> usize {
+    model
+        .meta
+        .get(TASK_COUNT)
+        .map_or(0, |count| count.parse().expect("a count"))
+}
+
+/// Raises the flag when it goes out of scope, by return or by panic.
+struct StopOnDrop<'a>(&'a AtomicBool);
+
+impl Drop for StopOnDrop<'_> {
+    fn drop(&mut self) {
+        self.0.store(true, Ordering::Relaxed);
+    }
+}
 
 // ---- killed at any moment --------------------------------------------
 
