@@ -149,8 +149,9 @@ bare task row does not.
 
 ### Note
 
-    {"id": 4, "body": "…", "created_at": "…", "updated_at": "…"}
+    {"id": 4, "body": "…", "created_at": "…", "updated_at": "…", "archived_at": null}
 
+`archived_at` is when the note was archived, or `null` for a note in the list.
 List rows drop `body` for `first_line` unless `include_body` is asked for.
 
 ### Undo entry
@@ -180,7 +181,7 @@ write system state, and neither pushes an undo entry.
 | `schedule.list`| `include_stopped?: bool` (default `false`)                           | `{"total":n,"schedules":[Schedule]}`                        |
 | `schedule.get` | `id`                                                                 | `{"schedule": Schedule, "next": ["2026-09-08", …]}` — the next 3 dates after `generated_through` |
 | `schedule.preview` | exactly one of `rule` or `schedule`; `after?` (date, default the schedule's `generated_through`, or today for a bare rule); `count?` (1..=50, default 3) | `{"rule": rule, "after":"…", "dates":["…"]}` |
-| `note.list`    | `include_body?: bool` (default `false`)                              | `{"count":n,"notes":[{"id":n,"first_line":"…","created_at":"…","updated_at":"…","body"?:"…"}]}` — newest `created_at` first; `body` only when asked for |
+| `note.list`    | `include_body?: bool` (default `false`); `archived?: bool` (default `false`) | `{"count":n,"notes":[{"id":n,"first_line":"…","created_at":"…","updated_at":"…","archived_at":"…"\|null,"body"?:"…"}]}` — the notes in the list, newest `created_at` first; with `archived`, the archived notes instead, newest `archived_at` first. `count` is the length of the list returned; `body` only when asked for |
 | `note.get`     | `id`                                                                 | `{"note": Note}`                                            |
 | `note.check`   | exactly one of `note` (id) or `text`; `suggestions?: bool` (default `false`) | section 9                                          |
 | `settings.get` | —                                                                    | `{"settings": Settings, "date_order":"day_first"}`           |
@@ -280,9 +281,16 @@ rewritten by a reorder.
 | `note.create` | `body?` (string, default "") | `{"note": Note, "undo": UndoEntry}`      |
 | `note.update` | `id`, `body`                 | `{"note": Note, "undo": UndoEntry}` — one deliberate replacement, so unlike the TUI's per-tick save it is undoable |
 | `note.delete` | `id`, `confirm?: bool`       | `{"note": Note, "undo": UndoEntry}`      |
+| `note.archive`   | `id`                      | `{"note": Note, "undo": UndoEntry}`      |
+| `note.unarchive` | `id`                      | `{"note": Note, "undo": UndoEntry}`      |
 
 `body` is full text: newlines and any Unicode, unchanged. `note.create` with a
 body is one change and one undo entry ("Added a note").
+
+An archived note is out of the default `note.list` but otherwise an ordinary
+note: `note.get`, `note.update`, `note.delete` and `note.check` work on it.
+Archiving an archived note, or unarchiving one that is in the list, is
+`rejected`. Undoing an unarchive puts the note back at the `archived_at` it had.
 
 ### Settings and the dictionary
 

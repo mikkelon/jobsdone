@@ -23,12 +23,19 @@ use crate::domain::{self, Command, Id, Note};
 struct List {
     #[serde(default)]
     include_body: bool,
+    #[serde(default)]
+    archived: bool,
 }
 
+/// The notes in the list, or the archived ones when asked for.
 pub(super) fn list(session: &Session, fields: Value) -> Result<Value, Error> {
     let request: List = spec::fields("note.list", fields)?;
     let model = session.model();
-    let view = domain::notes(model);
+    let view = if request.archived {
+        domain::archived_notes(model)
+    } else {
+        domain::notes(model)
+    };
     Ok(dto::notes(model, &view, request.include_body))
 }
 
@@ -111,6 +118,22 @@ pub(super) fn delete(session: &mut Session, fields: Value) -> Result<Value, Erro
     let model = session.model();
     let note = model.note(request.id).ok_or_else(|| missing(request.id))?;
     Ok(json!({"note": dto::note(note), "undo": undo}))
+}
+
+/// Archiving and unarchiving: the domain says whether the note is where
+/// the request expects it.
+pub(super) fn archive(session: &mut Session, fields: Value) -> Result<Value, Error> {
+    let request: One = spec::fields("note.archive", fields)?;
+    live(session, request.id)?;
+    let undo = session.commit(vec![Command::ArchiveNote { note: request.id }])?;
+    Ok(json!({"note": dto::note(live(session, request.id)?), "undo": undo}))
+}
+
+pub(super) fn unarchive(session: &mut Session, fields: Value) -> Result<Value, Error> {
+    let request: One = spec::fields("note.unarchive", fields)?;
+    live(session, request.id)?;
+    let undo = session.commit(vec![Command::UnarchiveNote { note: request.id }])?;
+    Ok(json!({"note": dto::note(live(session, request.id)?), "undo": undo}))
 }
 
 #[derive(Debug, Deserialize)]

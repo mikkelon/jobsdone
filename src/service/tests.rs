@@ -911,6 +911,94 @@ fn replacing_a_note_can_be_taken_back() {
 }
 
 #[test]
+fn an_archived_note_leaves_the_list_and_is_listed_on_its_own() {
+    let mut world = World::new();
+    let older = world.ok(json!({"op": "note.create", "body": "Older"}))["note"]["id"].clone();
+    world.clock("2026-09-07T10:00:00");
+    let newer = world.ok(json!({"op": "note.create", "body": "Newer"}))["note"]["id"].clone();
+    assert!(world.ok(json!({"op": "note.get", "id": older}))["note"]["archived_at"].is_null());
+
+    world.clock("2026-09-07T11:00:00");
+    let data = world.ok(json!({"op": "note.archive", "id": older}));
+    assert_eq!(
+        data["note"]["archived_at"],
+        "2026-09-07T11:00:00+02:00[Europe/Copenhagen]"
+    );
+    assert_eq!(data["undo"]["label"], "Archived \"Older\"");
+    world.clock("2026-09-07T12:00:00");
+    world.ok(json!({"op": "note.archive", "id": newer}));
+
+    let list = world.ok(json!({"op": "note.list"}));
+    assert_eq!(list["count"], 0);
+    assert_eq!(list["notes"], json!([]));
+
+    let archive = world.ok(json!({"op": "note.list", "archived": true}));
+    assert_eq!(archive["count"], 2);
+    assert_eq!(archive["notes"][0]["first_line"], "Newer");
+    assert_eq!(archive["notes"][1]["first_line"], "Older");
+    assert_eq!(
+        archive["notes"][1]["archived_at"],
+        "2026-09-07T11:00:00+02:00[Europe/Copenhagen]"
+    );
+
+    let data = world.ok(json!({"op": "note.unarchive", "id": older}));
+    assert!(data["note"]["archived_at"].is_null());
+    assert_eq!(
+        world.ok(json!({"op": "note.list"}))["notes"][0]["first_line"],
+        "Older"
+    );
+
+    world.ok(json!({"op": "undo.apply"}));
+    let archive = world.ok(json!({"op": "note.list", "archived": true}));
+    assert_eq!(
+        archive["notes"][1]["first_line"], "Older",
+        "back in its place"
+    );
+}
+
+#[test]
+fn an_archived_note_is_read_changed_checked_and_deleted_like_any_other() {
+    let mut world = World::new();
+    let id = world.ok(json!({"op": "note.create", "body": "Milk"}))["note"]["id"].clone();
+    world.ok(json!({"op": "note.archive", "id": id}));
+
+    assert_eq!(
+        world.ok(json!({"op": "note.get", "id": id}))["note"]["body"],
+        "Milk"
+    );
+    let data = world.ok(json!({"op": "note.update", "id": id, "body": "Mlik"}));
+    assert_eq!(data["note"]["body"], "Mlik");
+    assert!(!data["note"]["archived_at"].is_null());
+    let data = world.ok(json!({"op": "note.check", "note": id}));
+    assert_eq!(data["misspellings"][0]["word"], "Mlik");
+    world.ok(json!({"op": "note.delete", "id": id, "confirm": true}));
+    assert_eq!(
+        world.ok(json!({"op": "note.list", "archived": true}))["count"],
+        0
+    );
+}
+
+#[test]
+fn a_note_is_archived_from_the_list_and_unarchived_from_the_archive() {
+    let mut world = World::new();
+    let id = world.ok(json!({"op": "note.create", "body": "Milk"}))["note"]["id"].clone();
+
+    let refused = world.err(json!({"op": "note.unarchive", "id": id}));
+    assert_eq!(refused.code, "rejected");
+    assert_eq!(refused.message, "That note is not archived.");
+
+    world.ok(json!({"op": "note.archive", "id": id}));
+    let refused = world.err(json!({"op": "note.archive", "id": id}));
+    assert_eq!(refused.code, "rejected");
+    assert_eq!(refused.message, "That note is already archived.");
+
+    assert_eq!(
+        world.err(json!({"op": "note.archive", "id": 99})).code,
+        "not_found"
+    );
+}
+
+#[test]
 fn the_notes_list_is_newest_first_and_shows_the_first_line() {
     let mut world = World::new();
     world.ok(json!({"op": "note.create", "body": "Older\nsecond line"}));

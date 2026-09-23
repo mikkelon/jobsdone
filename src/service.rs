@@ -205,6 +205,8 @@ impl Session<'_> {
             "note.create" => notes::create(self, fields),
             "note.update" => notes::update(self, fields),
             "note.delete" => notes::delete(self, fields),
+            "note.archive" => notes::archive(self, fields),
+            "note.unarchive" => notes::unarchive(self, fields),
             "note.check" => notes::check(self, fields),
 
             "settings.get" => config::settings_get(self, fields),

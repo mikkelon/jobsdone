@@ -210,10 +210,12 @@ pub(super) fn note(note: &Note) -> Value {
         "body": note.body,
         "created_at": note.created_at.to_string(),
         "updated_at": note.updated_at.to_string(),
+        "archived_at": note.archived_at.as_ref().map(ToString::to_string),
     })
 }
 
-/// The notes list, in the order the scratchpad draws it.
+/// The notes list or the archive, in the order the scratchpad draws it,
+/// and how many notes that list holds.
 pub(super) fn notes(model: &Model, view: &NotesView, include_body: bool) -> Value {
     let rows: Vec<Value> = view
         .rows
@@ -224,6 +226,7 @@ pub(super) fn notes(model: &Model, view: &NotesView, include_body: bool) -> Valu
                 "first_line": row.first_line,
                 "created_at": row.created_at.to_string(),
                 "updated_at": model.note(row.note).map(|note| note.updated_at.to_string()),
+                "archived_at": row.archived_at.as_ref().map(ToString::to_string),
             });
             if include_body
                 && let Some(found) = model.note(row.note)
@@ -234,7 +237,7 @@ pub(super) fn notes(model: &Model, view: &NotesView, include_body: bool) -> Valu
             entry
         })
         .collect();
-    json!({"notes": rows, "count": view.count})
+    json!({"notes": rows, "count": rows.len()})
 }
 
 pub(super) fn undo_entry(entry: &UndoEntry) -> Value {

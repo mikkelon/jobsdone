@@ -398,6 +398,51 @@ fn one_task_is_reordered_against_another_without_naming_the_rest() {
     );
 }
 
+#[test]
+fn a_note_is_archived_and_brought_back_from_the_command_line() {
+    let dir = scratch();
+    let data = dir.path();
+    ok(data, &["note", "create", "Mention to Anna"]);
+    ok(data, &["note", "create", "Milk"]);
+
+    let archived = ok(data, &["note", "archive", "1"]);
+    assert!(
+        archived.out.contains("Archived note 1."),
+        "{}",
+        archived.out
+    );
+
+    let listed = ok(data, &["note", "list"]);
+    assert!(!listed.out.contains("Mention to Anna"), "{}", listed.out);
+    let archive = ok(data, &["note", "list", "--archived"]);
+    assert!(
+        archive.out.contains("Mention to Anna · archived"),
+        "{}",
+        archive.out
+    );
+    assert!(!archive.out.contains("Milk"), "{}", archive.out);
+    let read = ok(data, &["note", "get", "1"]);
+    assert!(
+        read.out
+            .lines()
+            .next()
+            .unwrap_or_default()
+            .contains("· archived"),
+        "{}",
+        read.out
+    );
+
+    // Archiving it again is the rules saying no.
+    let again = run(data, &["--json", "note", "archive", "1"], None);
+    assert_eq!(again.code, 4, "{} {}", again.out, again.err);
+    assert_eq!(again.failure()["error"]["code"], "rejected");
+
+    ok(data, &["note", "unarchive", "1"]);
+    let listed = ok(data, &["--json", "note", "list"]).json();
+    assert_eq!(listed["data"]["count"], 2);
+    assert!(listed["data"]["notes"][1]["archived_at"].is_null());
+}
+
 // ---- text that is too big to be an argument -------------------------
 
 #[test]

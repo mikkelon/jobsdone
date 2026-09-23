@@ -237,6 +237,8 @@ const SAMPLES: &[(&str, &[&str])] = &[
     ("note create", &["note", "create"]),
     ("note update", &["note", "update", "1", "a thought"]),
     ("note delete", &["note", "delete", "1", "--yes"]),
+    ("note archive", &["note", "archive", "1"]),
+    ("note unarchive", &["note", "unarchive", "1"]),
     ("note check", &["note", "check", "1"]),
     ("note copy", &["note", "copy", "1"]),
     ("settings get", &["settings", "get"]),
@@ -253,6 +255,15 @@ const SAMPLES: &[(&str, &[&str])] = &[
     ("desktop", &["desktop", "--tiled"]),
     ("help", &["help"]),
 ];
+
+#[test]
+fn the_archive_is_listed_with_archived() {
+    let sent = request(&["note", "list", "--archived", "--bodies"]);
+    assert_eq!(sent["op"], "note.list");
+    assert_eq!(sent["archived"], true);
+    assert_eq!(sent["include_body"], true);
+    assert!(request(&["note", "list"]).get("archived").is_none());
+}
 
 #[test]
 fn every_command_in_the_table_parses_and_sends_its_own_operation() {

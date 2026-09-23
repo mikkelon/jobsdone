@@ -66,6 +66,53 @@ fn a_service_delete_on_another_sqlite_connection_recovers_the_dirty_editor() {
     assert_eq!(stored.note(recovery).unwrap().body, "baseline local");
 }
 
+/// Archiving keeps a note, so an editor open on one that another
+/// connection archives goes on saving into it and makes no recovery note.
+#[test]
+fn a_service_archive_on_another_sqlite_connection_keeps_the_editor_saving() {
+    use serde_json::json;
+
+    let dir = tempfile::tempdir().unwrap();
+    let path = dir.path().join("notes.db");
+    let mut other = Sqlite::open(&path).unwrap();
+    let created = service::execute(
+        &mut other,
+        json!({"op":"note.create", "body":"baseline"}),
+        &at(NOW),
+        DateOrder::DayFirst,
+    )
+    .unwrap();
+    let original = created["data"]["note"]["id"].as_i64().unwrap();
+    let mut app = App::new(
+        Box::new(Sqlite::open(&path).unwrap()),
+        Box::new(NoDesktop),
+        Locale::default(),
+        &at(NOW),
+    )
+    .unwrap();
+    app.update(Action::NotesPage);
+    app.update(Action::Confirm);
+    app.paste(Ok(" local".to_owned()));
+    service::execute(
+        &mut other,
+        json!({"op":"note.archive", "id":original}),
+        &at(NOW),
+        DateOrder::DayFirst,
+    )
+    .unwrap();
+    app.update(Action::Tick);
+    app.paste(Ok(" more".to_owned()));
+    app.update(Action::Tick);
+
+    let stored = other.load().unwrap();
+    assert_eq!(stored, *app.model());
+    assert_eq!(app.draft().unwrap().note, original, "no recovery note");
+    assert_eq!(stored.notes.len(), 1);
+    let note = stored.note(original).unwrap();
+    assert!(note.is_archived());
+    assert_eq!(note.body, "baseline local more");
+}
+
 #[test]
 fn a_cli_crlf_note_survives_editor_copy_and_database_reopen() {
     let dir = tempfile::tempdir().unwrap();

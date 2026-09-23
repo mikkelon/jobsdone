@@ -88,6 +88,10 @@ already have recycled IDs, and the migration cannot reconstruct that history.
 A stale ID returns conflict (exit 5) without changing data. Settings,
 dictionary edits, recurrence refresh and review gate changes are not undoable.
 
+`note archive ID` takes a note out of the list without deleting it and
+`note unarchive ID` brings it back; `note list --archived` lists the archive.
+An archived note can still be read, updated, checked and deleted by ID.
+
 Deletion respects `confirm_delete`: when enabled, explicitly pass `--yes`.
 The CLI never waits for an interactive confirmation.
 
@@ -120,6 +124,7 @@ queries do not require a display server.
 An open TUI reloads changes made by the CLI. If both edit the same note,
 the TUI preserves its unsaved text in a separate recovery note and keeps the
 CLI version intact. It does not attempt to merge the two bodies.
-If the CLI deletes a note with unsaved text in the TUI, that text is also saved
+If the CLI archives a note open in the TUI, the editor keeps saving into
+it; the note leaves the list when the editor is closed. If the CLI deletes a note with unsaved text in the TUI, that text is also saved
 in a recovery note; the original stays deleted. A failed recovery keeps the
 unsaved text in the editor until it can be saved or explicitly abandoned.

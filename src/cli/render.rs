@@ -597,11 +597,16 @@ impl Reading<'_> {
                         .map(|body| body.lines().next().unwrap_or_default().to_owned())
                 })
                 .unwrap_or_default();
+            // An archived note is dated by when it was archived, which is
+            // the order the archive is in.
+            let stamp = match text_at(note, "archived_at") {
+                Some(archived) => format!("archived {}", self.stamp(archived)),
+                None => self.stamp(text_at(note, "created_at").unwrap_or_default()),
+            };
             let _ = writeln!(
                 out,
-                "  {:>4}  {first} · {}",
+                "  {:>4}  {first} · {stamp}",
                 number_at(note, "id").unwrap_or_default(),
-                self.stamp(text_at(note, "created_at").unwrap_or_default())
             );
         }
         let _ = writeln!(
@@ -623,12 +628,16 @@ impl Reading<'_> {
         let mut out = String::new();
         let id = number_at(note, "id").unwrap_or_default();
         if self.op == "note.get" {
-            let _ = writeln!(
+            let _ = write!(
                 out,
                 "Note {id} · created {} · updated {}",
                 self.stamp(text_at(note, "created_at").unwrap_or_default()),
                 self.stamp(text_at(note, "updated_at").unwrap_or_default())
             );
+            if let Some(archived) = text_at(note, "archived_at") {
+                let _ = write!(out, " · archived {}", self.stamp(archived));
+            }
+            out.push('\n');
             out.push('\n');
             out.push_str(text_at(note, "body").unwrap_or_default());
             if !out.ends_with('\n') {
@@ -848,6 +857,8 @@ impl Reading<'_> {
             "note.create" => "Added note",
             "note.update" => "Rewrote note",
             "note.delete" => "Deleted note",
+            "note.archive" => "Archived note",
+            "note.unarchive" => "Unarchived note",
             "dictionary.add" => "Added",
             "dictionary.update" => "Changed",
             "dictionary.delete" => "Removed",

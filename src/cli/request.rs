@@ -547,12 +547,16 @@ count (integer 1..=50).",
     Spec {
         name: "note list",
         op: "note.list",
-        options: &[("--bodies", false)],
+        options: &[("--bodies", false), ("--archived", false)],
         view: View::Notes,
         then: Then::Nothing,
         summary: "the scratchpad notes, newest first",
-        usage: "jobsdone note list [--bodies]",
-        detail: "First lines only unless --bodies.\n\nJSON fields: include_body (bool).",
+        usage: "jobsdone note list [--bodies] [--archived]",
+        detail: "\
+First lines only unless --bodies. --archived lists the archived notes
+instead, the most recently archived first.
+
+JSON fields: include_body (bool), archived (bool).",
     },
     Spec {
         name: "note get",
@@ -604,6 +608,30 @@ JSON fields: id (integer), body (string).",
 while the confirm-before-delete setting is on.
 
 JSON fields: id (integer), confirm (bool).",
+    },
+    Spec {
+        name: "note archive",
+        op: "note.archive",
+        options: NO_OPTIONS,
+        view: View::Note,
+        then: Then::Nothing,
+        summary: "put a note out of the list without deleting it",
+        usage: "jobsdone note archive ID",
+        detail: "\
+An archived note is kept and can still be read, changed and deleted.
+note list --archived shows it.
+
+JSON fields: id (integer).",
+    },
+    Spec {
+        name: "note unarchive",
+        op: "note.unarchive",
+        options: NO_OPTIONS,
+        view: View::Note,
+        then: Then::Nothing,
+        summary: "bring an archived note back to the list",
+        usage: "jobsdone note unarchive ID",
+        detail: "JSON fields: id (integer).",
     },
     Spec {
         name: "note check",
@@ -1164,8 +1192,11 @@ pub fn fields(
             if present(options, "--bodies") {
                 out.insert("include_body".to_owned(), Value::Bool(true));
             }
+            if present(options, "--archived") {
+                out.insert("archived".to_owned(), Value::Bool(true));
+            }
         }
-        "note get" | "note copy" => {
+        "note get" | "note copy" | "note archive" | "note unarchive" => {
             if let Some(only) = needed(one(name, positionals)?, input, || want("a note id"))? {
                 out.insert("id".to_owned(), id(&only)?);
             }
