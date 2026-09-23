@@ -6,7 +6,7 @@ list, and review what yesterday left behind.
 ![A morning in jobsdone: review yesterday, plan today, focus the report, and complete a task](assets/demo.gif)
 
 - Organize tasks by day, set reminders, and schedule recurring work.
-- Keep notes with optional offline spell checking.
+- Keep notes, archive and filter them, with optional offline spell checking.
 - Work in a terminal that follows your theme, with your data stored locally.
 
 Built for Linux, with floating windows and a keyboard shortcut on Omarchy.

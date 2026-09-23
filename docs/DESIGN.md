@@ -122,8 +122,9 @@ still does everything.
 
 Conventions, so the map is guessable:
 
-- `j` `k` move; `h` `l` and `tab` switch pane (or tab when narrow); `J` `K`
-  reorder.
+- `j` `k` move; `h` `l` switch between panes side by side; `tab` switches
+  between tabs: the tabs of a narrow window, and Notes and Archive on the
+  notes page. `J` `K` reorder.
 - Lowercase acts on the cursor row: `space` done, `f` focus, `a` add,
   `e` edit, `x` delete, `t` to today, `b` to backlog, `m` move to a day,
   `d` due by, `r` remind on, `w` waiting, `y` copy. `R` opens the repeat
@@ -169,7 +170,9 @@ Conventions, so the map is guessable:
   keep their meaning there. The few
   extra actions a text field needs are on Alt plus a key (`alt-t` re-add
   from search, `alt-1` to `alt-4` quick dates). `Tab` moves focus to the
-  next control, where single keys work again.
+  next control, where single keys work again: from the date field to its
+  calendar, and from the notes filter to the list it narrows. An open
+  note is left with `Escape`; `Tab` there does nothing.
 - `j` and `k`, or the arrow keys, navigate every review step just as they
   navigate other lists. In the surfaced step, `s` means "leave in backlog":
   acknowledge the row in this review without changing or snoozing it.
@@ -372,8 +375,40 @@ is already on top whenever it is needed.
 
 A note has no title, so the list row is the first line of the body and how
 long ago the note was made, which is the order the list is in. The number
-of notes is already in the status line, so the list header names the key
-that makes another one instead.
+of notes is already in the status line, so the list header names `A`, the
+key that archives one, with the number already archived beside it.
+
+The left pane shows one of two lists, Notes or the Archive, and `tab`
+switches between them; the page is always opened on Notes. `A` on Notes
+archives the cursor note and on the Archive brings it back, and the
+cursor lands on the row that took its place, as after `x`. Both undo with
+`u`, and the hint bar says "Archived …" or "Unarchived …" with the note's
+first line. Archiving is a way to put a note away without deleting it, so
+it asks nothing, even with confirm-before-delete on. The Archive header is
+`Archive` and its count. Its rows are dated by when they were archived,
+most recent first, and an archived note's header says both instants:
+`Mon 22 Sep 09:12 · archived today`. An archived note opens and takes
+typing like any other; if another window archives the note being typed
+in, the editor keeps saving into it and the note is simply not in Notes
+when the editor is left. An empty archive says "Nothing archived." and
+that `A` on a note puts it there.
+
+`/` on the notes page opens a filter on the first line of the list showing,
+in place of task search. Letters type into it and the list narrows as they
+do: every word typed has to be in the note's body with its letters in
+order, and the best fits come first. The rows still show first lines and
+the note pane shows the cursor note. `↑`/`↓` move the cursor while typing,
+`Enter` opens the cursor note and `Escape` clears the filter. `Tab` hands
+the keyboard to the list with the filter still applied, where `A`, `x`
+and the other single keys work and `tab` switches lists, taking the filter
+with it; `/` goes back into the filter. The filter stays while a note is
+opened from it and after the note is left, until `Escape` on the list
+clears it. Leaving the page drops it. A filter that matches nothing says
+so, and that `Escape` clears it.
+
+In a narrow window Notes and the Archive are two stops of the one notes
+tab, which `tab` reaches after Backlog and leaves for Today; the tab reads
+ARCHIVE and counts the archived notes on its second stop.
 
 A note wider than the pane is wrapped at a space where there is one, and
 the rows it is wrapped into are the rows the caret moves through: `↑` and

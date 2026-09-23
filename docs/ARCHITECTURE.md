@@ -362,7 +362,7 @@ adds it here first, the way a new dependency is added to section 2 first.
     because `J` and `K` are one row called "reorder" and the arrow keys
     stand in for `j` and `k`;
   - `shown`: how those keys are written when the row is named, `J/K` or
-    `tab h/l`. A row with no keys at all, "type to filter", is a line of
+    `y/alt-y`. A row with no keys at all, "type to filter", is a line of
     the hint bar and nothing else;
   - `label`: what the row is called, in all three places. It is empty on
     a caption row, a row with no key that names the rows after it, which

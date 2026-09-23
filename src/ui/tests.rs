@@ -1313,8 +1313,8 @@ fn the_hint_bar_says_what_just_happened_and_offers_to_undo_it() {
         "the keys that fit follow: {bar:?}"
     );
     assert!(
-        !bar.contains("tab h/l pane"),
-        "the right end gives way first: {bar:?}"
+        !bar.contains("x delete") && bar.ends_with("h/l pane"),
+        "the keys that no longer fit are left out whole: {bar:?}"
     );
 }
 

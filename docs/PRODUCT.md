@@ -116,7 +116,12 @@ mention X" or drafting a message before sending it.
 - Notes are independent of tasks. They are not attached to or linked from
   anything.
 - Notes are created and thrown away individually. A note stays until it is
-  deleted; there is no automatic expiry or cleanup.
+  deleted or archived; there is no automatic expiry or cleanup.
+- Archiving puts a note out of the way without throwing it away; archived
+  notes are kept, can be opened and edited, and come back with the same key.
+  The scratchpad is still not a place to organise notes: there are no
+  folders, tags, or titles.
+- Either list can be filtered by typing a few letters of what a note says.
 - Notes are not long-term storage and the product does not try to organise
   them.
 

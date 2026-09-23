@@ -333,7 +333,7 @@ impl Bar {
 pub struct Binding {
     /// Every key that runs the row, with the action it means.
     pub keys: &'static [(&'static str, Action)],
-    /// How the keys are written when the row is named: `J/K`, `tab h/l`,
+    /// How the keys are written when the row is named: `J/K`, `y/alt-y`,
     /// `[ ]`. A row with no keys at all, such as "type to filter", is a
     /// line of the hint bar and nothing else.
     pub shown: &'static str,

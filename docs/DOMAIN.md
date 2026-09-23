@@ -29,6 +29,7 @@ through every wireframe and names the view it is drawn from.
 | copy            | A task created by a schedule for one date. Ordinary from then on.        |
 | review          | The two-step morning pass over the pile and the surfaced tasks.          |
 | note            | A plain-text scratchpad entry.                                           |
+| archived        | A live note put out of the notes list without being deleted.             |
 | command         | One change to the model. Every command has an inverse.                   |
 | settings        | The fourteen values that change what the rules do. Section 19.           |
 
@@ -379,7 +380,8 @@ as if it had been removed. Deleting a task that was closed on a past day
 removes it from that day's record. That is the one deliberate act of
 forgetting the product has, and it is undoable.
 
-Notes are deleted the same way.
+Notes are deleted the same way. Archiving a note is not deleting it: an
+archived note is live, and deleting one works as for any other note.
 
 ### Undo
 
@@ -403,6 +405,10 @@ signed 64-bit counter rejects the operation without writes.
 - UI note typing (`EditNote`), copy generation, starting a review, and undo
   itself push nothing. A deliberate CLI note replacement (`ReplaceNote`) is one
   undoable operation.
+- Undoing `UnarchiveNote` puts the note back at the `archived_at` it had
+  rather than now, so it returns to its place in the archive's order. The
+  inverse carries the old instant, as `RestoreNoteBody` carries the old
+  body.
 - After a reload (another instance wrote), the stack is reloaded with
   everything else.
 
@@ -468,7 +474,15 @@ is one of the task commands above, or nothing at all in the case of
 |-----------------------|--------------|------------------------------|-------------------|
 | CreateNote            |              | New empty note, `created_at` = now. | DeleteNote  |
 | EditNote(note, body)  | live         | Sets body, `updated_at` = now. Not undoable. | none |
+| ReplaceNote(note, body) | live       | Sets body, `updated_at` = now. | RestoreNoteBody(old body, old `updated_at`) |
 | DeleteNote(note)      | live         | `deleted_at` = now.          | RestoreNote       |
+| ArchiveNote(note)     | live, not archived | `archived_at` = now.   | UnarchiveNote     |
+| UnarchiveNote(note)   | live, archived | `archived_at` none.        | RearchiveNote(old `archived_at`) |
+
+Every command but EditNote works on an archived note as on any other.
+Labels: "Added a note", "Replaced a note", "Deleted a note", and "Archived
+…" and "Unarchived …" naming the note's first line, or "a note" when it
+is blank.
 
 ### Settings
 
@@ -539,7 +553,7 @@ to say what it did to it, and `u` is on the same line.
 Results in two groups: open tasks (their place and flags beside them),
 then closed tasks by place day, newest first. Each recurring copy is its
 own row, marked `↻`. Enter goes to the task's place day. Notes are not
-searched.
+searched: they are filtered on their own page (section 15).
 
 The empty result offers to add the typed text as a task on today. A
 result offers the same thing under `alt-t`, with its own title: a task
@@ -556,12 +570,26 @@ rewrite that day's record.
 | created_at | instant         |
 | updated_at | instant         |
 | deleted_at | instant or none |
+| archived_at | instant or none |
 
-The list is ordered by `created_at`, newest first, and editing does not
-move a note. The list row shows the first line of the body and
+A live note is in one of two lists: the notes, where `archived_at` is
+none, or the archive. Archived notes never expire and are not in the note
+count the home page shows.
+
+The notes list is ordered by `created_at`, newest first, and editing does
+not move a note. The list row shows the first line of the body and
 `created_at`, which the screen renders as an age. It is the age of the
 note rather than of its last edit, because that is the order the list is
-already in.
+already in. The archive is ordered by `archived_at`, newest first, ties
+by the higher id, and its rows show the age since archiving for the same
+reason.
+
+A filter narrows whichever list is shown. Its text is split on
+whitespace, and a note matches when every word is in its whole body as a
+subsequence, ignoring case and Unicode composition. Matches are ranked by
+how well the letters fit: at word starts and in runs score more, gaps
+cost. Ties keep the list's own order. The filter is application state,
+not model state.
 
 ## 16. Several instances
 
@@ -637,6 +665,7 @@ CREATE TABLE notes (
     updated_at  TEXT NOT NULL,
     deleted_at  TEXT
 );
+-- archived_at TEXT, added by the fifth migration.
 
 CREATE TABLE meta (
     key    TEXT PRIMARY KEY,
@@ -680,6 +709,11 @@ the persisted counter (and rejects missing or invalid counters), then an after-i
 trigger advances the counter in the same transaction. An old client may append a
 fresh ID, but an attempted reuse fails atomically as a conflict.
 
+The fifth migration adds `notes.archived_at`, a nullable instant. The note
+upsert names its columns, so a client started before the migration that saves
+a body into an archived note leaves `archived_at` as it is; it shows archived
+notes as live until it is restarted.
+
 Opening a database acquires a SQLite immediate transaction before reading its
 schema version. All pending migrations and version updates commit together;
 failure rolls back the entire sequence. Concurrent openers reread the version
@@ -717,21 +751,22 @@ is drawn from.
 | 01 Review: the pile     | pile (13) grouped by day; focus flag; repeat chip; review session for handled rows and progress |
 | 02 Review: surfaced     | due, remind, copies-today (13); waiting flag for dimming; review session for progress            |
 | 03 Today + backlog      | day view for today (6); backlog view (7); pile size for the count; note count (15)              |
-| 04 Half-width tile      | the same two views, one at a time                                                               |
+| 04 Half-width tile      | the same two views, one at a time; the archive (15) as the fourth tab                           |
 | 05 Task states          | AddTask, EditTitle and the copy question, Reorder, SetFocus, Close, Move, DeleteTask and its undo label (12) |
 | 06 Due, remind, waiting | SetDue, SetRemind, SetWaiting (12); chips and the Waiting group (6, 7)                          |
 | 07 Repeat               | rule shapes and `next_dates` (10); CreateSchedule, SetRule, StopSchedule; the schedule list (7) |
 | 08 History              | day view for a past day (6) including Moved; day list with counts (6)                            |
 | 09 Search               | matches (14); place day; `↻` from `schedule_id`                                                 |
-| 10 Scratchpad           | notes (15); CreateNote, EditNote, DeleteNote                                                    |
+| 10 Scratchpad           | notes and the archive (15); CreateNote, EditNote, DeleteNote, ArchiveNote, UnarchiveNote; the filter |
 | 11 Palette and help     | the command list (12) and the key map in DESIGN.md; no model state                              |
-| 12 Empty states         | every view above when its contents are empty; the empty search's AddTask                        |
+| 12 Empty states         | every view above when its contents are empty, the archive included; the empty search's AddTask   |
 | 13 Settings             | the settings (19); `change_settings` and the sentence it refuses an empty week with             |
 
-Three things the wireframes show that are not model state: the "moving"
-marker during a reorder, the text of a title being edited, and the number
-or size being typed on a settings row. All three are application state
-that becomes a command on Enter.
+Four things the wireframes show that are not model state: the "moving"
+marker during a reorder, the text of a title being edited, the number or
+size being typed on a settings row, and the notes filter. The first three
+are application state that becomes a command on Enter; the filter only
+narrows a view.
 
 ## 19. Settings
 
