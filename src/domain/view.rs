@@ -174,11 +174,14 @@ pub struct DayListRow {
     pub open: usize,
 }
 
-/// The scratchpad's list, and the count the home page shows beside `n`.
+/// One of the scratchpad's two lists, the notes or the archive, with
+/// the count of each. `count` is the notes in the list, which is what
+/// the home page shows beside `n`; archived notes are not in it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct NotesView {
     pub rows: Vec<NoteRow>,
     pub count: usize,
+    pub archived: usize,
 }
 
 /// A note as the list draws it: its first line stands for the whole body,
@@ -190,6 +193,8 @@ pub struct NoteRow {
     pub note: Id,
     pub first_line: String,
     pub created_at: Zoned,
+    /// When the note was archived, which is the age an archive row shows.
+    pub archived_at: Option<Zoned>,
 }
 
 // ---- the views -------------------------------------------------------
@@ -510,22 +515,46 @@ fn stretch_of(day: Date, today: Date, start: WeekStart) -> Stretch {
     }
 }
 
-/// The live notes, newest first. Editing does not move a note, so the
-/// order is the order they were created in (DOMAIN.md section 15).
+/// The live notes that are not archived, newest first. Editing does not
+/// move a note, so the order is the order they were created in (DOMAIN.md
+/// section 15).
 pub fn notes(model: &Model) -> NotesView {
-    let mut live: Vec<&Note> = model.notes.values().filter(|note| note.is_live()).collect();
-    live.sort_by(|a, b| b.created_at.cmp(&a.created_at).then(b.id.cmp(&a.id)));
-
+    let (mut listed, archived) = live_notes(model);
+    listed.sort_by(|a, b| b.created_at.cmp(&a.created_at).then(b.id.cmp(&a.id)));
     NotesView {
-        count: live.len(),
-        rows: live
-            .into_iter()
-            .map(|note| NoteRow {
-                note: note.id,
-                first_line: note.body.lines().next().unwrap_or_default().to_owned(),
-                created_at: note.created_at.clone(),
-            })
-            .collect(),
+        count: listed.len(),
+        archived: archived.len(),
+        rows: listed.into_iter().map(note_row).collect(),
+    }
+}
+
+/// The archived notes, the most recently archived first (DOMAIN.md
+/// section 15).
+pub fn archived_notes(model: &Model) -> NotesView {
+    let (listed, mut archived) = live_notes(model);
+    archived.sort_by(|a, b| b.archived_at.cmp(&a.archived_at).then(b.id.cmp(&a.id)));
+    NotesView {
+        count: listed.len(),
+        archived: archived.len(),
+        rows: archived.into_iter().map(note_row).collect(),
+    }
+}
+
+/// The live notes, split into those in the list and those archived.
+fn live_notes(model: &Model) -> (Vec<&Note>, Vec<&Note>) {
+    model
+        .notes
+        .values()
+        .filter(|note| note.is_live())
+        .partition(|note| !note.is_archived())
+}
+
+fn note_row(note: &Note) -> NoteRow {
+    NoteRow {
+        note: note.id,
+        first_line: note.body.lines().next().unwrap_or_default().to_owned(),
+        created_at: note.created_at.clone(),
+        archived_at: note.archived_at.clone(),
     }
 }
 

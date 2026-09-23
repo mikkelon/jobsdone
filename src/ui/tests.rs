@@ -252,6 +252,7 @@ fn wireframe_model() -> Model {
                 created_at: made.clone(),
                 updated_at: made,
                 deleted_at: None,
+                archived_at: None,
             },
         );
     }
@@ -399,6 +400,7 @@ fn history_model() -> Model {
                 created_at: made.clone(),
                 updated_at: made,
                 deleted_at: None,
+                archived_at: None,
             },
         );
     }
@@ -2119,6 +2121,7 @@ fn a_note_of_wide_characters_wraps_and_puts_its_caret_by_cells() {
             created_at: at(NOW),
             updated_at: at(NOW),
             deleted_at: None,
+            archived_at: None,
         },
     );
     let mut app = app_on(MemStore::holding(model));
@@ -3460,6 +3463,7 @@ fn note_open(body: &str, width: u16, height: u16) -> App {
             created_at: at(NOW),
             updated_at: at(NOW),
             deleted_at: None,
+            archived_at: None,
         },
     );
     let mut app = app_on(MemStore::holding(model));

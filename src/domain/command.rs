@@ -107,6 +107,14 @@ pub enum Command {
     DeleteNote {
         note: Id,
     },
+    /// Puts a note out of the list without throwing it away.
+    ArchiveNote {
+        note: Id,
+    },
+    /// Brings an archived note back to the list.
+    UnarchiveNote {
+        note: Id,
+    },
 
     // The inverses, which say more than a user ever does.
     /// The inverse of Move, of Close, and of the move inside SetWaiting:
@@ -154,6 +162,13 @@ pub enum Command {
         body: String,
         updated_at: Zoned,
     },
+    /// The inverse of UnarchiveNote: the note goes back into the archive
+    /// at the instant it was archived before, so that it takes its old
+    /// place in the archive's order rather than the top of it.
+    RearchiveNote {
+        note: Id,
+        archived_at: Zoned,
+    },
     /// The inverse of one operation made of several commands: the
     /// inverses of those commands in the order they undo, which is the
     /// reverse of the order they were applied in. It is serialised like
@@ -179,6 +194,7 @@ impl Command {
                 | Command::ResumeSchedule { .. }
                 | Command::RestoreNote { .. }
                 | Command::RestoreNoteBody { .. }
+                | Command::RearchiveNote { .. }
                 | Command::Sequence(_)
         )
     }
@@ -355,9 +371,12 @@ fn task_of(command: &Command) -> Option<Id> {
         | Command::EditNote { .. }
         | Command::ReplaceNote { .. }
         | Command::DeleteNote { .. }
+        | Command::ArchiveNote { .. }
+        | Command::UnarchiveNote { .. }
         | Command::ResumeSchedule { .. }
         | Command::RestoreNote { .. }
-        | Command::RestoreNoteBody { .. } => None,
+        | Command::RestoreNoteBody { .. }
+        | Command::RearchiveNote { .. } => None,
         // The task the operation as a whole was about, which is the one
         // the first of its commands that was about a task named.
         Command::Sequence(commands) => commands.iter().find_map(task_of),
@@ -755,6 +774,7 @@ fn run(
                     created_at: now.clone(),
                     updated_at: now.clone(),
                     deleted_at: None,
+                    archived_at: None,
                 },
             );
             Ok(Entry::new(
@@ -798,6 +818,39 @@ fn run(
             Ok(Entry::new(
                 "Deleted a note".to_owned(),
                 Command::RestoreNote { note: *note },
+            ))
+        }
+
+        Command::ArchiveNote { note } => {
+            let current = live_note(model, *note)?;
+            if current.is_archived() {
+                return Err(Rejected("That note is already archived.".to_owned()));
+            }
+            let first = first_line(&current.body);
+            if let Some(note) = model.notes.get_mut(note) {
+                note.archived_at = Some(now.clone());
+            }
+            Ok(Entry::new(
+                format!("Archived {}", named_note(&first)),
+                Command::UnarchiveNote { note: *note },
+            ))
+        }
+
+        Command::UnarchiveNote { note } => {
+            let current = live_note(model, *note)?;
+            let Some(was) = current.archived_at.clone() else {
+                return Err(Rejected("That note is not archived.".to_owned()));
+            };
+            let first = first_line(&current.body);
+            if let Some(note) = model.notes.get_mut(note) {
+                note.archived_at = None;
+            }
+            Ok(Entry::new(
+                format!("Unarchived {}", named_note(&first)),
+                Command::RearchiveNote {
+                    note: *note,
+                    archived_at: was,
+                },
             ))
         }
 
@@ -902,6 +955,17 @@ fn run(
             if let Some(note) = model.notes.get_mut(note) {
                 note.body = body.clone();
                 note.updated_at = updated_at.clone();
+            }
+            Ok(None)
+        }
+
+        Command::RearchiveNote { note, archived_at } => {
+            let current = live_note(model, *note)?;
+            if current.is_archived() {
+                return Err(Rejected("That note is already archived.".to_owned()));
+            }
+            if let Some(note) = model.notes.get_mut(note) {
+                note.archived_at = Some(archived_at.clone());
             }
             Ok(None)
         }
@@ -1059,6 +1123,20 @@ fn named(title: &str) -> String {
         Some((at, _)) => format!("\"{}…\"", title[..at].trim_end()),
         None => format!("\"{title}\""),
     }
+}
+
+/// A note as a label names it: its first line in quotes, or "a note"
+/// when that line is blank.
+fn named_note(first_line: &str) -> String {
+    if first_line.trim().is_empty() {
+        "a note".to_owned()
+    } else {
+        named(first_line.trim())
+    }
+}
+
+fn first_line(body: &str) -> String {
+    body.lines().next().unwrap_or_default().to_owned()
 }
 
 /// The most characters of a title a label quotes.

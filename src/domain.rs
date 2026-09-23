@@ -37,8 +37,9 @@ pub use self::settings::{
 pub use self::system::{generate_copies, start_review};
 pub use self::view::{
     BacklogView, DayCounts, DayList, DayListRow, DayStretch, DayView, DueChip, NoteRow, NotesView,
-    Pile, PileDay, Row, ScheduleRow, SearchResults, Stretch, Surfaced, backlog_view, day_list,
-    day_view, notes, pile, pile_again, previous_review, search, surfaced, surfaced_again,
+    Pile, PileDay, Row, ScheduleRow, SearchResults, Stretch, Surfaced, archived_notes,
+    backlog_view, day_list, day_view, notes, pile, pile_again, previous_review, search, surfaced,
+    surfaced_again,
 };
 
 /// What the domain is told about the world outside it: the instant the

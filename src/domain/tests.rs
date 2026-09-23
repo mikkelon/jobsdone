@@ -2735,6 +2735,243 @@ fn the_note_list_is_newest_first_and_shows_the_first_line() {
     assert_eq!(view.rows[0].note, first);
 }
 
+/// The note most recently made, with a body.
+fn new_note(world: &mut World, body: &str) -> Id {
+    world.must(Command::CreateNote);
+    let note = world
+        .model
+        .notes
+        .keys()
+        .copied()
+        .next_back()
+        .expect("a note");
+    world.must(Command::EditNote {
+        note,
+        body: body.to_owned(),
+    });
+    note
+}
+
+#[test]
+fn an_archived_note_leaves_the_list_and_is_kept() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let note = new_note(&mut world, "Mention to Anna:\n- CI runner budget");
+    let other = new_note(&mut world, "Milk");
+
+    world.clock("2026-09-08T10:00:00");
+    world.must(Command::ArchiveNote { note });
+
+    let archived = world.model.note(note).expect("the note");
+    assert!(archived.is_live(), "archived is not deleted");
+    assert_eq!(archived.archived_at, Some(world.now.clone()));
+    assert_eq!(
+        world.model.undo.last().map(|entry| entry.label.as_str()),
+        Some("Archived \"Mention to Anna:\"")
+    );
+
+    let list = notes(&world.model);
+    assert_eq!(
+        list.rows.iter().map(|row| row.note).collect::<Vec<_>>(),
+        [other]
+    );
+    assert_eq!(
+        list.count, 1,
+        "an archived note is not counted with the notes"
+    );
+    assert_eq!(list.archived, 1);
+
+    let archive = archived_notes(&world.model);
+    assert_eq!(
+        archive.rows.iter().map(|row| row.note).collect::<Vec<_>>(),
+        [note]
+    );
+    assert_eq!(archive.rows[0].first_line, "Mention to Anna:");
+    assert_eq!(archive.rows[0].archived_at, Some(world.now.clone()));
+
+    // Nothing expires an archived note.
+    world.clock("2027-09-07T09:00:00");
+    assert_eq!(archived_notes(&world.model).rows.len(), 1);
+}
+
+#[test]
+fn archiving_is_taken_back_with_undo() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let note = new_note(&mut world, "Milk");
+    world.must(Command::ArchiveNote { note });
+
+    let undone = world.undo();
+    assert_eq!(undone.dropped, None);
+    assert_eq!(world.model.note(note).expect("the note").archived_at, None);
+    assert_eq!(notes(&world.model).count, 1);
+}
+
+#[test]
+fn an_archive_is_in_the_order_notes_were_archived_in() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let first = new_note(&mut world, "First");
+    let second = new_note(&mut world, "Second");
+    let third = new_note(&mut world, "Third");
+
+    world.clock("2026-09-08T09:00:00");
+    world.must(Command::ArchiveNote { note: second });
+    world.clock("2026-09-09T09:00:00");
+    world.must(Command::ArchiveNote { note: first });
+    world.must(Command::ArchiveNote { note: third });
+
+    let order: Vec<Id> = archived_notes(&world.model)
+        .rows
+        .iter()
+        .map(|row| row.note)
+        .collect();
+    assert_eq!(
+        order,
+        [third, first, second],
+        "newest archived first, a tie broken by the higher id"
+    );
+}
+
+/// Taking back an unarchive puts the note back at the instant it was
+/// archived, so it returns to its old place in the archive rather than
+/// the top of it.
+#[test]
+fn an_unarchived_note_undoes_back_to_its_place_in_the_archive() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let older = new_note(&mut world, "Older");
+    let newer = new_note(&mut world, "Newer");
+    world.must(Command::ArchiveNote { note: older });
+    let archived_at = world.now.clone();
+    world.clock("2026-09-08T09:00:00");
+    world.must(Command::ArchiveNote { note: newer });
+
+    world.clock("2026-09-09T09:00:00");
+    world.must(Command::UnarchiveNote { note: older });
+    assert_eq!(world.model.note(older).expect("the note").archived_at, None);
+    assert_eq!(
+        world.model.undo.last().map(|entry| entry.label.as_str()),
+        Some("Unarchived \"Older\"")
+    );
+
+    world.clock("2026-09-10T09:00:00");
+    world.undo();
+    assert_eq!(
+        world.model.note(older).expect("the note").archived_at,
+        Some(archived_at)
+    );
+    let order: Vec<Id> = archived_notes(&world.model)
+        .rows
+        .iter()
+        .map(|row| row.note)
+        .collect();
+    assert_eq!(order, [newer, older]);
+}
+
+#[test]
+fn a_note_is_archived_only_from_the_list_and_unarchived_only_from_the_archive() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let note = new_note(&mut world, "Milk");
+
+    assert_eq!(
+        world.refuse(Command::UnarchiveNote { note }),
+        "That note is not archived."
+    );
+    world.must(Command::ArchiveNote { note });
+    assert_eq!(
+        world.refuse(Command::ArchiveNote { note }),
+        "That note is already archived."
+    );
+
+    world.must(Command::DeleteNote { note });
+    assert_eq!(
+        world.refuse(Command::UnarchiveNote { note }),
+        "That note is gone."
+    );
+    assert_eq!(
+        world.refuse(Command::ArchiveNote { note: note + 1 }),
+        "That note is gone."
+    );
+}
+
+#[test]
+fn an_archived_note_is_edited_replaced_and_deleted_like_any_other() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let note = new_note(&mut world, "Milk");
+    world.must(Command::ArchiveNote { note });
+
+    world.must(Command::EditNote {
+        note,
+        body: "Milk\nBread".to_owned(),
+    });
+    world.must(Command::ReplaceNote {
+        note,
+        body: "Eggs".to_owned(),
+    });
+    assert_eq!(world.model.note(note).expect("the note").body, "Eggs");
+    assert!(world.model.note(note).expect("the note").is_archived());
+
+    world.must(Command::DeleteNote { note });
+    assert!(archived_notes(&world.model).rows.is_empty());
+    assert_eq!(archived_notes(&world.model).archived, 0);
+
+    world.undo();
+    let back = world.model.note(note).expect("the note");
+    assert!(back.is_live());
+    assert!(
+        back.is_archived(),
+        "a deleted archived note comes back archived"
+    );
+}
+
+#[test]
+fn a_note_with_a_blank_first_line_is_named_a_note() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let note = new_note(&mut world, "");
+    world.must(Command::ArchiveNote { note });
+    assert_eq!(
+        world.model.undo.last().map(|entry| entry.label.as_str()),
+        Some("Archived a note")
+    );
+}
+
+#[test]
+fn nobody_may_ask_for_a_rearchive() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let note = new_note(&mut world, "Milk");
+    let now = world.now.clone();
+    assert_eq!(
+        world.refuse(Command::RearchiveNote {
+            note,
+            archived_at: now,
+        }),
+        "That is not a change anything may ask for."
+    );
+}
+
+/// An undo entry is kept as JSON in the database, so the names the
+/// inverses are written under are part of the schema.
+#[test]
+fn the_archive_inverses_are_written_under_stable_names() {
+    let at: Zoned = "2026-09-07T09:00:00+02:00[Europe/Copenhagen]"
+        .parse()
+        .expect("an instant");
+    assert_eq!(
+        serde_json::to_string(&Command::UnarchiveNote { note: 3 }).expect("json"),
+        r#"{"UnarchiveNote":{"note":3}}"#
+    );
+    let rearchive = Command::RearchiveNote {
+        note: 3,
+        archived_at: at,
+    };
+    let json = serde_json::to_string(&rearchive).expect("json");
+    assert_eq!(
+        json,
+        r#"{"RearchiveNote":{"note":3,"archived_at":"2026-09-07T09:00:00+02:00[Europe/Copenhagen]"}}"#
+    );
+    assert_eq!(
+        serde_json::from_str::<Command>(&json).expect("a command"),
+        rearchive
+    );
+}
+
 // ---- several instances -----------------------------------------------
 
 #[test]

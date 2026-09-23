@@ -116,7 +116,7 @@ fn a_fresh_database_is_migrated_to_the_latest_schema() {
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user_version");
 
-    assert_eq!(user_version, 4);
+    assert_eq!(user_version, 5);
     assert_eq!(store.load().expect("load"), Model::empty());
 }
 
@@ -273,6 +273,9 @@ fn load_gives_back_the_whole_model() {
         body: "remember to mention X\nand Y".to_owned(),
     });
     world.run(Command::DeleteNote { note: notes[1] });
+    world.run(Command::CreateNote);
+    let archived = *world.model.notes.keys().next_back().expect("a note");
+    world.run(Command::ArchiveNote { note: archived });
 
     world.clock("2026-09-08T09:00:00+02:00[Europe/Copenhagen]");
     world.commit(&domain::generate_copies(&world.model.clone(), &world.now));
@@ -283,7 +286,8 @@ fn load_gives_back_the_whole_model() {
 
     assert!(world.model.tasks.len() > 8);
     assert_eq!(world.model.schedules.len(), 2);
-    assert_eq!(world.model.notes.len(), 2);
+    assert_eq!(world.model.notes.len(), 3);
+    assert!(world.model.notes.values().any(|note| note.is_archived()));
     assert!(!world.model.undo.is_empty());
     assert_eq!(world.reopened(), world.model);
 }
@@ -428,7 +432,7 @@ fn a_database_without_the_dictionary_gains_it_and_keeps_what_it_had() {
         .conn
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user_version");
-    assert_eq!(user_version, 4);
+    assert_eq!(user_version, 5);
 
     let model = store.load().expect("load");
     assert_eq!(
@@ -451,6 +455,60 @@ fn a_database_without_the_dictionary_gains_it_and_keeps_what_it_had() {
 }
 
 #[test]
+fn a_note_written_before_the_archive_existed_is_in_the_list() {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let path = dir.path().join("jobsdone.db");
+    let conn = Connection::open(&path).expect("a new database");
+    for (number, sql) in MIGRATIONS.iter().filter(|(number, _)| *number < 5) {
+        conn.execute_batch(&format!("BEGIN;\n{sql}\nCOMMIT;"))
+            .unwrap_or_else(|error| panic!("migration {number}: {error}"));
+    }
+    conn.execute(
+        "INSERT INTO notes (id, body, created_at, updated_at, deleted_at)
+         VALUES (1, 'Milk', ?1, ?1, NULL)",
+        params!["2026-09-07T09:00:00+02:00[Europe/Copenhagen]"],
+    )
+    .expect("a note written before the archive existed");
+    drop(conn);
+
+    let store = Sqlite::open(&path).expect("the same database again");
+    let note = store.load().expect("load").notes[&1].clone();
+    assert_eq!(note.body, "Milk");
+    assert!(!note.is_archived());
+}
+
+/// A client started before the archive existed keeps running until it
+/// is restarted. Its note upsert names its columns, so saving a body into
+/// a note that has since been archived leaves the archive alone.
+#[test]
+fn an_older_client_saving_a_note_leaves_its_archive_alone() {
+    let mut world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
+    world.run(Command::CreateNote);
+    let note = *world.model.notes.keys().next().expect("the note");
+    world.run(Command::ArchiveNote { note });
+
+    let conn = Connection::open(&world.path).expect("the database again");
+    conn.execute(
+        "INSERT INTO notes (id, body, created_at, updated_at, deleted_at)
+         VALUES (?1, 'Typed by the old client', ?2, ?2, NULL)
+         ON CONFLICT (id) DO UPDATE SET
+             body = excluded.body, created_at = excluded.created_at,
+             updated_at = excluded.updated_at, deleted_at = excluded.deleted_at",
+        params![note, "2026-09-07T10:00:00+02:00[Europe/Copenhagen]"],
+    )
+    .expect("the old upsert");
+    drop(conn);
+
+    let reopened = world.reopened();
+    let saved = reopened.note(note).expect("the note");
+    assert_eq!(saved.body, "Typed by the old client");
+    assert_eq!(
+        saved.archived_at,
+        world.model.note(note).unwrap().archived_at
+    );
+}
+
+#[test]
 fn a_database_at_the_latest_schema_is_opened_without_migrating_it_again() {
     let mut world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
     let change = domain::add_dictionary_word(&world.model, "Ratatui").expect("the word");
@@ -462,7 +520,7 @@ fn a_database_at_the_latest_schema_is_opened_without_migrating_it_again() {
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user_version");
 
-    assert_eq!(user_version, 4);
+    assert_eq!(user_version, 5);
     assert_eq!(
         again.load().expect("load").personal_dictionary,
         world.model.personal_dictionary
@@ -1157,7 +1215,7 @@ fn undo_migration_preserves_existing_rows_and_initializes_from_stack() {
     world
         .store
         .conn
-        .execute_batch("DROP TRIGGER undo_identity_guard; DROP TRIGGER undo_identity_advance; DELETE FROM meta WHERE key = 'undo_high_water'; PRAGMA user_version = 3;")
+        .execute_batch("DROP TRIGGER undo_identity_guard; DROP TRIGGER undo_identity_advance; DELETE FROM meta WHERE key = 'undo_high_water'; ALTER TABLE notes DROP COLUMN archived_at; PRAGMA user_version = 3;")
         .unwrap();
     let before = world.model.clone();
     let upgraded = Sqlite::open(&world.path).unwrap();

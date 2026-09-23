@@ -127,11 +127,19 @@ pub struct Note {
     pub created_at: Zoned,
     pub updated_at: Zoned,
     pub deleted_at: Option<Zoned>,
+    /// When the note was put out of the way. An archived note is still
+    /// live: it is kept, can be opened and edited, and comes back with
+    /// `UnarchiveNote` (DOMAIN.md section 15).
+    pub archived_at: Option<Zoned>,
 }
 
 impl Note {
     pub fn is_live(&self) -> bool {
         self.deleted_at.is_none()
+    }
+
+    pub fn is_archived(&self) -> bool {
+        self.archived_at.is_some()
     }
 }
 
