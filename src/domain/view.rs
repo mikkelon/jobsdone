@@ -492,7 +492,7 @@ pub fn day_list(model: &Model, today: Date) -> DayList {
 
 /// The first day of the week a date is in, on the day the settings say
 /// a week begins on.
-fn week_start_of(date: Date, start: WeekStart) -> Date {
+pub(super) fn week_start_of(date: Date, start: WeekStart) -> Date {
     // `Weekday::of` counts from Monday, so a Sunday-start week is the
     // same count shifted round by one.
     let gone = match start {

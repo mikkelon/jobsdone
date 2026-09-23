@@ -1424,7 +1424,7 @@ fn the_date_card_types_picks_and_walks_the_month() {
     assert!(text.contains("Due by Write the Q4 planning doc"));
     assert!(text.contains("alt-r remind on"), "the card's other mode");
     assert!(text.contains("Tue 30 Sep"), "what the typed date reads as");
-    assert!(text.contains("alt-3"));
+    assert!(text.contains("alt-4"));
     assert!(text.contains("In a week"));
     assert!(text.contains("no due date"), "what clearing answers");
     assert!(text.contains("September 2025"));

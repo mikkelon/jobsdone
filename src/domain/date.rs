@@ -10,7 +10,8 @@ use jiff::civil::Date;
 use jiff::{Span, Zoned};
 
 use super::rule::{Rule, Weekday, next_dates};
-use super::settings::{DateOrder, WorkDays};
+use super::settings::{DateOrder, WeekStart, WorkDays};
+use super::view::week_start_of;
 
 /// `Fri 5 Sep`, or `Fri Sep 5` where the month comes first.
 pub fn day_label(date: Date, order: DateOrder) -> String {
@@ -35,6 +36,21 @@ pub fn stamp_label(instant: &Zoned, order: DateOrder) -> String {
         day_label(instant.date(), order),
         instant.strftime("%H:%M")
     )
+}
+
+/// The last work day of the week today is in, or of the next week once
+/// that day has passed. Today is the end of the week when it is that day.
+pub fn end_of_week(today: Date, start: WeekStart, work_days: &WorkDays) -> Option<Date> {
+    let first = week_start_of(today, start);
+    let last = (0..7)
+        .rev()
+        .filter_map(|days| first.checked_add(Span::new().days(days)).ok())
+        .find(|day| work_days.contains(Weekday::of(*day)))?;
+    if last >= today {
+        Some(last)
+    } else {
+        last.checked_add(Span::new().days(7)).ok()
+    }
 }
 
 /// How far ahead a day of the month with no month named is looked for.

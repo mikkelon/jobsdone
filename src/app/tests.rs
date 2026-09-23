@@ -1604,6 +1604,32 @@ fn a_quick_pick_is_the_answer_and_closes_the_card() {
 }
 
 #[test]
+fn the_end_of_the_week_pick_is_the_last_work_day_of_it() {
+    let (mut app, task) = with_a_backlog_task("Send the invoice");
+
+    app.update(Action::DueBy);
+    let picks: Vec<&str> = app
+        .date_choices()
+        .iter()
+        .map(|choice| choice.label)
+        .collect();
+    app.update(Action::EndOfWeek);
+
+    assert_eq!(
+        picks[..5],
+        [
+            "Tomorrow",
+            "End of week",
+            "Next Monday",
+            "In a week",
+            "End of month"
+        ]
+    );
+    // Today is a Friday, which is the last work day of its week.
+    assert_eq!(due_on(&app, task).as_deref(), Some("2025-09-05"));
+}
+
+#[test]
 fn the_calendar_walks_days_and_months_once_tab_is_pressed() {
     let (mut app, task) = with_a_backlog_task("Renew passport");
 

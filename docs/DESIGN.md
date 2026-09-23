@@ -169,7 +169,7 @@ Conventions, so the map is guessable:
   every letter and digit types. Only `Enter`, `Escape`, `↑`/`↓` and `Tab`
   keep their meaning there. The few
   extra actions a text field needs are on Alt plus a key (`alt-t` re-add
-  from search, `alt-1` to `alt-4` quick dates). `Tab` moves focus to the
+  from search, `alt-1` to `alt-5` quick dates). `Tab` moves focus to the
   next control, where single keys work again: from the date field to its
   calendar, and from the notes filter to the list it narrows. An open
   note is left with `Escape`; `Tab` there does nothing.

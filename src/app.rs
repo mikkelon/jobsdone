@@ -1396,6 +1396,7 @@ impl App {
             Action::Tomorrow
             | Action::NextWorkDay
             | Action::NextMonday
+            | Action::EndOfWeek
             | Action::InAWeek
             | Action::EndOfMonth => self.quick_pick(action),
             Action::ClearDate => self.take_the_date(None),
@@ -2450,7 +2451,8 @@ impl App {
 
     /// The day a quick pick on either card means. "Next work day" and
     /// "next Monday" are the rules' own definitions of those days
-    /// (DOMAIN.md section 10); the rest are arithmetic.
+    /// (DOMAIN.md section 10), and the end of the week is the last work
+    /// day of it (section 2); the rest are arithmetic.
     fn day_for(&self, action: Action) -> Option<Date> {
         let work_days = self.model.settings.work_days();
         let next = |rule: Rule| {
@@ -2465,6 +2467,9 @@ impl App {
             Action::NextMonday => next(Rule::Weekly {
                 weekdays: vec![Weekday::Mon],
             }),
+            Action::EndOfWeek => {
+                domain::end_of_week(self.today, self.model.settings.week_starts_on(), &work_days)
+            }
             Action::InAWeek => self.today.checked_add(Span::new().days(7)).ok(),
             Action::EndOfMonth => Some(self.today.last_of_month()),
             _ => None,
@@ -2667,9 +2672,11 @@ impl App {
         .filter_map(|binding| {
             let (key, action) = *binding.keys.first()?;
             let date = match action {
-                Action::Tomorrow | Action::NextMonday | Action::InAWeek | Action::EndOfMonth => {
-                    Some(self.day_for(action)?)
-                }
+                Action::Tomorrow
+                | Action::EndOfWeek
+                | Action::NextMonday
+                | Action::InAWeek
+                | Action::EndOfMonth => Some(self.day_for(action)?),
                 Action::ClearDate if clears => None,
                 _ => return None,
             };

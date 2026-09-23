@@ -1871,6 +1871,44 @@ fn a_weekday_a_word_and_a_count_of_days_are_dates_too() {
 }
 
 #[test]
+fn the_end_of_the_week_is_its_last_work_day_until_that_has_passed() {
+    let end = |today: &str, start: WeekStart, work_days: WorkDays| {
+        end_of_week(on(today), start, &work_days).map(|date| date.to_string())
+    };
+    let weekdays = WorkDays::DEFAULT;
+    // Wednesday to Friday, and Friday is its own end of the week.
+    assert_eq!(
+        end("2025-09-03", WeekStart::Monday, weekdays).as_deref(),
+        Some("2025-09-05")
+    );
+    assert_eq!(
+        end("2025-09-05", WeekStart::Monday, weekdays).as_deref(),
+        Some("2025-09-05")
+    );
+    // At the weekend this week's Friday has gone, so it is next week's.
+    assert_eq!(
+        end("2025-09-06", WeekStart::Monday, weekdays).as_deref(),
+        Some("2025-09-12")
+    );
+    assert_eq!(
+        end("2025-09-07", WeekStart::Sunday, weekdays).as_deref(),
+        Some("2025-09-12")
+    );
+    // A Sunday-to-Thursday week ends on the Thursday.
+    let sunday_to_thursday = WorkDays::of([
+        Weekday::Sun,
+        Weekday::Mon,
+        Weekday::Tue,
+        Weekday::Wed,
+        Weekday::Thu,
+    ]);
+    assert_eq!(
+        end("2025-09-02", WeekStart::Sunday, sunday_to_thursday).as_deref(),
+        Some("2025-09-04")
+    );
+}
+
+#[test]
 fn what_cannot_be_read_as_a_date_is_nothing() {
     for text in ["", "   ", "someday", "31 feb", "40", "9 13", "1 2 3 4", "+"] {
         assert_eq!(typed(text), None, "{text}");

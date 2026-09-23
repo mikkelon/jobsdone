@@ -89,6 +89,10 @@ December is next September. Nothing else is guessed: text that is not
 one of these shapes is not a date, and the card says so rather than
 choosing a day.
 
+The card's "end of week" pick is `end_of_week(today, week_starts_on,
+work_days)`: the last work day of the week today is in, which is today
+itself on that day, or the same day of the next week once it has passed.
+
 ## 3. Task
 
 | Field          | Type            | Meaning                                                  |
