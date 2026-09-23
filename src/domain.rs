@@ -12,6 +12,7 @@ use jiff::Zoned;
 mod command;
 mod date;
 mod dictionary;
+pub mod fuzzy;
 mod model;
 mod rule;
 mod settings;
