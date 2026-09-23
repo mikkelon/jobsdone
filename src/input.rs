@@ -31,11 +31,21 @@ pub enum Shown {
     Future,
 }
 
-/// A pane of the notes page.
+/// Where the keyboard is on the notes page: the list, the note open
+/// beside it, or the filter typed at the top of the list.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NotesPane {
     List,
     Note,
+    Filter,
+}
+
+/// Which list the left pane of the notes page shows. `tab` switches
+/// between them (DESIGN.md section 9).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum NotesList {
+    Notes,
+    Archive,
 }
 
 /// Which step of the morning review is on screen.
@@ -89,14 +99,22 @@ pub enum Field {
 /// shortcuts keep a name of their own.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum KeyContext {
+    /// `narrow` is the window collapsed to tabs, where `tab` steps
+    /// through them and `h`/`l` mean nothing, rather than two panes side
+    /// by side, where `h`/`l` switch pane and `tab` means nothing.
     Home {
         pane: Pane,
         day: Shown,
         field: Option<Field>,
+        narrow: bool,
     },
+    /// On the Archive, `tab` goes back to Notes in a wide window and on
+    /// to the next tab in a narrow one, which is what `narrow` is for.
     Notes {
         pane: NotesPane,
+        list: NotesList,
         text_field: bool,
+        narrow: bool,
     },
     Review {
         step: ReviewStep,
@@ -146,6 +164,9 @@ pub enum Action {
     PaneLeft,
     PaneRight,
     NextPane,
+    /// `tab` on a page: the next tab of a narrow window, or the other
+    /// list of the notes page.
+    NextTab,
     MoveDown,
     MoveUp,
     PrevDay,
@@ -168,6 +189,8 @@ pub enum Action {
     Delete,
     CopyTask,
     CopyNote,
+    /// `A` on the notes page: the note to the archive, or back from it.
+    Archive,
     CopySelection,
     CutSelection,
     Paste,
@@ -215,6 +238,9 @@ pub enum Action {
 
     // Popups.
     Search,
+    /// `/` on the notes page, which narrows the list shown rather than
+    /// searching the tasks.
+    Filter,
     Commands,
     Help,
     Confirm,
@@ -339,6 +365,7 @@ impl Binding {
                     | Action::Focus
                     | Action::Edit
                     | Action::Delete
+                    | Action::Archive
                     | Action::CopyTask
                     | Action::ToToday
                     | Action::ToBacklog
@@ -374,6 +401,7 @@ macro_rules! home_table {
         steps: $steps:expr, $steps_narrow:expr;
         today: $today:expr, $today_narrow:expr;
         go_to: $goto:expr, $goto_narrow:expr;
+        panes: $panes:expr;
         $($own:expr),* $(,)?
     ) => {
         &[
@@ -399,17 +427,7 @@ macro_rules! home_table {
                 narrow: $goto_narrow,
             },
             $($own,)*
-            Binding {
-                keys: &[
-                    ("tab", Action::NextPane),
-                    ("h", Action::PaneLeft),
-                    ("l", Action::PaneRight),
-                ],
-                shown: "tab h/l",
-                label: "pane",
-                bar: Bar::Right,
-                narrow: Bar::Off,
-            },
+            $panes,
             Binding {
                 keys: &[
                     ("j", Action::Down),
@@ -484,7 +502,58 @@ macro_rules! home_table {
     };
 }
 
-const HOME_DAY: &[Binding] = home_table![
+/// Both widths of a home table: `h` and `l` switch pane when both are
+/// on screen, and `tab` steps through the tabs when they have collapsed
+/// (DESIGN.md section 4).
+macro_rules! home_tables {
+    (
+        $(#[$doc:meta])*
+        $wide:ident, $narrow:ident;
+        steps: $steps:expr, $steps_narrow:expr;
+        today: $today:expr, $today_narrow:expr;
+        go_to: $goto:expr, $goto_narrow:expr;
+        $($own:expr),* $(,)?
+    ) => {
+        $(#[$doc])*
+        const $wide: &[Binding] = home_table![
+            steps: $steps, $steps_narrow;
+            today: $today, $today_narrow;
+            go_to: $goto, $goto_narrow;
+            panes: PANES;
+            $($own),*
+        ];
+        $(#[$doc])*
+        const $narrow: &[Binding] = home_table![
+            steps: $steps, $steps_narrow;
+            today: $today, $today_narrow;
+            go_to: $goto, $goto_narrow;
+            panes: TABS;
+            $($own),*
+        ];
+    };
+}
+
+/// Two panes side by side.
+const PANES: Binding = Binding {
+    keys: &[("h", Action::PaneLeft), ("l", Action::PaneRight)],
+    shown: "h/l",
+    label: "pane",
+    bar: Bar::Right,
+    narrow: Bar::Off,
+};
+
+/// The tabs a narrow window collapses to, which go round: Today,
+/// Backlog, Notes, Archive and Today again.
+const TABS: Binding = Binding {
+    keys: &[("tab", Action::NextTab)],
+    shown: "tab",
+    label: "next tab",
+    bar: Bar::Off,
+    narrow: Bar::Off,
+};
+
+home_tables![
+    HOME_DAY, HOME_DAY_NARROW;
     steps: Bar::Off, Bar::Off;
     today: Bar::Off, Bar::Off;
     go_to: Bar::Off, Bar::Off;
@@ -579,7 +648,8 @@ const HOME_DAY: &[Binding] = home_table![
     },
 ];
 
-const HOME_BACKLOG: &[Binding] = home_table![
+home_tables![
+    HOME_BACKLOG, HOME_BACKLOG_NARROW;
     steps: Bar::Off, Bar::Off;
     today: Bar::Off, Bar::Off;
     go_to: Bar::Off, Bar::Off;
@@ -672,10 +742,12 @@ const HOME_BACKLOG: &[Binding] = home_table![
     },
 ];
 
-/// A day that is not today. Stepping is what the pane is for, so the day
-/// keys lead the bar; `t` puts a task from a day that has passed onto
-/// today, which on today itself would mean nothing (wireframe 08).
-const HOME_OTHER_DAY: &[Binding] = home_table![
+home_tables![
+    /// A day that is not today. Stepping is what the pane is for, so the
+    /// day keys lead the bar; `t` puts a task from a day that has passed
+    /// onto today, which on today itself would mean nothing (wireframe
+    /// 08).
+    HOME_OTHER_DAY, HOME_OTHER_DAY_NARROW;
     steps: Bar::Short(Side::Left, "day"), Bar::Short(Side::Left, "day");
     // The narrow bar calls the way home "back", as the notes page does,
     // because `t to today` is beside it and means something else.
@@ -748,9 +820,11 @@ const HOME_OTHER_DAY: &[Binding] = home_table![
     },
 ];
 
-/// The list of days the backlog pane becomes while history is browsed.
-/// Its rows are days, so nothing that acts on a task is bound here.
-const HOME_DAYS: &[Binding] = home_table![
+home_tables![
+    /// The list of days the backlog pane becomes while history is
+    /// browsed. Its rows are days, so nothing that acts on a task is
+    /// bound here.
+    HOME_DAYS, HOME_DAYS_NARROW;
     steps: Bar::Short(Side::Left, "day"), Bar::Short(Side::Left, "day");
     today: Bar::Left, Bar::Short(Side::Left, "back");
     go_to: Bar::Left, Bar::Off;
@@ -763,13 +837,182 @@ const HOME_DAYS: &[Binding] = home_table![
     },
 ];
 
-const NOTES_LIST: &[Binding] = &[
+/// A notes list table: the rows the two lists share around the one key
+/// that differs between them, `A`, and what `tab` goes on to.
+macro_rules! notes_table {
+    ($archive:expr, $tab:expr) => {
+        &[
+            Binding {
+                keys: &[("y", Action::CopyNote), ("alt-y", Action::CopyNote)],
+                shown: "y/alt-y",
+                label: "copy note",
+                bar: Bar::Left,
+                narrow: Bar::Left,
+            },
+            Binding {
+                keys: &[("enter", Action::Confirm)],
+                shown: "⏎",
+                label: "open",
+                bar: Bar::Left,
+                narrow: Bar::Left,
+            },
+            Binding {
+                keys: &[("a", Action::Add)],
+                shown: "a",
+                label: "new",
+                bar: Bar::Left,
+                narrow: Bar::Left,
+            },
+            $archive,
+            Binding {
+                keys: &[("x", Action::Delete)],
+                shown: "x",
+                label: "delete",
+                bar: Bar::Left,
+                narrow: Bar::Short(Side::Left, "del"),
+            },
+            // `esc` leaves the page as well, which is what the status
+            // line promises; `n` is the key the bar has room to name.
+            Binding {
+                keys: &[("n", Action::NotesPage), ("esc", Action::Cancel)],
+                shown: "n",
+                label: "back to tasks",
+                bar: Bar::Left,
+                narrow: Bar::Short(Side::Left, "back"),
+            },
+            Binding {
+                keys: &[(",", Action::SettingsPage)],
+                shown: ",",
+                label: "settings",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+            $tab,
+            Binding {
+                keys: &[("h", Action::PaneLeft), ("l", Action::PaneRight)],
+                shown: "h/l",
+                label: "pane",
+                bar: Bar::Right,
+                narrow: Bar::Off,
+            },
+            Binding {
+                keys: &[
+                    ("j", Action::Down),
+                    ("k", Action::Up),
+                    ("down", Action::Down),
+                    ("up", Action::Up),
+                ],
+                shown: "j/k",
+                label: "move",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+            Binding {
+                keys: &[("u", Action::Undo)],
+                shown: "u",
+                label: "undo",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+            // The notes page filters its own list rather than searching
+            // the tasks (DESIGN.md section 9).
+            Binding {
+                keys: &[("/", Action::Filter)],
+                shown: "/",
+                label: "filter",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+            Binding {
+                keys: &[(":", Action::Commands)],
+                shown: ":",
+                label: "commands",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+            Binding {
+                keys: &[("?", Action::Help)],
+                shown: "?",
+                label: "help",
+                bar: Bar::Off,
+                narrow: Bar::Short(Side::Right, "more"),
+            },
+            Binding {
+                keys: &[("q", Action::Quit)],
+                shown: "q",
+                label: "quit",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+        ]
+    };
+}
+
+const ARCHIVE_NOTE: Binding = Binding {
+    keys: &[("A", Action::Archive)],
+    shown: "A",
+    label: "archive note",
+    bar: Bar::Short(Side::Left, "archive"),
+    narrow: Bar::Off,
+};
+
+const UNARCHIVE_NOTE: Binding = Binding {
+    keys: &[("A", Action::Archive)],
+    shown: "A",
+    label: "unarchive note",
+    bar: Bar::Short(Side::Left, "unarchive"),
+    narrow: Bar::Off,
+};
+
+/// `tab` from Notes, at either width, is the Archive.
+const TO_THE_ARCHIVE: Binding = Binding {
+    keys: &[("tab", Action::NextTab)],
+    shown: "tab",
+    label: "archive",
+    bar: Bar::Right,
+    narrow: Bar::Off,
+};
+
+/// `tab` from the Archive is Notes when the list is a pane of its own,
+/// and the next tab, Today, when the window has collapsed to tabs.
+const BACK_TO_THE_NOTES: Binding = Binding {
+    keys: &[("tab", Action::NextTab)],
+    shown: "tab",
+    label: "notes",
+    bar: Bar::Right,
+    narrow: Bar::Off,
+};
+
+const ON_TO_TODAY: Binding = Binding {
+    keys: &[("tab", Action::NextTab)],
+    shown: "tab",
+    label: "next tab",
+    bar: Bar::Off,
+    narrow: Bar::Off,
+};
+
+const NOTES_LIST: &[Binding] = notes_table!(ARCHIVE_NOTE, TO_THE_ARCHIVE);
+const ARCHIVE_LIST: &[Binding] = notes_table!(UNARCHIVE_NOTE, BACK_TO_THE_NOTES);
+const ARCHIVE_LIST_NARROW: &[Binding] = notes_table!(UNARCHIVE_NOTE, ON_TO_TODAY);
+
+/// The filter at the top of the notes list while it has the keyboard.
+/// Every letter types into it; the list under it still moves and opens,
+/// and `tab` hands the keyboard to the list, where single keys work
+/// again with the filter still applied (DESIGN.md section 4).
+const NOTES_FILTER: &[Binding] = &[
     Binding {
-        keys: &[("y", Action::CopyNote), ("alt-y", Action::CopyNote)],
-        shown: "y/alt-y",
-        label: "copy note",
+        keys: &[],
+        shown: "type",
+        label: "to filter",
         bar: Bar::Left,
         narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("up", Action::Up), ("down", Action::Down)],
+        shown: "↑/↓",
+        label: "move",
+        bar: Bar::Left,
+        narrow: Bar::Off,
     },
     Binding {
         keys: &[("enter", Action::Confirm)],
@@ -779,92 +1022,18 @@ const NOTES_LIST: &[Binding] = &[
         narrow: Bar::Left,
     },
     Binding {
-        keys: &[("a", Action::Add)],
-        shown: "a",
-        label: "new",
+        keys: &[("tab", Action::NextPane)],
+        shown: "tab",
+        label: "to the list",
+        bar: Bar::Left,
+        narrow: Bar::Short(Side::Left, "list"),
+    },
+    Binding {
+        keys: &[("esc", Action::Cancel)],
+        shown: "esc",
+        label: "clear",
         bar: Bar::Left,
         narrow: Bar::Left,
-    },
-    Binding {
-        keys: &[("x", Action::Delete)],
-        shown: "x",
-        label: "delete",
-        bar: Bar::Left,
-        narrow: Bar::Short(Side::Left, "del"),
-    },
-    // `esc` leaves the page as well, which is what the status line
-    // promises; `n` is the key the bar has room to name.
-    Binding {
-        keys: &[("n", Action::NotesPage), ("esc", Action::Cancel)],
-        shown: "n",
-        label: "back to tasks",
-        bar: Bar::Left,
-        narrow: Bar::Short(Side::Left, "back"),
-    },
-    Binding {
-        keys: &[(",", Action::SettingsPage)],
-        shown: ",",
-        label: "settings",
-        bar: Bar::Off,
-        narrow: Bar::Off,
-    },
-    Binding {
-        keys: &[
-            ("tab", Action::NextPane),
-            ("h", Action::PaneLeft),
-            ("l", Action::PaneRight),
-        ],
-        shown: "tab h/l",
-        label: "pane",
-        bar: Bar::Right,
-        narrow: Bar::Off,
-    },
-    Binding {
-        keys: &[
-            ("j", Action::Down),
-            ("k", Action::Up),
-            ("down", Action::Down),
-            ("up", Action::Up),
-        ],
-        shown: "j/k",
-        label: "move",
-        bar: Bar::Off,
-        narrow: Bar::Off,
-    },
-    Binding {
-        keys: &[("u", Action::Undo)],
-        shown: "u",
-        label: "undo",
-        bar: Bar::Off,
-        narrow: Bar::Off,
-    },
-    Binding {
-        keys: &[("/", Action::Search)],
-        shown: "/",
-        label: "search",
-        bar: Bar::Off,
-        narrow: Bar::Off,
-    },
-    Binding {
-        keys: &[(":", Action::Commands)],
-        shown: ":",
-        label: "commands",
-        bar: Bar::Off,
-        narrow: Bar::Off,
-    },
-    Binding {
-        keys: &[("?", Action::Help)],
-        shown: "?",
-        label: "help",
-        bar: Bar::Off,
-        narrow: Bar::Short(Side::Right, "more"),
-    },
-    Binding {
-        keys: &[("q", Action::Quit)],
-        shown: "q",
-        label: "quit",
-        bar: Bar::Off,
-        narrow: Bar::Off,
     },
 ];
 
@@ -934,13 +1103,6 @@ const NOTES_NOTE: &[Binding] = &[
         keys: &[("up", Action::Up), ("down", Action::Down)],
         shown: "↑/↓",
         label: "move",
-        bar: Bar::Off,
-        narrow: Bar::Off,
-    },
-    Binding {
-        keys: &[("tab", Action::NextPane)],
-        shown: "tab",
-        label: "pane",
         bar: Bar::Off,
         narrow: Bar::Off,
     },
@@ -1967,30 +2129,35 @@ pub fn bindings(context: KeyContext) -> &'static [Binding] {
             ..
         } => HOME_RENAMING,
         KeyContext::Home {
-            pane: Pane::Day,
-            day: Shown::Today,
-            ..
-        } => HOME_DAY,
-        KeyContext::Home {
-            pane: Pane::Day, ..
-        } => HOME_OTHER_DAY,
-        KeyContext::Home {
-            pane: Pane::Backlog,
-            day: Shown::Today,
-            ..
-        } => HOME_BACKLOG,
-        KeyContext::Home {
-            pane: Pane::Backlog,
-            ..
-        } => HOME_DAYS,
+            pane, day, narrow, ..
+        } => match (pane, day == Shown::Today, narrow) {
+            (Pane::Day, true, false) => HOME_DAY,
+            (Pane::Day, true, true) => HOME_DAY_NARROW,
+            (Pane::Day, false, false) => HOME_OTHER_DAY,
+            (Pane::Day, false, true) => HOME_OTHER_DAY_NARROW,
+            (Pane::Backlog, true, false) => HOME_BACKLOG,
+            (Pane::Backlog, true, true) => HOME_BACKLOG_NARROW,
+            (Pane::Backlog, false, false) => HOME_DAYS,
+            (Pane::Backlog, false, true) => HOME_DAYS_NARROW,
+        },
         KeyContext::Notes {
             pane: NotesPane::List,
+            list,
+            narrow,
             ..
-        } => NOTES_LIST,
+        } => match (list, narrow) {
+            (NotesList::Notes, _) => NOTES_LIST,
+            (NotesList::Archive, false) => ARCHIVE_LIST,
+            (NotesList::Archive, true) => ARCHIVE_LIST_NARROW,
+        },
         KeyContext::Notes {
             pane: NotesPane::Note,
             ..
         } => NOTES_NOTE,
+        KeyContext::Notes {
+            pane: NotesPane::Filter,
+            ..
+        } => NOTES_FILTER,
         // `e` on a review row opens the same field a task row opens
         // anywhere else, so Enter saves the title rather than moving the
         // review on to its next step.
@@ -2091,12 +2258,22 @@ pub fn name(context: KeyContext) -> &'static str {
         } => "DAYS",
         KeyContext::Notes {
             pane: NotesPane::List,
+            list: NotesList::Notes,
             ..
         } => "NOTES",
+        KeyContext::Notes {
+            pane: NotesPane::List,
+            list: NotesList::Archive,
+            ..
+        } => "ARCHIVE",
         KeyContext::Notes {
             pane: NotesPane::Note,
             ..
         } => "NOTE",
+        KeyContext::Notes {
+            pane: NotesPane::Filter,
+            ..
+        } => "FILTER",
         KeyContext::Review {
             step: ReviewStep::Pile,
             ..

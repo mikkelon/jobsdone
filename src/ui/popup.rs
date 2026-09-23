@@ -18,7 +18,7 @@ use super::{
 use crate::app::{App, Card, DateDraft, DateKind, Layout, MoveTarget, Popup, RepeatDraft, RowId};
 use crate::domain::{self, Row, WeekStart, Weekday, WorkDays};
 use crate::input::{
-    self, Action, Binding, KeyContext, NotesPane, Pane, PopupKind, ReviewStep, Shown,
+    self, Action, Binding, KeyContext, NotesList, NotesPane, Pane, PopupKind, ReviewStep, Shown,
 };
 
 pub(super) fn draw(canvas: &mut Canvas, app: &App, rows: &Rows, layout: &mut Layout) {
@@ -1228,10 +1228,17 @@ struct HelpLine {
 fn help_sections(context: KeyContext, all: bool) -> Vec<(&'static str, KeyContext)> {
     let mut sections = vec![(input::name(context), context)];
     if all {
+        // The keys of the width the window is at, since `h`/`l` and `tab`
+        // mean different things at the two.
+        let narrow = match context {
+            KeyContext::Home { narrow, .. } | KeyContext::Notes { narrow, .. } => narrow,
+            _ => false,
+        };
         let home = |pane, day| KeyContext::Home {
             pane,
             day,
             field: None,
+            narrow,
         };
         let mut others = vec![
             ("TODAY", home(Pane::Day, Shown::Today)),
@@ -1244,6 +1251,7 @@ fn help_sections(context: KeyContext, all: bool) -> Vec<(&'static str, KeyContex
                     pane: Pane::Day,
                     day: Shown::Today,
                     field: Some(input::Field::Adding),
+                    narrow,
                 },
             ),
             (
@@ -1252,6 +1260,7 @@ fn help_sections(context: KeyContext, all: bool) -> Vec<(&'static str, KeyContex
                     pane: Pane::Day,
                     day: Shown::Today,
                     field: Some(input::Field::Renaming),
+                    narrow,
                 },
             ),
             (
@@ -1274,14 +1283,36 @@ fn help_sections(context: KeyContext, all: bool) -> Vec<(&'static str, KeyContex
                 "NOTES LIST",
                 KeyContext::Notes {
                     pane: NotesPane::List,
+                    list: NotesList::Notes,
                     text_field: false,
+                    narrow,
+                },
+            ),
+            (
+                "ARCHIVE",
+                KeyContext::Notes {
+                    pane: NotesPane::List,
+                    list: NotesList::Archive,
+                    text_field: false,
+                    narrow,
+                },
+            ),
+            (
+                "NOTES FILTER",
+                KeyContext::Notes {
+                    pane: NotesPane::Filter,
+                    list: NotesList::Notes,
+                    text_field: true,
+                    narrow,
                 },
             ),
             (
                 "NOTE EDITING",
                 KeyContext::Notes {
                     pane: NotesPane::Note,
+                    list: NotesList::Notes,
                     text_field: true,
+                    narrow,
                 },
             ),
             ("SETTINGS", KeyContext::Settings { field: false }),

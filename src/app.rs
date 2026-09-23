@@ -11,8 +11,8 @@ use unicode_segmentation::UnicodeSegmentation;
 
 use crate::domain::{
     self, BacklogView, Change, Command, Context, DateStyle, DayList, DayView, Id, Model, MonthDay,
-    NotesView, Pile, Place, Rule, SearchResults, Settings, Store, StoreError, Surfaced, WeekStart,
-    Weekday, Write,
+    NoteRow, NotesView, Pile, Place, Rule, SearchResults, Settings, Store, StoreError, Surfaced,
+    WeekStart, Weekday, Write,
 };
 
 /// The two domain types the desktop is spoken to in. They cross that
@@ -20,7 +20,8 @@ use crate::domain::{
 /// (ARCHITECTURE.md section 2).
 pub use crate::domain::{DateOrder, WindowSize};
 use crate::input::{
-    self, Action, Binding, Field, KeyContext, NotesPane, Pane, PopupKind, ReviewStep, Shown,
+    self, Action, Binding, Field, KeyContext, NotesList, NotesPane, Pane, PopupKind, ReviewStep,
+    Shown,
 };
 
 mod note_history;
@@ -973,6 +974,13 @@ impl Layout {
     }
 }
 
+/// The text the notes list is filtered by, and the caret in it.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct NoteFilter {
+    pub text: String,
+    pub caret: usize,
+}
+
 /// The cursor of each list, by id.
 #[derive(Clone, Copy, Debug, Default)]
 struct Cursors {
@@ -980,6 +988,9 @@ struct Cursors {
     backlog: Option<RowId>,
     days: Option<RowId>,
     notes: Option<RowId>,
+    /// The notes page's other list, which keeps its own cursor so that
+    /// `tab` there and back lands where it was.
+    archive: Option<RowId>,
     review: Option<RowId>,
     settings: Option<RowId>,
 }
@@ -992,6 +1003,7 @@ struct Views {
     backlog: BacklogView,
     days: DayList,
     notes: NotesView,
+    archive: NotesView,
     /// The size of the pile, which the status line counts in red.
     pile: usize,
 }
@@ -1018,6 +1030,13 @@ pub struct App {
     came_from: Page,
     pane: Pane,
     notes_pane: NotesPane,
+    /// Which list the notes page shows, Notes or the Archive.
+    notes_list: NotesList,
+    /// What the notes list is narrowed to, while there is a filter. It
+    /// has the keyboard while `notes_pane` is `Filter`, and stays applied
+    /// while a note is opened from it and the keyboard is back on the
+    /// list, until `esc` clears it.
+    filter: Option<NoteFilter>,
     popup: Option<Popup>,
     editor: Option<Editor>,
     /// The review, while it is on screen. It is a mode over the page
@@ -1090,6 +1109,8 @@ impl App {
             came_from: Page::Home,
             pane: Pane::Day,
             notes_pane: NotesPane::List,
+            notes_list: NotesList::Notes,
+            filter: None,
             popup: None,
             editor: None,
             review: None,
@@ -1331,15 +1352,17 @@ impl App {
                     self.step(false);
                 }
             }
-            Action::PaneLeft => self.shift_pane(false, false),
-            Action::PaneRight => self.shift_pane(true, false),
+            Action::PaneLeft => self.shift_pane(false),
+            Action::PaneRight => self.shift_pane(true),
             Action::NextPane => self.next_control(),
+            Action::NextTab => self.next_tab(),
             Action::NotesPage => self.turn_the_page(),
             Action::SettingsPage => self.turn_to_the_settings(),
             Action::OpenReview => self.reopen_the_review(),
 
             Action::Commands => self.open(PopupKind::Palette, None),
             Action::Search => self.open(PopupKind::Search, None),
+            Action::Filter => self.open_the_filter(),
             Action::Help => self.open(PopupKind::Help, None),
             Action::Cancel => self.back_out(),
             Action::Confirm => return self.confirm(),
@@ -1359,6 +1382,7 @@ impl App {
             Action::Close => self.close_or_reopen(),
             Action::Focus => self.turn_focus_over(),
             Action::Delete => self.delete(),
+            Action::Archive => self.archive_or_unarchive(),
             Action::CopyTask => return self.copy_task(),
             Action::CopyNote => return self.copy_note(),
             Action::CopySelection => return self.copy_selection(false),
@@ -1595,6 +1619,7 @@ impl App {
             backlog: domain::backlog_view(&self.model, self.today),
             days: domain::day_list(&self.model, self.today),
             notes: domain::notes(&self.model),
+            archive: domain::archived_notes(&self.model),
             pile: domain::pile(&self.model, self.today).total,
         };
         // The review keeps the rows it opened with and draws them as the
@@ -2074,10 +2099,8 @@ impl App {
                 .map(|row| (RowId::Day(row.day), Group::Days))
                 .collect(),
             List::Notes => self
-                .views
-                .notes
-                .rows
-                .iter()
+                .shown_notes()
+                .into_iter()
                 .map(|row| (RowId::Note(row.note), Group::Notes))
                 .collect(),
             List::Review => self
@@ -2768,7 +2791,11 @@ impl App {
             draft.in_calendar = !draft.in_calendar;
             return;
         }
-        self.shift_pane(true, true);
+        // The filter hands the keyboard to the list it is narrowing,
+        // where single keys work again.
+        if self.popup.is_none() && self.notes_pane == NotesPane::Filter {
+            self.notes_pane = NotesPane::List;
+        }
     }
 
     // ---- the repeat card ---------------------------------------------
@@ -3234,6 +3261,78 @@ impl App {
         Some(id)
     }
 
+    /// The rows of the notes list on screen: Notes or the Archive, and of
+    /// that only what the filter matches, best first. A filter matches
+    /// the whole body, though a row shows its first line.
+    pub fn shown_notes(&self) -> Vec<&NoteRow> {
+        let view = match self.notes_list {
+            NotesList::Notes => &self.views.notes,
+            NotesList::Archive => &self.views.archive,
+        };
+        let Some(filter) = self
+            .filter
+            .as_ref()
+            .filter(|filter| !filter.text.trim().is_empty())
+        else {
+            return view.rows.iter().collect();
+        };
+        let bodies = view.rows.iter().map(|row| {
+            let body = self
+                .model
+                .note(row.note)
+                .map_or("", |note| note.body.as_str());
+            (row, body)
+        });
+        domain::fuzzy::rank(&filter.text, bodies)
+    }
+
+    /// `/` on the notes page: the filter at the top of the list, with the
+    /// keyboard in it and the caret at the end of what it already says.
+    fn open_the_filter(&mut self) {
+        if self.page != Page::Notes || !self.leave_the_note() {
+            return;
+        }
+        self.filter.get_or_insert_with(NoteFilter::default);
+        self.notes_pane = NotesPane::Filter;
+    }
+
+    fn cursor_to_the_top(&mut self) {
+        if let Some(first) = self.shown_notes().first().map(|row| RowId::Note(row.note)) {
+            self.set_cursor(List::Notes, first);
+        }
+    }
+
+    /// `A`: the cursor note to the archive from Notes, or back to Notes
+    /// from the Archive. The cursor lands on the row that took its place.
+    fn archive_or_unarchive(&mut self) {
+        if self.page != Page::Notes || self.notes_pane != NotesPane::List {
+            return;
+        }
+        let Some(note) = self.note_at_cursor() else {
+            return;
+        };
+        let next = self.neighbour_of(List::Notes, RowId::Note(note));
+        let command = match self.notes_list {
+            NotesList::Notes => Command::ArchiveNote { note },
+            NotesList::Archive => Command::UnarchiveNote { note },
+        };
+        if self.run(command).is_some()
+            && let Some(next) = next
+        {
+            self.set_cursor(List::Notes, next);
+        }
+    }
+
+    /// Which list the notes page is showing.
+    pub fn notes_list(&self) -> NotesList {
+        self.notes_list
+    }
+
+    /// The filter on the notes list, while there is one.
+    pub fn filter(&self) -> Option<&NoteFilter> {
+        self.filter.as_ref()
+    }
+
     /// `a` on the notes page: an empty note at the top of the list, open
     /// and ready to be typed into, because there is nothing else to do
     /// with an empty note.
@@ -3241,6 +3340,11 @@ impl App {
         if !self.leave_the_note() {
             return;
         }
+        // A new note is in Notes, and nothing typed yet to match a
+        // filter, so the list it is at the top of is the whole of Notes.
+        self.notes_list = NotesList::Notes;
+        self.filter = None;
+        self.notes_pane = NotesPane::List;
         if let Some(change) = self.run(Command::CreateNote)
             && let Some(note) = added_note(&change)
         {
@@ -3435,6 +3539,10 @@ impl App {
             draft.note = recovery;
             draft.saved = body;
         }
+        // The recovery note is a new note, so it is in Notes whichever
+        // list the one it came from was in.
+        self.notes_list = NotesList::Notes;
+        self.filter = None;
         self.set_cursor(List::Notes, RowId::Note(recovery));
         self.say(
             if deleted {
@@ -4029,12 +4137,15 @@ impl App {
                 pane: self.pane,
                 day: self.shown(),
                 field: self.editor.as_ref().map(|editor| editor.field),
+                narrow: self.layout.narrow,
             },
             Page::Notes => KeyContext::Notes {
                 pane: self.notes_pane,
+                list: self.notes_list,
                 // The note pane is a text field exactly while a note is
-                // open in it.
-                text_field: self.draft.is_some(),
+                // open in it, and the filter while it has the keyboard.
+                text_field: self.draft.is_some() || self.notes_pane == NotesPane::Filter,
+                narrow: self.layout.narrow,
             },
             Page::Settings => KeyContext::Settings {
                 field: self.setting_draft.is_some(),
@@ -4101,6 +4212,7 @@ impl App {
         &self.views.backlog
     }
 
+    /// The notes in the list, with the counts of both lists.
     pub fn notes(&self) -> &NotesView {
         &self.views.notes
     }
@@ -4176,7 +4288,10 @@ impl App {
             List::Day => self.cursors.day,
             List::Backlog => self.cursors.backlog,
             List::Days => self.cursors.days,
-            List::Notes => self.cursors.notes,
+            List::Notes => match self.notes_list {
+                NotesList::Notes => self.cursors.notes,
+                NotesList::Archive => self.cursors.archive,
+            },
             List::Review => self.cursors.review,
             List::Settings => self.cursors.settings,
         };
@@ -4248,7 +4363,18 @@ impl App {
             day: self.rows_of(List::Day).first().map(|(id, _)| *id),
             backlog: self.rows_of(List::Backlog).first().map(|(id, _)| *id),
             days: self.rows_of(List::Days).first().map(|(id, _)| *id),
-            notes: self.rows_of(List::Notes).first().map(|(id, _)| *id),
+            notes: self
+                .views
+                .notes
+                .rows
+                .first()
+                .map(|row| RowId::Note(row.note)),
+            archive: self
+                .views
+                .archive
+                .rows
+                .first()
+                .map(|row| RowId::Note(row.note)),
             review: None,
             settings: self.rows_of(List::Settings).first().map(|(id, _)| *id),
         };
@@ -4264,7 +4390,10 @@ impl App {
             List::Day => &mut self.cursors.day,
             List::Backlog => &mut self.cursors.backlog,
             List::Days => &mut self.cursors.days,
-            List::Notes => &mut self.cursors.notes,
+            List::Notes => match self.notes_list {
+                NotesList::Notes => &mut self.cursors.notes,
+                NotesList::Archive => &mut self.cursors.archive,
+            },
             List::Review => &mut self.cursors.review,
             List::Settings => &mut self.cursors.settings,
         };
@@ -4335,53 +4464,88 @@ impl App {
         }
     }
 
-    /// The next pane, or the next tab when the window has collapsed to
-    /// one. `wrap` is `tab`, which goes round; `h` and `l` stop.
-    fn shift_pane(&mut self, forward: bool, wrap: bool) {
+    /// `h` and `l`: the other pane, where there are two side by side.
+    /// On the notes page the pane to the right is the cursor note, so
+    /// `l` opens it.
+    fn shift_pane(&mut self, forward: bool) {
         if self.popup.is_some() || self.editor.is_some() {
             return;
         }
-        let narrow = self.layout.narrow;
         match (self.page, self.pane, self.notes_pane, forward) {
             (Page::Home, Pane::Day, _, true) => self.pane = Pane::Backlog,
             (Page::Home, Pane::Backlog, _, false) => self.pane = Pane::Day,
-            // Notes is the third tab when the panes have collapsed.
-            (Page::Home, Pane::Backlog, _, true) if narrow => self.page = Page::Notes,
-            (Page::Home, Pane::Backlog, _, true) if wrap => self.pane = Pane::Day,
-            (Page::Home, Pane::Day, _, false) if wrap => self.pane = Pane::Backlog,
-
             (Page::Notes, _, NotesPane::List, true) => self.open_the_note(),
             (Page::Notes, _, NotesPane::Note, false) => {
-                self.leave_the_note();
-            }
-            (Page::Notes, _, NotesPane::List, false) if narrow => {
-                self.page = Page::Home;
-                self.pane = Pane::Backlog;
-            }
-            (Page::Notes, _, NotesPane::Note, true) if wrap && narrow => {
-                if self.leave_the_note() {
-                    self.page = Page::Home;
-                    self.pane = Pane::Day;
-                }
-            }
-            (Page::Notes, _, NotesPane::Note, true) if wrap => {
                 self.leave_the_note();
             }
             _ => {}
         }
     }
 
+    /// `tab`: the next tab of a window collapsed to tabs, which goes
+    /// round Today, Backlog, Notes and Archive; on the notes page of a
+    /// wide window, the other list.
+    fn next_tab(&mut self) {
+        if self.popup.is_some() || self.editor.is_some() || self.draft.is_some() {
+            return;
+        }
+        let narrow = self.layout.narrow;
+        match (self.page, self.pane, self.notes_list) {
+            (Page::Home, Pane::Day, _) if narrow => self.pane = Pane::Backlog,
+            (Page::Home, Pane::Backlog, _) if narrow => self.enter_the_notes(),
+            (Page::Notes, _, NotesList::Notes) => self.show_the_list(NotesList::Archive),
+            (Page::Notes, _, NotesList::Archive) if narrow => {
+                self.leave_the_notes();
+                self.page = Page::Home;
+                self.pane = Pane::Day;
+            }
+            (Page::Notes, _, NotesList::Archive) => self.show_the_list(NotesList::Notes),
+            _ => {}
+        }
+    }
+
+    /// One of the notes page's two lists in the left pane. The filter,
+    /// if there is one, goes with it.
+    fn show_the_list(&mut self, list: NotesList) {
+        self.notes_list = list;
+        if self.notes_pane == NotesPane::Note {
+            self.notes_pane = NotesPane::List;
+        }
+        if self.filter.is_some() {
+            self.cursor_to_the_top();
+        }
+    }
+
+    /// The notes page as it is every time it is turned to: Notes, with
+    /// the keyboard on the list.
+    fn enter_the_notes(&mut self) {
+        self.page = Page::Notes;
+        self.notes_pane = NotesPane::List;
+        self.notes_list = NotesList::Notes;
+        self.filter = None;
+    }
+
+    /// What the notes page holds that no other page needs: the filter,
+    /// and the keyboard in it.
+    fn leave_the_notes(&mut self) {
+        self.filter = None;
+        self.notes_pane = NotesPane::List;
+    }
+
     fn turn_the_page(&mut self) {
         if !self.leave_the_note() {
             return;
         }
-        self.page = match self.page {
-            Page::Home => Page::Notes,
-            Page::Notes => Page::Home,
+        match self.page {
+            Page::Home => self.enter_the_notes(),
+            Page::Notes => {
+                self.leave_the_notes();
+                self.page = Page::Home;
+            }
             // `n` is not a key of the settings page; the page it was
             // opened from is where every way off it leads.
-            Page::Settings => self.came_from,
-        };
+            Page::Settings => self.page = self.came_from,
+        }
     }
 
     /// A click puts the cursor on the row it landed on and moves the
@@ -4532,10 +4696,8 @@ impl App {
                 self.page = Page::Home;
                 self.pane = Pane::Backlog;
             }
-            List::Notes => {
-                self.page = Page::Notes;
-                self.notes_pane = NotesPane::List;
-            }
+            List::Notes if self.page != Page::Notes => self.enter_the_notes(),
+            List::Notes => self.notes_pane = NotesPane::List,
             List::Settings => self.page = Page::Settings,
             // The review is the whole window, so there is no other pane
             // for a click to move the keyboard to.
@@ -4594,9 +4756,13 @@ impl App {
             return;
         }
         if self.page == Page::Notes {
-            // The note first, then the page: one level at a time.
+            // The note first, then the filter, then the page: one level
+            // at a time.
             if self.draft.is_some() {
                 self.leave_the_note();
+            } else if self.filter.is_some() {
+                self.filter = None;
+                self.notes_pane = NotesPane::List;
             } else {
                 self.turn_the_page();
             }
@@ -4741,6 +4907,11 @@ impl App {
         if let Some(draft) = &self.setting_draft {
             return Some((&draft.text, draft.caret));
         }
+        if self.notes_pane == NotesPane::Filter
+            && let Some(filter) = &self.filter
+        {
+            return Some((&filter.text, filter.caret));
+        }
         self.draft
             .as_ref()
             .map(|draft| (draft.text.as_str(), draft.caret))
@@ -4816,6 +4987,11 @@ impl App {
         }
         if let Some(draft) = &mut self.setting_draft {
             return Some((&mut draft.text, &mut draft.caret));
+        }
+        if self.notes_pane == NotesPane::Filter
+            && let Some(filter) = &mut self.filter
+        {
+            return Some((&mut filter.text, &mut filter.caret));
         }
         let draft = self.draft.as_mut()?;
         Some((&mut draft.text, &mut draft.caret))
@@ -4917,6 +5093,12 @@ impl App {
     /// at the top again, and the date card follows what has been typed as
     /// far as the domain can read it.
     fn after_typing(&mut self) {
+        // A filter being typed ranks the list afresh, and the cursor
+        // goes to the best of it.
+        if self.popup.is_none() && self.notes_pane == NotesPane::Filter {
+            self.cursor_to_the_top();
+            return;
+        }
         if let Some(popup) = &mut self.popup {
             // The dictionary manager's list is not what is being typed
             // into: the field stands over it, and the row it was left on

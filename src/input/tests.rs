@@ -7,6 +7,17 @@ fn home(pane: Pane) -> KeyContext {
         pane,
         day: Shown::Today,
         field: None,
+        narrow: false,
+    }
+}
+
+/// The same pane of a window collapsed to tabs.
+fn tab(pane: Pane) -> KeyContext {
+    KeyContext::Home {
+        pane,
+        day: Shown::Today,
+        field: None,
+        narrow: true,
     }
 }
 
@@ -16,6 +27,7 @@ fn browsing(pane: Pane) -> KeyContext {
         pane,
         day: Shown::Past,
         field: None,
+        narrow: false,
     }
 }
 
@@ -24,6 +36,27 @@ fn writing(field: Field) -> KeyContext {
         pane: Pane::Day,
         day: Shown::Today,
         field: Some(field),
+        narrow: false,
+    }
+}
+
+/// The notes page, with the keyboard on the list, in the note or in the
+/// filter.
+fn notes(pane: NotesPane) -> KeyContext {
+    KeyContext::Notes {
+        pane,
+        list: NotesList::Notes,
+        text_field: pane != NotesPane::List,
+        narrow: false,
+    }
+}
+
+fn archive(narrow: bool) -> KeyContext {
+    KeyContext::Notes {
+        pane: NotesPane::List,
+        list: NotesList::Archive,
+        text_field: false,
+        narrow,
     }
 }
 
@@ -48,14 +81,13 @@ fn every_context() -> Vec<KeyContext> {
         home(Pane::Backlog),
         browsing(Pane::Day),
         browsing(Pane::Backlog),
-        KeyContext::Notes {
-            pane: NotesPane::List,
-            text_field: false,
-        },
-        KeyContext::Notes {
-            pane: NotesPane::Note,
-            text_field: true,
-        },
+        tab(Pane::Day),
+        tab(Pane::Backlog),
+        notes(NotesPane::List),
+        archive(false),
+        archive(true),
+        notes(NotesPane::Note),
+        notes(NotesPane::Filter),
         KeyContext::Review {
             step: ReviewStep::Pile,
             asks: true,
@@ -115,10 +147,7 @@ fn every_list_of_rows_moves_with_j_and_k() {
         home(Pane::Backlog),
         browsing(Pane::Day),
         browsing(Pane::Backlog),
-        KeyContext::Notes {
-            pane: NotesPane::List,
-            text_field: false,
-        },
+        notes(NotesPane::List),
     ];
     for context in lists {
         for wanted in [
@@ -707,14 +736,8 @@ fn keep_is_the_surfaced_steps_word_and_not_the_piles() {
 
 #[test]
 fn notes_yank_without_intercepting_plain_y_in_the_editor() {
-    let list = KeyContext::Notes {
-        pane: NotesPane::List,
-        text_field: false,
-    };
-    let editor = KeyContext::Notes {
-        pane: NotesPane::Note,
-        text_field: true,
-    };
+    let list = notes(NotesPane::List);
+    let editor = notes(NotesPane::Note);
     assert_eq!(action_for(&typing('y'), list), Some(Action::CopyNote));
     assert_eq!(action_for(&typing('y'), editor), Some(Action::Insert('y')));
     for context in [list, editor] {
@@ -750,14 +773,8 @@ fn y_copies_a_task_wherever_the_rows_are_tasks() {
 
 #[test]
 fn the_open_note_offers_alt_s_where_plain_s_types() {
-    let list = KeyContext::Notes {
-        pane: NotesPane::List,
-        text_field: false,
-    };
-    let editor = KeyContext::Notes {
-        pane: NotesPane::Note,
-        text_field: true,
-    };
+    let list = notes(NotesPane::List);
+    let editor = notes(NotesPane::Note);
     let alt_s = press_with(KeyCode::Char('s'), KeyModifiers::ALT);
 
     assert_eq!(
@@ -781,10 +798,7 @@ fn the_open_note_offers_alt_s_where_plain_s_types() {
 
 #[test]
 fn the_open_note_names_alt_s_in_its_hint_bar_at_both_widths() {
-    let editor = KeyContext::Notes {
-        pane: NotesPane::Note,
-        text_field: true,
-    };
+    let editor = notes(NotesPane::Note);
     let row = bindings(editor)
         .iter()
         .find(|binding| {
@@ -900,10 +914,7 @@ fn shifted_navigation_selects_in_every_text_context() {
         field(PopupKind::Date),
         field(PopupKind::Dictionary),
         KeyContext::Settings { field: true },
-        KeyContext::Notes {
-            pane: NotesPane::Note,
-            text_field: true,
-        },
+        notes(NotesPane::Note),
         KeyContext::Review {
             step: ReviewStep::Pile,
             asks: true,
@@ -956,5 +967,102 @@ fn shift_enter_only_keeps_adding_in_the_add_field() {
     assert_ne!(
         action_for(&shifted, home(Pane::Day)),
         Some(Action::AddAndContinue)
+    );
+}
+
+#[test]
+fn h_and_l_switch_panes_side_by_side_and_tab_steps_through_tabs() {
+    let tab_key = press(KeyCode::Tab);
+    for pane in [Pane::Day, Pane::Backlog] {
+        assert_eq!(action_for(&typing('h'), home(pane)), Some(Action::PaneLeft));
+        assert_eq!(
+            action_for(&typing('l'), home(pane)),
+            Some(Action::PaneRight)
+        );
+        assert_eq!(action_for(&tab_key, home(pane)), None, "wide, tab is free");
+
+        assert_eq!(action_for(&tab_key, tab(pane)), Some(Action::NextTab));
+        assert_eq!(
+            action_for(&typing('h'), tab(pane)),
+            None,
+            "narrow, h is free"
+        );
+        assert_eq!(action_for(&typing('l'), tab(pane)), None);
+    }
+}
+
+#[test]
+fn the_notes_list_archives_with_a_and_switches_list_with_tab() {
+    for context in [notes(NotesPane::List), archive(false), archive(true)] {
+        assert_eq!(action_for(&typing('A'), context), Some(Action::Archive));
+        assert_eq!(
+            action_for(&press(KeyCode::Tab), context),
+            Some(Action::NextTab)
+        );
+        assert_eq!(action_for(&typing('l'), context), Some(Action::PaneRight));
+        assert_eq!(action_for(&typing('h'), context), Some(Action::PaneLeft));
+    }
+    let label = |context| {
+        bindings(context)
+            .iter()
+            .find(|binding| binding.keys.iter().any(|(_, a)| *a == Action::Archive))
+            .map(|binding| binding.label)
+    };
+    assert_eq!(label(notes(NotesPane::List)), Some("archive note"));
+    assert_eq!(label(archive(false)), Some("unarchive note"));
+    assert_eq!(name(notes(NotesPane::List)), "NOTES");
+    assert_eq!(name(archive(false)), "ARCHIVE");
+    assert_eq!(
+        action_for(&press(KeyCode::Tab), notes(NotesPane::Note)),
+        None,
+        "an open note is left with esc"
+    );
+}
+
+/// `/` filters the notes page's own list, and is search everywhere
+/// else.
+#[test]
+fn slash_filters_the_notes_page_and_searches_the_rest() {
+    assert_eq!(
+        action_for(&typing('/'), notes(NotesPane::List)),
+        Some(Action::Filter)
+    );
+    assert_eq!(
+        action_for(&typing('/'), archive(false)),
+        Some(Action::Filter)
+    );
+    for context in [home(Pane::Day), home(Pane::Backlog), browsing(Pane::Day)] {
+        assert_eq!(action_for(&typing('/'), context), Some(Action::Search));
+    }
+}
+
+#[test]
+fn the_filter_types_every_letter_and_keeps_its_few_keys() {
+    let filter = notes(NotesPane::Filter);
+    assert!(filter.text_field());
+    assert_eq!(name(filter), "FILTER");
+    for letter in ['A', 'x', 'j', '/', 'n', 'q'] {
+        assert_eq!(
+            action_for(&typing(letter), filter),
+            Some(Action::Insert(letter))
+        );
+    }
+    assert_eq!(
+        action_for(&press(KeyCode::Down), filter),
+        Some(Action::Down)
+    );
+    assert_eq!(action_for(&press(KeyCode::Up), filter), Some(Action::Up));
+    assert_eq!(
+        action_for(&press(KeyCode::Enter), filter),
+        Some(Action::Confirm)
+    );
+    assert_eq!(
+        action_for(&press(KeyCode::Esc), filter),
+        Some(Action::Cancel)
+    );
+    assert_eq!(
+        action_for(&press(KeyCode::Tab), filter),
+        Some(Action::NextPane),
+        "tab moves focus to the list, the next control"
     );
 }

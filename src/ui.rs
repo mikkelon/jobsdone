@@ -28,7 +28,7 @@ use crate::domain::{
     self, DateOrder, DayListRow, MonthDay, NoteRow, Place, Rule, ScheduleRow, Stretch, Weekday,
     day_label, short_label, stamp_label,
 };
-use crate::input::{self, Field, NotesPane, Pane, Shown, Side};
+use crate::input::{self, Field, NotesList, NotesPane, Pane, Shown, Side};
 
 mod popup;
 mod review;
@@ -752,23 +752,27 @@ fn tab_row(canvas: &mut Canvas, app: &App, y: u16) {
     // Stepped to another day, the first two tabs are that day and the
     // list of days, because that is what the two panes hold.
     let browsing = app.shown() != Shown::Today;
+    // The third tab is two stops of `tab`, Notes and then the Archive,
+    // and is named for whichever of them it is on.
+    let archive = app.page() == Page::Notes && app.notes_list() == NotesList::Archive;
+    let (third, notes) = if archive {
+        ("ARCHIVE", app.notes().archived)
+    } else {
+        (TABS[2], app.notes().count)
+    };
     let tabs: [String; 3] = if browsing {
         [
             day_label(app.showing(), app.dates()).to_uppercase(),
             "DAYS".to_owned(),
-            TABS[2].to_owned(),
+            third.to_owned(),
         ]
     } else {
-        TABS.map(str::to_owned)
+        [TABS[0].to_owned(), TABS[1].to_owned(), third.to_owned()]
     };
     let counts = if browsing {
-        [
-            app.day().counts.planned,
-            app.days().days().count(),
-            app.notes().count,
-        ]
+        [app.day().counts.planned, app.days().days().count(), notes]
     } else {
-        [app.day().counts.open, app.backlog().open, app.notes().count]
+        [app.day().counts.open, app.backlog().open, notes]
     };
     let mut x = 1;
     for (at, (name, count)) in tabs.iter().zip(counts).enumerate() {
@@ -808,7 +812,7 @@ fn two_panes(canvas: &mut Canvas, app: &App, rows: &Rows, layout: &mut Layout) {
 
     let on_left = match app.page() {
         Page::Home => app.pane() == Pane::Day,
-        Page::Notes => app.notes_pane() == NotesPane::List,
+        Page::Notes => app.notes_pane() != NotesPane::Note,
         // The settings are one list, and the pane beside them describes
         // its cursor row rather than being somewhere to be.
         Page::Settings => true,
@@ -854,7 +858,14 @@ fn one_pane(canvas: &mut Canvas, app: &App, rows: &Rows, layout: &mut Layout) {
 
     // The list keeps to what it has to draw, and never more than half the
     // tab, so the note has the rest.
-    let wanted = lines_of(&notes_pane(app)).len() as u16;
+    // An empty list still has its two lines to say, under a blank one.
+    let view = notes_pane(app);
+    let filtering = u16::from(app.filter().is_some());
+    let wanted = if view.sections.is_empty() {
+        4
+    } else {
+        lines_of(&view).len() as u16
+    } + filtering;
     let height = wanted.clamp(2, whole.height() / 2);
     let list = Column {
         bottom: whole.top + height - 1,
@@ -864,7 +875,7 @@ fn one_pane(canvas: &mut Canvas, app: &App, rows: &Rows, layout: &mut Layout) {
         top: list.bottom + 2,
         ..whole
     };
-    let on_list = app.notes_pane() == NotesPane::List;
+    let on_list = app.notes_pane() != NotesPane::Note;
     pane(canvas, app, List::Notes, list, rows, on_list, layout);
     open_note(canvas, app, note, None, !on_list, layout);
 }
@@ -925,7 +936,7 @@ enum Content<'a> {
     Tasks(&'a [domain::Row], Kind),
     Schedules(&'a [ScheduleRow]),
     Days(&'a [DayListRow]),
-    Notes(&'a [NoteRow]),
+    Notes(Vec<&'a NoteRow>),
     /// A run of settings rows under one label. They are not rows of the
     /// model, so the page rather than a view says what is in each group.
     Settings(&'a [(SettingGroup, SettingRow)]),
@@ -1164,34 +1175,93 @@ fn backlog_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
     }
 }
 
-/// The notes list, and under it the row that makes another one. They are
-/// two groups rather than one so that a blank row separates them, which is
-/// what keeps the list a list.
+/// The notes list, and under it the row that makes another one, or the
+/// archive. Notes and new-note row are two groups rather than one so
+/// that a blank row separates them, which is what keeps the list a list.
 fn notes_pane(app: &App) -> PaneView<'_> {
     let view = app.notes();
-    PaneView {
-        title: "Notes".to_owned(),
-        sub: String::new(),
-        // The count is in the status line; the header names the key that
-        // fills the list instead (DESIGN.md section 9).
-        right: key("a", "new"),
-        // The new-note row is the whole empty state (DESIGN.md section 10).
-        sections: vec![
-            Section {
-                label: "",
-                count: None,
-                content: Content::Notes(&view.rows),
-                add: None,
+    let rows = app.shown_notes();
+    let filtered = app
+        .filter()
+        .is_some_and(|filter| !filter.text.trim().is_empty());
+    // A filter that matches nothing says so, and how to be rid of it.
+    let empty = [quiet("Nothing matches."), key("esc", "clears the filter")];
+    match app.notes_list() {
+        NotesList::Notes => PaneView {
+            title: "Notes".to_owned(),
+            sub: String::new(),
+            // The count of notes is in the status line; the header names
+            // the key that puts one away and how many are (DESIGN.md
+            // section 9).
+            right: if view.archived > 0 {
+                vec![
+                    Part::Key("A".to_owned()),
+                    words(&format!("archive {}", view.archived), dim()),
+                ]
+            } else {
+                key("A", "archive")
             },
-            Section {
-                label: "",
-                count: None,
-                content: Content::Notes(&[]),
-                add: Some("new note"),
+            // The new-note row is the whole empty state (DESIGN.md
+            // section 10).
+            sections: if filtered && rows.is_empty() {
+                Vec::new()
+            } else {
+                vec![
+                    Section {
+                        label: "",
+                        count: None,
+                        content: Content::Notes(rows),
+                        add: None,
+                    },
+                    Section {
+                        label: "",
+                        count: None,
+                        content: Content::Notes(Vec::new()),
+                        add: Some("new note"),
+                    },
+                ]
             },
-        ],
-        foot: None,
-        empty: [Vec::new(), Vec::new()],
+            foot: None,
+            empty,
+        },
+        NotesList::Archive => PaneView {
+            title: "Archive".to_owned(),
+            sub: view.archived.to_string(),
+            right: key("A", "unarchive"),
+            sections: if rows.is_empty() {
+                Vec::new()
+            } else {
+                vec![Section {
+                    label: "",
+                    count: None,
+                    content: Content::Notes(rows),
+                    add: None,
+                }]
+            },
+            foot: None,
+            empty: if filtered {
+                empty
+            } else {
+                [
+                    quiet("Nothing archived."),
+                    key("A", "on a note puts it here"),
+                ]
+            },
+        },
+    }
+}
+
+/// `/ milk█`: the filter at the top of the notes list, with its caret
+/// while it has the keyboard.
+fn filter_row(canvas: &mut Canvas, column: Column, text: &str, caret: Option<usize>) {
+    let Column { x, width, top, .. } = column;
+    canvas.put(x + 1, top, " / ", accent());
+    let room = width.saturating_sub(5);
+    match caret {
+        Some(caret) => caret_line(canvas, x + 4, top, room, text, caret),
+        None => {
+            canvas.put(x + 4, top, clip(text, room), dim());
+        }
     }
 }
 
@@ -1228,7 +1298,7 @@ fn lines_of<'a>(view: &'a PaneView<'a>) -> Vec<Line<'a>> {
             }
             Content::Schedules(rows) => lines.extend(rows.iter().map(Line::Schedule)),
             Content::Days(rows) => lines.extend(rows.iter().map(Line::Day)),
-            Content::Notes(rows) => lines.extend(rows.iter().map(Line::Note)),
+            Content::Notes(ref rows) => lines.extend(rows.iter().map(|row| Line::Note(row))),
             Content::Settings(rows) => {
                 lines.extend(rows.iter().map(|(_, row)| Line::Setting(*row)));
             }
@@ -1264,6 +1334,7 @@ fn pane(
     layout: &mut Layout,
 ) {
     let Column { x, width, .. } = column;
+    let mut column = column;
     let writing = app.editor().filter(|editor| editor.list == list);
     let adding = writing.is_some_and(|editor| editor.field == Field::Adding);
     let view = match list {
@@ -1282,6 +1353,15 @@ fn pane(
     // at every width.
     if !layout.narrow || list == List::Settings {
         header(canvas, x, width, rows.headers, &view, focused);
+    }
+    // The filter is the first line of the list it narrows, and the rows
+    // begin under it.
+    if list == List::Notes
+        && let Some(filter) = app.filter()
+    {
+        let typing = app.notes_pane() == NotesPane::Filter;
+        filter_row(canvas, column, &filter.text, typing.then_some(filter.caret));
+        column.top += 1;
     }
     let height = column.height();
     layout.lists.push(ListArea {
@@ -1935,7 +2015,10 @@ fn note_row(canvas: &mut Canvas, x: u16, width: u16, y: u16, row: &NoteRow, app:
         clip(&row.first_line, width.saturating_sub(16)),
         plain(),
     );
-    let made = app.settings().working_day(&row.created_at);
+    // An archived note is dated by when it was put away, which is the
+    // order the archive is in.
+    let since = row.archived_at.as_ref().unwrap_or(&row.created_at);
+    let made = app.settings().working_day(since);
     canvas.rput(
         x + width - 1,
         y,
@@ -1961,6 +2044,17 @@ fn age(made: Date, today: Date, dates: DateOrder) -> String {
     }
 }
 
+/// How long ago a note was archived, as the note's header says it:
+/// `today`, `yesterday`, `3 days ago`, `on 4 Sep`.
+fn archived_ago(on: Date, today: Date, dates: DateOrder) -> String {
+    let said = age(on, today, dates);
+    match said.as_str() {
+        "today" | "yesterday" | "last week" => said,
+        _ if said.ends_with(" days") || said.ends_with(" weeks") => format!("{said} ago"),
+        _ => format!("on {said}"),
+    }
+}
+
 /// The open note: the day it was made, and the body as a plain text area
 /// with a caret in it. Nothing else is on it (DESIGN.md section 9).
 ///
@@ -1976,12 +2070,22 @@ fn open_note(
 ) {
     let Column { x, width, .. } = column;
     let open = app.cursor(List::Notes).and_then(RowId::note);
+    // The day it was made, and for an archived note when it was put away:
+    // `Mon 22 Sep 09:12 · archived today`.
     let made = app
-        .notes()
-        .rows
-        .iter()
-        .find(|row| Some(row.note) == open)
-        .map(|row| stamp_label(&row.created_at, app.dates()));
+        .model()
+        .note(open.unwrap_or_default())
+        .map(|note| match &note.archived_at {
+            Some(archived) => {
+                let on = app.settings().working_day(archived);
+                format!(
+                    "{} · archived {}",
+                    stamp_label(&note.created_at, app.dates()),
+                    archived_ago(on, app.today(), app.dates())
+                )
+            }
+            None => stamp_label(&note.created_at, app.dates()),
+        });
 
     let view = PaneView {
         title: "Note".to_owned(),
@@ -1994,7 +2098,11 @@ fn open_note(
         },
         sections: Vec::new(),
         foot: None,
-        empty: [quiet("No notes yet."), key("a", "writes one")],
+        // The archive says for itself that it is empty.
+        empty: match app.notes_list() {
+            NotesList::Notes => [quiet("No notes yet."), key("a", "writes one")],
+            NotesList::Archive => [Vec::new(), Vec::new()],
+        },
     };
     match header_row {
         Some(y) => header(canvas, x, width, y, &view, focused),

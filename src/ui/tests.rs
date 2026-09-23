@@ -870,19 +870,24 @@ fn the_narrow_window_makes_the_day_and_the_day_list_its_tabs() {
 fn a_hint_bar_too_full_for_its_right_end_leaves_it_out() {
     let mut app = history();
     // A day ahead: "FUTURE DAY" is the longest name a context has, and
-    // its bar is the longest too.
+    // its bar is the longest too. A little narrower than the floating
+    // window, it has no room left for the right end.
     for _ in 0..8 {
         app.update(Action::NextDay);
     }
-    let drawn = look(&app, 120, 36);
+    let drawn = look(&app, 116, 36);
     let bar = drawn[35].clone();
 
     assert!(bar.starts_with(" FUTURE DAY  [/] day  . today"));
+    assert!(bar.ends_with("⏎ follow moved"), "{bar}");
     assert!(
         !bar.contains("pane"),
         "the row that does not fit is left out, not written over"
     );
-    assert!(bar.len() <= 120, "and nothing runs past the window");
+    assert!(
+        bar.chars().count() <= 116,
+        "and nothing runs past the window"
+    );
 }
 
 #[test]
@@ -1971,14 +1976,20 @@ fn the_narrow_tab_row_marks_the_tab_the_keyboard_is_on() {
     app.set_layout(layout);
     assert_eq!(look(&app, 80, 44)[2], "  TODAY 6   BACKLOG 12   NOTES 4");
 
-    // Right from the backlog is the notes tab, not a pane of its own.
-    app.update(Action::PaneRight);
-    app.update(Action::PaneRight);
+    // After the backlog, tab goes to the notes tab, not a pane of its
+    // own, and then to the archive in the same place.
+    app.update(Action::NextTab);
+    app.update(Action::NextTab);
     let notes = look(&app, 80, 44);
     assert_eq!(app.page(), Page::Notes);
     assert!(!notes[0].contains("notes"));
     assert!(notes[2].contains("NOTES 4"));
     assert!(notes[4].contains("▪ Mention to Anna:"));
+
+    app.update(Action::NextTab);
+    let archive = look(&app, 80, 44);
+    assert_eq!(archive[2], "  TODAY 6   BACKLOG 12   ARCHIVE 0");
+    assert!(archive[6].contains("Nothing archived."), "{archive:#?}");
 }
 
 /// The colour and attribute parameters of every `ESC [ … m` written, with
@@ -3997,4 +4008,132 @@ fn consecutive_controls_advance_by_the_cells_the_canvas_draws() {
     assert_eq!(count("\t\r\n\u{1b}\u{7f}X"), 5);
     let text: String = (0..5).map(|x| buffer[(x, 0)].symbol()).collect();
     assert_eq!(text, "→���X");
+}
+
+// ---- the archive and the filter ---------------------------------------
+
+#[test]
+fn the_archive_takes_the_place_of_the_notes_and_dates_its_rows_by_archiving() {
+    let mut app = app();
+    app.update(Action::NotesPage);
+    let drawn = look(&app, 120, 36);
+    assert!(left(&drawn[2]).starts_with(" Notes"));
+    assert!(left(&drawn[2]).ends_with("A archive"), "{:?}", drawn[2]);
+    assert_eq!(
+        drawn[35],
+        " NOTES  y/alt-y copy note  ⏎ open  a new  A archive  x delete  n back to tasks                    tab archive  h/l pane"
+    );
+
+    app.update(Action::Archive);
+    let drawn = look(&app, 120, 36);
+    assert!(left(&drawn[2]).ends_with("A archive 1"), "{:?}", drawn[2]);
+    assert!(
+        drawn[0].contains("3 notes"),
+        "an archived note is not counted"
+    );
+
+    app.update(Action::NextTab);
+    let drawn = look(&app, 120, 36);
+    assert!(left(&drawn[2]).starts_with(" Archive 1"), "{:?}", drawn[2]);
+    assert!(left(&drawn[2]).ends_with("A unarchive"), "{:?}", drawn[2]);
+    assert_eq!(
+        left(&drawn[4]),
+        "  ▪ Mention to Anna:                  today",
+        "dated by when it was archived, not when it was made"
+    );
+    assert!(
+        right(&drawn[2])
+            .trim_start()
+            .starts_with("Note Thu 4 Sep 16:40 · archived today"),
+        "{:?}",
+        drawn[2]
+    );
+    assert_eq!(right(&drawn[4]), "│  Mention to Anna:");
+    assert_eq!(
+        drawn[35],
+        " ARCHIVE  y/alt-y copy note  ⏎ open  a new  A unarchive  x delete  n back to tasks                  tab notes  h/l pane"
+    );
+}
+
+#[test]
+fn an_empty_archive_names_the_key_that_fills_it() {
+    let mut app = app();
+    app.update(Action::NotesPage);
+    app.update(Action::NextTab);
+    let drawn = look(&app, 120, 36);
+
+    assert!(left(&drawn[2]).starts_with(" Archive 0"), "{:?}", drawn[2]);
+    assert!(
+        drawn
+            .iter()
+            .any(|row| left(row).contains("Nothing archived."))
+    );
+    assert!(
+        drawn
+            .iter()
+            .any(|row| left(row).contains("A on a note puts it here"))
+    );
+    assert!(
+        !drawn.iter().any(|row| row.contains("No notes yet.")),
+        "the note pane beside it does not say the notes are empty"
+    );
+}
+
+#[test]
+fn the_filter_is_the_first_line_of_the_list_it_narrows() {
+    let mut app = app();
+    app.update(Action::NotesPage);
+    app.update(Action::Filter);
+    for typed in "rsync".chars() {
+        app.update(Action::Insert(typed));
+    }
+    let drawn = look(&app, 120, 36);
+
+    assert_eq!(left(&drawn[4]).trim_end(), "  / rsync█");
+    assert!(
+        left(&drawn[5]).starts_with("  ▪ rsync -av"),
+        "{:?}",
+        drawn[5]
+    );
+    assert!(
+        left(&drawn[6]).starts_with("  ▪ Mention to Anna:"),
+        "a long body has the letters scattered through it, and ranks below"
+    );
+    assert_eq!(left(&drawn[7]).trim_end(), "", "nothing else matches");
+    assert!(
+        right(&drawn[4]).contains("rsync -av"),
+        "the cursor note beside it"
+    );
+    assert_eq!(
+        drawn[35],
+        " FILTER  type to filter  ↑/↓ move  ⏎ open  tab to the list  esc clear"
+    );
+
+    // The list has the keyboard, and the filter stands without a caret.
+    app.update(Action::NextPane);
+    let drawn = look(&app, 120, 36);
+    assert_eq!(left(&drawn[4]).trim_end(), "  / rsync");
+    assert!(drawn[35].starts_with(" NOTES "));
+}
+
+#[test]
+fn a_filter_that_matches_nothing_says_how_to_be_rid_of_it() {
+    let mut app = app();
+    app.update(Action::NotesPage);
+    app.update(Action::Filter);
+    for typed in "zzz".chars() {
+        app.update(Action::Insert(typed));
+    }
+    let drawn = look(&app, 120, 36);
+
+    assert!(
+        drawn
+            .iter()
+            .any(|row| left(row).contains("Nothing matches."))
+    );
+    assert!(
+        drawn
+            .iter()
+            .any(|row| left(row).contains("esc clears the filter"))
+    );
 }

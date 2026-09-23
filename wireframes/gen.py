@@ -310,7 +310,7 @@ TODAY_HINTS = [('J/K', 'reorder'), ('space', 'done'), ('f', 'focus'), ('a', 'add
                ('b', 'to backlog'), ('m', 'move to day…'), ('R', 'repeat'), ('x', 'delete')]
 BACKLOG_HINTS = [('t', 'to today'), ('m', 'move…'), ('d', 'due by'), ('r', 'remind on'), ('w', 'waiting'),
                  ('R', 'repeat'), ('a', 'add'), ('e', 'edit'), ('x', 'delete')]
-PANE_KEYS = [('tab h/l', 'pane')]
+PANE_KEYS = [('h/l', 'pane')]
 
 
 # 03 --------------------------------------------------------------------
@@ -464,16 +464,40 @@ def p04():
     task(g, lx, lw, y, 'Chase the hosting invoice', state='moved', meta='to Mon 8 Sep'); y += 1
     hints(g, g.h - 1, 'Today', [('space', 'done'), ('f', 'focus'), ('a', 'add'), ('b', 'backlog'), ('x', 'del')], [('?', 'more')])
     g.callout(g.w - 10, g.h - 1, 3)
-    page('04-narrow', 'Half-width tile', [('80×44 · half-width tile, beside an editor', g)], '''
+
+    a = Grid(80, 44)
+    strip(a, [], [key('n', 'or') + key('esc', 'back to tasks'), key('/'), key(':'), key('?')])
+    x = a.put(1, 2, ' TODAY 6 ', 'd')
+    x = a.put(x + 1, 2, ' BACKLOG 12 ', 'd')
+    x = a.put(x + 1, 2, ' ARCHIVE 3 ', 'A b r')
+    a.callout(x + 2, 2, 4)
+    a.hl(0, 3, a.w)
+    y = 4
+    for t, age, cur in [('Retro format ideas: start/stop/continue', 'today', True),
+                        ('Reply to tender Q2, sent 11 Aug', '3 days', False),
+                        ('Old VPN steps, before the switch', 'last month', False)]:
+        a.put(1, y, ' ▪ ', 'd'); a.put(4, y, t); a.rput(a.w - 1, y, age, 'd')
+        if cur: a.add_attr(0, y, a.w, 'c')
+        y += 1
+    y += 1
+    a.put(1, y, 'NOTE MON 22 SEP 09:12 · ARCHIVED TODAY', 'd'); a.hl(40, y, a.w - 41, 'd'); y += 1
+    for l in ['Retro format ideas:', '- start / stop / continue', '- sailboat (wind, anchors, rocks)']:
+        a.put(2, y, l); y += 1
+    hints(a, a.h - 1, 'Archive', [('y/alt-y', 'copy note'), ('⏎', 'open'), ('a', 'new'), ('x', 'del'), ('n', 'back')], [('?', 'more')])
+    page('04-narrow', 'Half-width tile', [('80×44 · half-width tile, beside an editor', g),
+                                          ('80×44 · the Archive, the fourth stop of tab', a)], '''
 <h2>Narrow: under 100 columns</h2>
 <p>When the window is tiled into a half column the two panes collapse to one, switched by a tab row. The floating window never hits this; a tiled one often will.</p>
 <ol>
-<li>Tabs replace panes. <kbd>h</kbd>/<kbd>l</kbd> or <kbd>tab</kbd> switch tabs. Counts keep the other tabs informative. Notes becomes a tab.</li>
+<li>Tabs replace panes. <kbd>tab</kbd> goes round them: Today, Backlog, Notes, Archive and Today again; <kbd>h</kbd>/<kbd>l</kbd>, which switch panes side by side, mean nothing here. Counts keep the other tabs informative. Notes becomes a tab.</li>
 <li>Rows drop text metadata first and keep glyph-only chips. Titles get the width. Close times go; where a moved task went stays, because that is the whole content of the row.</li>
 <li>The hint bar shows the top five keys and defers to <kbd>?</kbd>.</li>
 </ol>
-<div class="flow"><b>Pull from backlog when narrow</b><kbd>l</kbd> to the Backlog tab, <kbd>t</kbd> on a task: it moves to Today, the Today count increments. No confirmation.</div>
-<p>The review takes the whole window in both layouts; when narrow, the action column becomes a popup on <kbd>⏎</kbd>.</p>''')
+<div class="flow"><b>Pull from backlog when narrow</b><kbd>tab</kbd> to the Backlog tab, <kbd>t</kbd> on a task: it moves to Today, the Today count increments. No confirmation.</div>
+<p>The review takes the whole window in both layouts; when narrow, the action column becomes a popup on <kbd>⏎</kbd>.</p>
+<ol start="4">
+<li>The third tab is two stops of <kbd>tab</kbd>. On the second it is named ARCHIVE and counts the archived notes; the next <kbd>tab</kbd> is Today.</li>
+</ol>''')
 
 
 # 05 --------------------------------------------------------------------
@@ -728,7 +752,7 @@ def p10():
     g = Grid(120, 36)
     strip(g, [[('4 notes', 'd')]], [key('n', 'or') + key('esc', 'back to today'), key('/'), key(':'), key('?')])
     g.callout(20, 0, 1)
-    lx, lw, rx, rw, y0, y1 = frame2(g, ('Notes', '', key('a', 'new')), ('Note', 'Thu 4 Sep 16:40', key('esc', 'back')), 'right', div=44)
+    lx, lw, rx, rw, y0, y1 = frame2(g, ('Notes', '', key('A', 'archive')), ('Note', 'Thu 4 Sep 16:40', key('esc', 'back')), 'right', div=44)
     g.callout(rx + 24, 2, 3)
     y = y0
     notes = [('Mention to Anna: CI runner budget,', 'yesterday', True), ('Draft reply to tender Q3: "We can', '2 days', False),
@@ -742,23 +766,76 @@ def p10():
     y = y0
     lines = ['Mention to Anna:', '- CI runner budget', '- Friday demo slot', '- ask about the retro format', '',
              'Also: the tender deadline moved to the 12th, check with legal first.', '',
-             'Draft:', 'Hi Anna, two things before Friday. The CI runner budget needs a decision', 'this week, and I would like the demo slot after lunch rather than before.']
+             'Draft:', 'Hi Anna, two things before Friday. The CI runner budget needs a decision', 'this week, and I would like the demo slot after lunch rather than', 'before.']
     for i, l in enumerate(lines):
         g.put(rx + 2, y + i, l)
     g.put(rx + 2 + len(lines[-1]), y + len(lines) - 1, '█', 'b')
     g.callout(rx + rw - 2, y0, 4)
     hints(g, g.h - 1, 'Note', [('type', 'to edit'), ('esc', 'back to the list')], [('in the list:', ''), ('⏎', 'open'), ('a', 'new'), ('x', 'delete'), ('n', 'back to today')])
-    page('10-scratchpad', 'Scratchpad', [('120×36 · floating window, notes page', g)], '''
+
+    notes_strip = [key('n', 'or') + key('esc', 'back to tasks'), key('/'), key(':'), key('?')]
+    list_hints = [('y/alt-y', 'copy note'), ('⏎', 'open'), ('a', 'new')]
+
+    a = Grid(120, 36)
+    strip(a, [[('4 notes', 'd')]], notes_strip)
+    lx, lw, rx, rw, y0, y1 = frame2(a, ('Archive', '12', key('A', 'unarchive')),
+                                    ('Note', 'Mon 22 Sep 09:12 · archived today', ''), 'left', div=44)
+    a.callout(lx + 10, 2, 5)
+    y = y0
+    archived = [('Retro format ideas: start/stop/continue', 'today'), ('Reply to tender Q2, sent 11 Aug', '3 days'),
+                ('psql -h db-staging -U app -d app', '5 days'), ('Offsite packing list: chargers', 'last week'),
+                ('Questions for the 1:1 on Tuesday', 'last week'), ('Standup notes 1 Sep', '2 weeks'),
+                ('Printer on 3rd floor: IP 10.0.4.12', '3 weeks'), ('Gift ideas for Ida', '3 weeks'),
+                ('Old VPN steps, before the switch', '4 weeks'), ('Budget 2026 notes from Jens', '5 weeks'),
+                ('Invoice template fields', '6 weeks'), ('Links from the Rust meetup', '7 weeks')]
+    for i, (t, age) in enumerate(archived):
+        a.put(lx + 1, y, ' ▪ ', 'd'); a.put(lx + 4, y, t[:lw - 16]); a.rput(lx + lw - 1, y, age, 'd')
+        if i == 0: a.add_attr(lx, y, lw, 'c')
+        y += 1
+    a.callout(lx + lw - 2, y0, 6)
+    y = y0
+    for i, l in enumerate(['Retro format ideas:', '- start / stop / continue', '- sailboat (wind, anchors, rocks)',
+                           '- one-word check-in first', '', 'Ask Anna which one the team did last time.']):
+        a.put(rx + 2, y + i, l)
+    hints(a, a.h - 1, 'Archive', list_hints + [('A', 'unarchive'), ('x', 'delete'), ('n', 'back to tasks')],
+          [('tab', 'notes'), ('h/l', 'pane')])
+
+    f = Grid(120, 36)
+    strip(f, [[('4 notes', 'd')]], notes_strip)
+    lx, lw, rx, rw, y0, y1 = frame2(f, ('Notes', '', key('A', 'archive 12')), ('Note', 'Thu 4 Sep 16:40', ''), 'left', div=44)
+    f.put(lx + 1, y0, ' / ', 'A'); f.put(lx + 4, y0, 'anna'); f.put(lx + 8, y0, '█', 'b')
+    f.callout(lx + 12, y0, 7)
+    y = y0 + 1
+    for i, (t, age) in enumerate([('Mention to Anna: CI runner budget,', 'yesterday'),
+                                  ('Draft reply to tender Q3: "We can', '2 days')]):
+        f.put(lx + 1, y, ' ▪ ', 'd'); f.put(lx + 4, y, t[:lw - 16]); f.rput(lx + lw - 1, y, age, 'd')
+        if i == 0: f.add_attr(lx, y, lw, 'c')
+        y += 1
+    y += 1
+    add_row(f, lx, lw, y, 'new note')
+    y = y0
+    for i, l in enumerate(lines[:6]):
+        f.put(rx + 2, y + i, l)
+    hints(f, f.h - 1, 'Filter', [('type', 'to filter'), ('↑/↓', 'move'), ('⏎', 'open'), ('tab', 'to the list'), ('esc', 'clear')])
+
+    page('10-scratchpad', 'Scratchpad', [('120×36 · floating window, notes page', g),
+                                          ('120×36 · tab: the archive in the same pane', a),
+                                          ('120×36 · / filters the list shown', f)], '''
 <h2>Scratchpad</h2>
 <p>A post-it block, on its own page. <kbd>n</kbd> switches the whole window to Notes and back, so a note gets real width; the day and backlog are one key away, not squeezed beside it. Text only.</p>
 <ol>
-<li>The pane header names Notes; the status line counts them and says how to get back. Search, commands and help still work here.</li>
-<li>Notes are a list, newest first: first line and age. No titles, no folders, no search. Create, open, throw away; delete has no confirmation, only undo. Nothing expires on its own.</li>
+<li>The pane header names Notes and the key that archives one; the status line counts them and says how to get back. Commands and help still work here; <kbd>/</kbd> filters the notes instead of searching the tasks.</li>
+<li>Notes are a list, newest first: first line and age. No titles, no folders. Create, open, archive, throw away; neither archiving nor deleting asks, and both undo. Nothing expires on its own.</li>
 <li>An open note takes the wide pane and shows when it was made, so a stale note is easy to spot and bin.</li>
 <li>The note is a plain multi-line text area with a cursor. No formatting, no toolbar. Every key types; <kbd>esc</kbd> returns focus to the list, where <kbd>a</kbd>, <kbd>x</kbd> and <kbd>n</kbd> work as keys.</li>
 </ol>
 <div class="flow"><b>Why a page and not a drawer</b>A drawer beside the day left a note about 40 columns wide, which is a strip, not a sheet. A page gives it 75 columns in the floating window and everything in a tile. The cost is one keypress to see the day again.</div>
-<div class="flow"><b>Narrow layout</b>Notes is one of the three tabs (screen 04); the list and the open note stack in that tab.</div>''')
+<ol start="5">
+<li><kbd>tab</kbd> puts the Archive in the list's place, and back. <kbd>A</kbd> on a note archives it, and on the Archive brings it back; the cursor lands on the row that took its place. Archived notes are dated by when they were archived, most recent first, and open and take typing like any other.</li>
+<li>An archived note's header says when it was made and when it was archived.</li>
+<li><kbd>/</kbd> opens a filter at the top of whichever list is showing. Letters type into it and the list narrows as they do, best match first: the letters of every word in order, anywhere in the body. <kbd>↑</kbd>/<kbd>↓</kbd> move, <kbd>⏎</kbd> opens, <kbd>tab</kbd> hands the keyboard to the list with the filter still applied, and <kbd>esc</kbd> clears it. The filter stays while a note is opened from it, and goes with <kbd>tab</kbd> to the other list.</li>
+</ol>
+<div class="flow"><b>Narrow layout</b>Notes and the Archive are the last two stops of <kbd>tab</kbd> (screen 04); the list and the open note stack in that tab.</div>''')
 
 
 # 11 --------------------------------------------------------------------
@@ -789,7 +866,7 @@ def p11():
     h = Grid(120, 17)
     h.box(2, 1, 116, 13)
     h.put(4, 1, ' Keys ', 'A b'); h.rseg(116, 1, [(' ', 'd'), ('?', 'k'), (' or ', 'd'), ('esc', 'k'), (' close ', 'd')], gap=0)
-    cols = [(5, 'Everywhere', [[('j/k', 'move'), ('h/l tab', 'pane')], [('a', 'add'), ('e', 'edit'), ('x', 'delete')],
+    cols = [(5, 'Everywhere', [[('j/k', 'move'), ('h/l', 'pane')], [('a', 'add'), ('e', 'edit'), ('x', 'delete')],
                                [('u', 'undo'), ('space', 'done')], [('/', 'search'), (':', 'commands')],
                                [('?', 'help'), ('n', 'notes')], [(',', 'settings'), ('q', 'quit')]]),
             (33, 'Day', [[('J/K', 'reorder'), ('f', 'focus')], [('b', 'to backlog')], [('m', 'move to day…')],
@@ -841,6 +918,9 @@ def p12():
     g = Grid(60, 8); header(g, 0, 60, 0, 'Notes', '', '0'); g.hl(0, 1, 60)
     add_row(g, 0, 60, 3, 'new note')
     grids.append(('F · No notes', g))
+    g = Grid(60, 8); header(g, 0, 60, 0, 'Archive', '0', key('A', 'unarchive'), focus=True); g.hl(0, 1, 60)
+    g.put(21, 3, 'Nothing archived.', 'd'); g.seg(19, 4, key('A', 'on a note puts it here'), gap=1)
+    grids.append(('G · Nothing archived', g))
     page('12-empty', 'Empty states', grids, '''
 <h2>Empty states</h2>
 <p>Empty states say what the list is for and name the one or two keys that fill it. No illustrations, no encouragement.</p>
@@ -848,7 +928,8 @@ def p12():
 <p><b>C</b> The review only ever appears with content. Its absence is the good news.</p>
 <p><b>D</b> Past days with nothing planned still exist in the day stepper so the calendar stays continuous; the day list on screen 08 skips them.</p>
 <p><b>E</b> The most likely reason for a miss is that the task does not exist yet, so with no matches Enter adds the typed text as a task on today.</p>
-<p><b>F</b> The new-note row is the whole empty state.</p>''')
+<p><b>F</b> The new-note row is the whole empty state.</p>
+<p><b>G</b> The archive is filled from the other list, so it names the key and where to press it.</p>''')
 
 
 

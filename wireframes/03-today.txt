@@ -34,7 +34,7 @@
                                                            │
                                                            │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- TODAY  J/K reorder  space done  f focus  a add  e edit  b to backlog  m move to day…  R repeat  x delete  tab h/l pane
+ TODAY  J/K reorder  space done  f focus  a add  e edit  b to backlog  m move to day…  R repeat  x delete      h/l pane
 
 
 == 160×48 · full-width tile: same layout, more rows
@@ -85,5 +85,5 @@
                                                                                │
                                                                                │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- TODAY  J/K reorder  space done  f focus  a add  e edit  b to backlog  m move to day…  R repeat  x delete                                          tab h/l pane
+ TODAY  J/K reorder  space done  f focus  a add  e edit  b to backlog  m move to day…  R repeat  x delete                                              h/l pane
 

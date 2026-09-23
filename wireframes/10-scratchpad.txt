@@ -3,7 +3,7 @@
 
  4 notes                                                                             n or esc back to today   /   :   ?
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- Notes                                a new   Note Thu 4 Sep 16:40                                             esc back
+ Notes                            A archive   Note Thu 4 Sep 16:40                                             esc back
 ────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────
   ▪ Mention to Anna: CI runner b  yesterday │  Mention to Anna:
   ▪ Draft reply to tender Q3: "W     2 days │  - CI runner budget
@@ -15,7 +15,7 @@
                                             │  Draft:
                                             │  Hi Anna, two things before Friday. The CI runner budget needs a decision
                                             │  this week, and I would like the demo slot after lunch rather than
-                                            │  before.
+                                            │  before.█
                                             │
                                             │
                                             │
@@ -35,4 +35,82 @@
                                             │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  NOTE  type to edit  esc back to the list                       in the list:   ⏎ open  a new  x delete  n back to today
+
+
+== 120×36 · tab: the archive in the same pane
+
+
+ 4 notes                                                                             n or esc back to tasks   /   :   ?
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Archive 12                     A unarchive   Note Mon 22 Sep 09:12 · archived today
+────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────
+  ▪ Retro format ideas: start/st      today │  Retro format ideas:
+  ▪ Reply to tender Q2, sent 11      3 days │  - start / stop / continue
+  ▪ psql -h db-staging -U app -d     5 days │  - sailboat (wind, anchors, rocks)
+  ▪ Offsite packing list: charge  last week │  - one-word check-in first
+  ▪ Questions for the 1:1 on Tue  last week │
+  ▪ Standup notes 1 Sep             2 weeks │  Ask Anna which one the team did last time.
+  ▪ Printer on 3rd floor: IP 10.    3 weeks │
+  ▪ Gift ideas for Ida              3 weeks │
+  ▪ Old VPN steps, before the sw    4 weeks │
+  ▪ Budget 2026 notes from Jens     5 weeks │
+  ▪ Invoice template fields         6 weeks │
+  ▪ Links from the Rust meetup      7 weeks │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ ARCHIVE  y/alt-y copy note  ⏎ open  a new  A unarchive  x delete  n back to tasks                  tab notes  h/l pane
+
+
+== 120×36 · / filters the list shown
+
+
+ 4 notes                                                                             n or esc back to tasks   /   :   ?
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ Notes                         A archive 12   Note Thu 4 Sep 16:40
+────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────
+  / anna█                                   │  Mention to Anna:
+  ▪ Mention to Anna: CI runner b  yesterday │  - CI runner budget
+  ▪ Draft reply to tender Q3: "W     2 days │  - Friday demo slot
+                                            │  - ask about the retro format
+  +  new note                             a │
+                                            │  Also: the tender deadline moved to the 12th, check with legal first.
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ FILTER  type to filter  ↑/↓ move  ⏎ open  tab to the list  esc clear
 

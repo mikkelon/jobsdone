@@ -837,7 +837,8 @@ fn shift_enter_keeps_adding_until_enter_closes_the_field() {
         KeyContext::Home {
             pane: Pane::Day,
             day: Shown::Today,
-            field: Some(Field::Adding)
+            field: Some(Field::Adding),
+            narrow: false,
         },
         "every letter types while the field is open"
     );
@@ -2019,7 +2020,8 @@ fn the_pane_beside_a_day_that_is_not_today_is_the_list_of_days() {
         KeyContext::Home {
             pane: Pane::Backlog,
             day: Shown::Past,
-            field: None
+            field: None,
+            narrow: false,
         }
     );
 }
@@ -2434,19 +2436,23 @@ fn a_cursor_on_a_row_another_window_took_away_clamps_to_the_first() {
 }
 
 #[test]
-fn h_and_l_stop_at_the_ends_and_tab_goes_round() {
+fn h_and_l_switch_the_panes_of_a_wide_window_and_stop_at_the_ends() {
     let mut app = started();
     app.update(Action::PaneLeft);
     assert_eq!(app.pane(), Pane::Day, "already at the left");
 
-    app.update(Action::NextPane);
+    app.update(Action::PaneRight);
     assert_eq!(app.pane(), Pane::Backlog);
-    app.update(Action::NextPane);
-    assert_eq!(app.pane(), Pane::Day, "tab wraps");
+    app.update(Action::PaneRight);
+    assert_eq!(app.pane(), Pane::Backlog, "l does not go round");
+    assert_eq!(app.page(), Page::Home, "and does not turn the page");
 
-    app.update(Action::PaneRight);
-    app.update(Action::PaneRight);
-    assert_eq!(app.pane(), Pane::Backlog, "l does not");
+    app.update(Action::NextTab);
+    assert_eq!(
+        (app.page(), app.pane()),
+        (Page::Home, Pane::Backlog),
+        "a wide window has no tabs to step through"
+    );
 }
 
 #[test]
@@ -2463,22 +2469,29 @@ fn a_field_holds_the_keyboard_until_it_is_answered() {
     assert!(app.editor().is_some());
 }
 
+/// A window collapsed to tabs goes round four of them with `tab`:
+/// Today, Backlog, Notes, Archive, and Today again.
 #[test]
-fn notes_is_the_third_tab_only_when_the_window_is_narrow() {
+fn tab_goes_round_the_four_tabs_of_a_narrow_window() {
     let mut app = started();
-    app.update(Action::PaneRight);
-    app.update(Action::PaneRight);
-    assert_eq!(app.page(), Page::Home, "wide, the notes page is a page");
-
     app.set_layout(Layout {
         narrow: true,
         ..Layout::default()
     });
-    app.update(Action::PaneRight);
-    assert_eq!(app.page(), Page::Notes);
-    app.update(Action::PaneLeft);
-    assert_eq!(app.page(), Page::Home);
-    assert_eq!(app.pane(), Pane::Backlog);
+    let stop = |app: &App| (app.page(), app.pane(), app.notes_list());
+
+    app.update(Action::NextTab);
+    assert_eq!(stop(&app), (Page::Home, Pane::Backlog, NotesList::Notes));
+    app.update(Action::NextTab);
+    assert_eq!(stop(&app), (Page::Notes, Pane::Backlog, NotesList::Notes));
+    app.update(Action::NextTab);
+    assert_eq!(stop(&app), (Page::Notes, Pane::Backlog, NotesList::Archive));
+    app.update(Action::NextTab);
+    assert_eq!(stop(&app), (Page::Home, Pane::Day, NotesList::Archive));
+
+    // The notes page is always turned to on Notes.
+    app.update(Action::NotesPage);
+    assert_eq!(app.notes_list(), NotesList::Notes);
 }
 
 #[test]
@@ -2500,7 +2513,9 @@ fn n_turns_the_page_and_turns_it_back() {
         app.key_context(),
         KeyContext::Notes {
             pane: NotesPane::List,
-            text_field: false
+            list: NotesList::Notes,
+            text_field: false,
+            narrow: false,
         }
     );
 
@@ -2559,6 +2574,269 @@ fn x_throws_a_note_away_and_u_brings_it_back() {
     assert_eq!(app.notes().count, 2);
 }
 
+/// Notes made from the oldest to the newest, left, on the notes page;
+/// the list is newest first.
+fn notes_saying(app: &mut App, bodies: &[&str]) -> Vec<Id> {
+    app.update(Action::NotesPage);
+    bodies
+        .iter()
+        .map(|body| {
+            let note = note_saying(app, body);
+            app.update(Action::Cancel);
+            note
+        })
+        .collect()
+}
+
+fn shown_notes(app: &App) -> Vec<Id> {
+    app.shown_notes().iter().map(|row| row.note).collect()
+}
+
+#[test]
+fn tab_on_the_notes_page_switches_to_the_archive_and_back() {
+    let mut app = started();
+    let made = notes_saying(&mut app, &["Older", "Newer"]);
+    app.update(Action::Down);
+    app.update(Action::Archive);
+    assert_eq!(shown_notes(&app), [made[1]]);
+
+    app.update(Action::NextTab);
+    assert_eq!(app.notes_list(), NotesList::Archive);
+    assert_eq!(shown_notes(&app), [made[0]]);
+    assert_eq!(
+        app.key_context(),
+        KeyContext::Notes {
+            pane: NotesPane::List,
+            list: NotesList::Archive,
+            text_field: false,
+            narrow: false,
+        }
+    );
+    app.update(Action::NextTab);
+    assert_eq!(app.notes_list(), NotesList::Notes);
+    assert_eq!(
+        app.page(),
+        Page::Notes,
+        "wide, the archive goes back to notes"
+    );
+
+    app.update(Action::NextTab);
+    app.update(Action::NotesPage);
+    app.update(Action::NotesPage);
+    assert_eq!(
+        app.notes_list(),
+        NotesList::Notes,
+        "the page is always entered on notes"
+    );
+}
+
+#[test]
+fn a_archives_the_cursor_note_and_the_next_one_takes_its_place() {
+    let mut app = started();
+    let made = notes_saying(&mut app, &["Third", "Second", "First"]);
+    // Newest first: First, Second, Third.
+    app.update(Action::Down);
+    assert_eq!(note_cursor(&app), Some(made[1]));
+
+    app.update(Action::Archive);
+    assert_eq!(hint(&app), "Archived \"Second\"");
+    assert!(app.message().is_some_and(|message| message.undo));
+    assert_eq!(shown_notes(&app), [made[2], made[0]]);
+    assert_eq!(
+        note_cursor(&app),
+        Some(made[0]),
+        "the row that took its place"
+    );
+    assert_eq!(app.notes().count, 2);
+    assert_eq!(app.notes().archived, 1);
+
+    app.update(Action::Undo);
+    assert_eq!(shown_notes(&app), [made[2], made[1], made[0]]);
+}
+
+#[test]
+fn a_on_the_archive_brings_the_note_back() {
+    let mut app = started();
+    let made = notes_saying(&mut app, &["Older", "Newer"]);
+    app.update(Action::Archive);
+    app.update(Action::Archive);
+    assert!(shown_notes(&app).is_empty());
+
+    app.update(Action::NextTab);
+    assert_eq!(
+        shown_notes(&app),
+        [made[1], made[0]],
+        "archived at the same instant, the higher id first"
+    );
+    app.update(Action::Archive);
+    assert_eq!(hint(&app), "Unarchived \"Newer\"");
+    assert_eq!(shown_notes(&app), [made[0]]);
+    assert_eq!(note_cursor(&app), Some(made[0]));
+}
+
+#[test]
+fn an_archived_note_opens_and_takes_what_is_typed() {
+    let mut app = started();
+    let made = notes_saying(&mut app, &["Milk"]);
+    app.update(Action::Archive);
+    app.update(Action::NextTab);
+
+    app.update(Action::Confirm);
+    type_in(&mut app, " and bread");
+    app.update(Action::Tick);
+    app.update(Action::Cancel);
+
+    let note = app.model().note(made[0]).expect("the note");
+    assert_eq!(note.body, "Milk and bread");
+    assert!(note.is_archived(), "typing into it does not bring it back");
+    assert_eq!(app.notes_list(), NotesList::Archive);
+}
+
+/// An editor open on a note another window archives stays open and
+/// keeps saving; the note is simply not in Notes when it is left.
+#[test]
+fn a_note_archived_elsewhere_while_it_is_open_keeps_its_editor() {
+    let store = MemStore::new();
+    let mut app = app_at(store.clone(), NOW);
+    let made = notes_saying(&mut app, &["Milk"]);
+    app.update(Action::Confirm);
+    type_in(&mut app, " and");
+
+    let mut elsewhere = app_at(store, NOW);
+    elsewhere.update(Action::NotesPage);
+    elsewhere.update(Action::Archive);
+    app.update(Action::Tick);
+    type_in(&mut app, " bread");
+    app.update(Action::Tick);
+
+    assert_eq!(app.draft().map(|draft| draft.note), Some(made[0]));
+    assert_eq!(app.model().notes.len(), 1, "no recovery note");
+    assert_eq!(app.model().note(made[0]).unwrap().body, "Milk and bread");
+
+    app.update(Action::Cancel);
+    assert_eq!(app.notes_pane(), NotesPane::List);
+    assert!(shown_notes(&app).is_empty(), "back in a list it has left");
+}
+
+#[test]
+fn the_filter_narrows_the_list_as_it_is_typed_best_match_first() {
+    let mut app = started();
+    let made = notes_saying(
+        &mut app,
+        &[
+            "Mention to Anna:\n- CI runner budget",
+            "Rain until noon",
+            "Groceries",
+        ],
+    );
+
+    app.update(Action::Filter);
+    assert_eq!(
+        app.key_context(),
+        KeyContext::Notes {
+            pane: NotesPane::Filter,
+            list: NotesList::Notes,
+            text_field: true,
+            narrow: false,
+        },
+        "every letter types into the filter"
+    );
+    type_in(&mut app, "run");
+    assert_eq!(app.filter().map(|filter| filter.text.as_str()), Some("run"));
+    assert_eq!(
+        shown_notes(&app),
+        [made[0], made[1]],
+        "the whole body is matched, and letters together rank first"
+    );
+    assert_eq!(
+        note_cursor(&app),
+        Some(made[0]),
+        "the cursor is on the best"
+    );
+
+    app.update(Action::Down);
+    assert_eq!(
+        note_cursor(&app),
+        Some(made[1]),
+        "the list moves while typing"
+    );
+    app.update(Action::Backspace);
+    app.update(Action::Backspace);
+    app.update(Action::Backspace);
+    assert_eq!(
+        shown_notes(&app).len(),
+        3,
+        "an empty filter shows everything"
+    );
+}
+
+#[test]
+fn a_note_opened_from_the_filter_comes_back_to_the_filtered_list() {
+    let mut app = started();
+    let made = notes_saying(&mut app, &["Milk", "Bread"]);
+    app.update(Action::Filter);
+    type_in(&mut app, "milk");
+
+    app.update(Action::Confirm);
+    assert_eq!(app.draft().map(|draft| draft.note), Some(made[0]));
+    app.update(Action::Cancel);
+
+    assert_eq!(
+        app.notes_pane(),
+        NotesPane::List,
+        "the keyboard is on the list"
+    );
+    assert_eq!(shown_notes(&app), [made[0]], "and the filter still applies");
+
+    app.update(Action::Cancel);
+    assert!(app.filter().is_none(), "esc clears the filter first");
+    assert_eq!(app.page(), Page::Notes);
+    assert_eq!(shown_notes(&app).len(), 2);
+    app.update(Action::Cancel);
+    assert_eq!(app.page(), Page::Home, "and then leaves the page");
+}
+
+#[test]
+fn tab_hands_the_filter_to_the_list_and_then_switches_lists_with_it() {
+    let mut app = started();
+    let made = notes_saying(&mut app, &["Milk", "Bread", "Oat milk"]);
+    app.update(Action::Archive);
+    app.update(Action::Filter);
+    type_in(&mut app, "milk");
+    assert_eq!(shown_notes(&app), [made[0]]);
+
+    app.update(Action::NextPane);
+    assert_eq!(app.notes_pane(), NotesPane::List, "single keys work again");
+    assert_eq!(
+        app.filter().map(|filter| filter.text.as_str()),
+        Some("milk")
+    );
+
+    app.update(Action::NextTab);
+    assert_eq!(app.notes_list(), NotesList::Archive);
+    assert_eq!(shown_notes(&app), [made[2]], "the filter goes with it");
+
+    app.update(Action::Filter);
+    assert_eq!(app.notes_pane(), NotesPane::Filter);
+    app.update(Action::Cancel);
+    assert!(app.filter().is_none());
+    assert_eq!(app.notes_pane(), NotesPane::List);
+}
+
+#[test]
+fn leaving_the_notes_page_drops_the_filter() {
+    let mut app = started();
+    notes_saying(&mut app, &["Milk", "Bread"]);
+    app.update(Action::Filter);
+    type_in(&mut app, "milk");
+    app.update(Action::NextPane);
+    app.update(Action::NotesPage);
+    app.update(Action::NotesPage);
+
+    assert!(app.filter().is_none());
+    assert_eq!(shown_notes(&app).len(), 2);
+}
+
 /// A note made, opened and typed into, which is the whole of writing one.
 fn note_saying(app: &mut App, body: &str) -> Id {
     app.update(Action::Add);
@@ -2577,7 +2855,9 @@ fn a_new_note_opens_for_typing_straight_away() {
         app.key_context(),
         KeyContext::Notes {
             pane: NotesPane::Note,
-            text_field: true
+            list: NotesList::Notes,
+            text_field: true,
+            narrow: false,
         },
         "every letter types in an open note"
     );
@@ -3604,7 +3884,8 @@ fn the_hint_bar_has_a_context_to_draw_from() {
         KeyContext::Home {
             pane: Pane::Day,
             day: Shown::Today,
-            field: None
+            field: None,
+            narrow: false,
         }
     );
 }
@@ -3626,7 +3907,8 @@ fn a_popup_takes_the_keyboard_and_escape_gives_it_back() {
         KeyContext::Home {
             pane: Pane::Day,
             day: Shown::Today,
-            field: None
+            field: None,
+            narrow: false,
         },
         "the page underneath is what the palette lists"
     );
@@ -5525,7 +5807,9 @@ fn escape_leaves_the_word_as_it_was_and_gives_the_note_back() {
         app.key_context(),
         KeyContext::Notes {
             pane: NotesPane::Note,
-            text_field: true
+            list: NotesList::Notes,
+            text_field: true,
+            narrow: false,
         },
         "one Escape backs out of the card, not out of the note"
     );
