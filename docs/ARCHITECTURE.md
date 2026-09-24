@@ -652,6 +652,6 @@ section 2, in the commit that needs it, with the reason in the message.
 | A new key, or a key that means something new      | `input`           |
 | A popup, a page, cursor behaviour, the review session | `app`         |
 | Where a caret goes, and which row of a wrapped note it is on | `app`     |
-| Colours, box drawing, date formatting, the collapse to tabs | `ui`    |
+| Colours, box drawing, date formatting, the narrow one-pane layout | `ui`    |
 | Resize, focus, panic, the tick                    | `terminal`        |
 | Paths, logging setup, the desktop pieces          | `main.rs`, the Makefile |
