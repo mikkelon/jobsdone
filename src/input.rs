@@ -554,14 +554,13 @@ const QUIT: Binding = Binding {
     narrow: Bar::Off,
 };
 
-/// The way home from another day, which is a place under the leader and
-/// so a line of the bar rather than a key of the table: stepping through
-/// days is what the pane is for, and coming back is the next thing to
-/// know (wireframe 08).
+/// The way home from another day: Escape, one level back towards today,
+/// the way it backs out of anything. Stepping through days is what the
+/// pane is for, and coming back is the next thing to know (wireframe 08).
 const BACK_TO_TODAY: Binding = Binding {
-    keys: &[],
-    shown: "gt",
-    label: "today",
+    keys: &[("esc", Action::Cancel)],
+    shown: "esc",
+    label: "back to today",
     bar: Bar::Left,
     // The narrow bar calls it "back", because `t today` is beside it and
     // means something else.
@@ -2494,6 +2493,97 @@ pub fn name(context: KeyContext) -> &'static str {
 /// The keys a text field leaves alone (DESIGN.md section 4). Everything
 /// else printable types.
 const KEEPS_ITS_NAME: &[&str] = &["enter", "esc", "tab", "up", "down"];
+
+/// The pages, for saying where a key that does nothing here does
+/// something: every context a key is pressed on when no field or card
+/// has the keyboard, at the full width.
+const PAGES: &[KeyContext] = &[
+    KeyContext::Home {
+        pane: Pane::Day,
+        day: Shown::Today,
+        field: None,
+        narrow: false,
+    },
+    KeyContext::Home {
+        pane: Pane::Backlog,
+        day: Shown::Today,
+        field: None,
+        narrow: false,
+    },
+    KeyContext::Home {
+        pane: Pane::Day,
+        day: Shown::Past,
+        field: None,
+        narrow: false,
+    },
+    KeyContext::Home {
+        pane: Pane::Backlog,
+        day: Shown::Past,
+        field: None,
+        narrow: false,
+    },
+    KeyContext::Notes {
+        pane: NotesPane::List,
+        list: NotesList::Notes,
+        text_field: false,
+        narrow: false,
+    },
+    KeyContext::Notes {
+        pane: NotesPane::List,
+        list: NotesList::Archive,
+        text_field: false,
+        narrow: false,
+    },
+    KeyContext::Review {
+        step: ReviewStep::Pile,
+        last: false,
+        asks: true,
+        text_field: false,
+    },
+    KeyContext::Review {
+        step: ReviewStep::Surfaced,
+        last: true,
+        asks: true,
+        text_field: false,
+    },
+    KeyContext::Settings { field: false },
+];
+
+/// The keys that were a place before `g` was, and the chord each became.
+const MOVED_UNDER_G: &[(&str, &str)] = &[(".", "gt"), ("n", "gn"), (",", "gs"), ("M", "gr")];
+
+/// What to say about a key that means nothing where it was pressed: where
+/// it went, if it was a place; what it is and where, if some other page
+/// has it; nothing, if no page does.
+pub fn elsewhere(key: &str) -> Option<String> {
+    if let Some((_, chord)) = MOVED_UNDER_G.iter().find(|(old, _)| *old == key) {
+        return Some(format!("{key} is now {chord}: g goes everywhere."));
+    }
+    let mut label = None;
+    let mut places: Vec<String> = Vec::new();
+    for page in PAGES {
+        let Some(binding) = bindings(*page)
+            .iter()
+            .find(|binding| binding.keys.iter().any(|(bound, _)| *bound == key))
+        else {
+            continue;
+        };
+        label.get_or_insert(binding.label);
+        let place = name(*page).to_lowercase();
+        if !places.contains(&place) {
+            places.push(place);
+        }
+    }
+    let label = label?;
+    let places = match places.as_slice() {
+        [one] => one.clone(),
+        [rest @ .., last] => format!("{} and {last}", rest.join(", ")),
+        [] => return None,
+    };
+    Some(format!(
+        "Nothing here for {key}. It is {label} on {places}."
+    ))
+}
 
 /// How the key tables write a key press, for a press that means nothing
 /// where it was made; anything that is not a key press has no name.

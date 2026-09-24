@@ -861,7 +861,7 @@ fn the_narrow_window_makes_the_day_and_the_day_list_its_tabs() {
     assert!(tabs.contains("DAYS 11"), "and the backlog gives way to it");
     assert_eq!(
         drawn[drawn.len() - 1],
-        " PAST DAY  [/] day  gt back  space done  t today  x del                  ? more",
+        " PAST DAY  [/] day  esc back  space done  t today  x del                 ? more",
         "and the bar keeps the way home in it"
     );
 }
@@ -878,10 +878,10 @@ fn a_hint_bar_too_full_for_its_right_end_leaves_it_out() {
     let drawn = look(&app, 116, 36);
     let bar = drawn[35].clone();
 
-    assert!(bar.starts_with(" FUTURE DAY  [/] day  gt today"));
-    assert!(bar.ends_with("⏎ follow moved  g go…"), "{bar}");
+    assert!(bar.starts_with(" FUTURE DAY  [/] day  esc back to today"));
+    assert!(bar.ends_with("m move…         g go…"), "{bar}");
     assert!(
-        !bar.contains("pane"),
+        !bar.contains("pane") && !bar.contains("follow"),
         "the row that does not fit is left out, not written over"
     );
     assert!(
@@ -3914,7 +3914,7 @@ fn page_headers_do_not_repeat_names_dates_or_note_counts() {
             if app.shown() == Shown::Today {
                 assert_eq!(headings.matches("today").count(), 1, "{headings}");
             } else {
-                assert!(drawn[0].contains("gt "), "return to today stays visible");
+                assert!(drawn[0].contains("esc "), "return to today stays visible");
             }
         }
         app.update(Action::NotesPage);

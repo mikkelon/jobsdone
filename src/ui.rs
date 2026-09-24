@@ -572,7 +572,7 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
     let (left, right) = match (app.page(), narrow) {
         (Page::Home, true) => (
             if browsing {
-                vec![key("gt", "today")]
+                vec![key("esc", "back to today")]
             } else {
                 vec![quiet(&day_label(app.today(), app.dates()))]
             },
@@ -581,7 +581,7 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
         (Page::Home, false) if browsing => (
             vec![
                 quiet(&ago(app.showing(), app.today())),
-                key("gt", "back to today"),
+                key("esc", "back to today"),
             ],
             with(
                 alert(" on the pile"),
@@ -1101,7 +1101,7 @@ fn days_pane(app: &App) -> PaneView<'_> {
         foot: Some("days with nothing planned are skipped"),
         empty: [
             quiet("Nothing has been planned on any day yet."),
-            key("gt", "back to today"),
+            key("esc", "back to today"),
         ],
     }
 }

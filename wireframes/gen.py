@@ -668,7 +668,7 @@ def p07():
 # 08 --------------------------------------------------------------------
 def p08():
     g = Grid(120, 36)
-    strip(g, [[('4 days ago', 'd')], key('gt', 'back to today')],
+    strip(g, [[('4 days ago', 'd')], key('esc', 'back to today')],
           pile(5) + [[('4 notes', 'd'), ('gn', 'k')], key('/'), key(':'), key('?')])
     g.callout(48, 0, 1)
     lx, lw, rx, rw, y0, y1 = frame2(g, ('Mon 1 Sep', 'past day', '8 planned · 3 done · 2 open · 3 moved'), ('Days', '', key('gd', 'go to date')), 'left')
@@ -701,7 +701,7 @@ def p08():
     group(g, rx, rw, y, 'Earlier'); y += 1
     g.put(rx + 5, y, 'Fri 22 Aug'); g.rput(rx + rw - 1, y, '1 / 2 · 1 open', 'd'); y += 1
     g.put(rx + 5, y, '…'); g.rput(rx + rw - 1, y, 'days with nothing planned are skipped', 'd')
-    hints(g, g.h - 1, 'Past day', [('[/]', 'day'), ('gt', 'today'), ('gd', 'go to date'), ('space', 'done'), ('t', 'to today'), ('b', 'to backlog'), ('m', 'move…'), ('⏎', 'follow moved')], PANE_KEYS)
+    hints(g, g.h - 1, 'Past day', [('[/]', 'day'), ('esc', 'back to today'), ('gd', 'go to date'), ('space', 'done'), ('t', 'to today'), ('b', 'to backlog'), ('m', 'move…'), ('⏎', 'follow moved')], PANE_KEYS)
     page('08-history', 'History', [('120×36 · floating window', g)], '''
 <h2>History: browsing past days</h2>
 <p>History is not a separate screen: it is the same day view stepped backwards. A past day is drawn exactly as it was while it was today, and the two panes stay in place.</p>

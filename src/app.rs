@@ -4605,9 +4605,27 @@ impl App {
     /// A key that means nothing where it was pressed. After `g` that is a
     /// place there is not, which is worth saying, since the next key
     /// would otherwise be read as if `g` had never been pressed.
+    ///
+    /// Anywhere else a key that does nothing says where it does something,
+    /// so that a key is never silently dead. Escape on today is the one
+    /// exception: it is as far back as there is to go, and says nothing.
     pub fn unbound(&mut self, key: &str) {
         if std::mem::take(&mut self.leader) {
             self.say(format!("g{key} is not a place to go."), false);
+            return;
+        }
+        if key == "esc" || self.key_context().text_field() {
+            return;
+        }
+        if self.page == Page::Settings && self.review.is_none() && key == "u" {
+            self.say(
+                "Settings are not on the undo stack: h and l change a value back.",
+                false,
+            );
+            return;
+        }
+        if let Some(said) = input::elsewhere(key) {
+            self.say(said, false);
         }
     }
 
@@ -4918,6 +4936,12 @@ impl App {
             } else {
                 self.turn_the_page();
             }
+            return;
+        }
+        // Another day is one level out from today, and today is as far
+        // back as Escape goes.
+        if self.browsing() {
+            self.show_the_day(self.today);
         }
     }
 

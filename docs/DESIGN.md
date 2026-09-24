@@ -182,7 +182,16 @@ Conventions, so the map is guessable:
   shows, in every list and every card that is a list. `G` is, with `gg`,
   the one uppercase key that is not about the cursor row. `ctrl-d` and
   `ctrl-u` also page the palette and search, where letters type.
-- `Enter` confirms, `Escape` backs out one level, `u` undoes.
+- `Enter` confirms, `Escape` backs out one level, `u` undoes. The levels
+  run towards today: a field, then a card, then a `g` waiting for its
+  place, then the review, then the notes or settings page, then another
+  day, then today, where Escape is as far back as there is and does
+  nothing.
+- A key that does nothing where it is pressed says where it does
+  something, in the hint bar: "Nothing here for d. It is due by on
+  backlog and surfaced." A key that used to be a place says what it is
+  now ("n is now gn"), and `u` on the settings page says why nothing is
+  undone there. A key no page has, and Escape on today, stay silent.
 - `ctrl-c` quits from wherever the keyboard is, a card or an open field
   included, and puts the terminal back the way `q` does. It is the one key
   that is not a row of any table: a terminal program that ignores it reads
@@ -307,8 +316,8 @@ without losing it.
 History is not a separate screen. It is the day pane stepped backwards with
 `[`, while the backlog pane becomes a list of days with their done counts,
 newest first, under a rule per week: this week, last week, earlier, and
-later for a day ahead. Future days work the same way forwards. `gt` comes
-back to today and `gd` goes straight to a date.
+later for a day ahead. Future days work the same way forwards. Escape, or
+`gt`, comes back to today and `gd` goes straight to a date.
 
 The header of a day that is not today is the date itself, with "past day"
 or "future day" beside it where today has the word "Today" before the

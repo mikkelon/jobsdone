@@ -1485,7 +1485,7 @@ fn help(canvas: &mut Canvas, _app: &App, popup: &Popup, rows: &Rows, layout: &mu
         y + height - 2,
         width,
         &[
-            ("esc", "close"),
+            ("?/esc", "close"),
             ("↑/↓", "scroll"),
             ("tab", if all { "current keys" } else { "all keys" }),
         ],

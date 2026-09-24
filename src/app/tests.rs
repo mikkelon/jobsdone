@@ -162,13 +162,12 @@ fn type_in(app: &mut App, text: &str) {
     }
 }
 
-/// `a`, the title, Enter, Escape: one task in the focused pane, the way
-/// somebody adds one.
+/// `a`, the title, Enter: one task in the focused pane, the way somebody
+/// adds one. Enter closes the field.
 fn add(app: &mut App, title: &str) -> Id {
     app.update(Action::Add);
     type_in(app, title);
     app.update(Action::Confirm);
-    app.update(Action::Cancel);
     cursor(app, app.focused()).expect("the task just added")
 }
 
@@ -6392,4 +6391,47 @@ fn cursor_title(app: &App, list: List) -> String {
         .and_then(|id| app.model().task(id))
         .map(|task| task.title.clone())
         .unwrap_or_default()
+}
+
+#[test]
+fn escape_on_another_day_comes_back_to_today_and_on_today_stays() {
+    let mut app = started();
+    app.update(Action::PrevDay);
+    app.update(Action::PrevDay);
+
+    app.update(Action::Cancel);
+    assert_eq!(app.showing(), app.today());
+
+    app.update(Action::Cancel);
+    assert_eq!(app.showing(), app.today());
+    assert_eq!(app.page(), Page::Home);
+}
+
+#[test]
+fn a_key_that_does_nothing_here_says_where_it_does_something() {
+    let mut app = started();
+
+    app.unbound("d");
+    assert_eq!(
+        hint(&app),
+        "Nothing here for d. It is due by on backlog and surfaced."
+    );
+
+    app.unbound("n");
+    assert_eq!(hint(&app), "n is now gn: g goes everywhere.");
+
+    app.update(Action::SettingsPage);
+    app.unbound("u");
+    assert!(hint(&app).starts_with("Settings are not on the undo stack"));
+
+    app.update(Action::Cancel);
+    app.update(Action::Tick);
+    let before = hint(&app);
+    app.unbound("esc");
+    app.unbound("F");
+    assert_eq!(
+        hint(&app),
+        before,
+        "Escape on today and a key no page has say nothing"
+    );
 }
