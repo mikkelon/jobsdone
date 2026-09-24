@@ -118,6 +118,9 @@ pub enum KeyContext {
     },
     Review {
         step: ReviewStep,
+        /// Whether this is the last step with something in it, where
+        /// Enter starts the day rather than going on to the next step.
+        last: bool,
         /// Whether the step asks a decision about any of its rows. A step
         /// of copies that only started this morning asks none, so it
         /// offers no outcome at all (DESIGN.md section 5).
@@ -681,8 +684,8 @@ home_tables![
     Binding {
         keys: &[("m", Action::MoveToDay)],
         shown: "m",
-        label: "move…",
-        bar: Bar::Left,
+        label: "move to day…",
+        bar: Bar::Short(Side::Left, "move…"),
         narrow: Bar::Off,
     },
     Binding {
@@ -757,7 +760,7 @@ home_tables![
     Binding {
         keys: &[("space", Action::Close)],
         shown: "space",
-        label: "close",
+        label: "done",
         bar: Bar::Left,
         narrow: Bar::Left,
     },
@@ -778,8 +781,8 @@ home_tables![
     Binding {
         keys: &[("m", Action::MoveToDay)],
         shown: "m",
-        label: "move…",
-        bar: Bar::Left,
+        label: "move to day…",
+        bar: Bar::Short(Side::Left, "move…"),
         narrow: Bar::Off,
     },
     // A pointer, so Enter goes to wherever the task is
@@ -794,7 +797,7 @@ home_tables![
     Binding {
         keys: &[("a", Action::Add)],
         shown: "a",
-        label: "add to this day",
+        label: "add",
         bar: Bar::Off,
         narrow: Bar::Off,
     },
@@ -860,7 +863,7 @@ macro_rules! notes_table {
             Binding {
                 keys: &[("a", Action::Add)],
                 shown: "a",
-                label: "new",
+                label: "add",
                 bar: Bar::Left,
                 narrow: Bar::Left,
             },
@@ -1109,106 +1112,115 @@ const NOTES_NOTE: &[Binding] = &[
     },
 ];
 
-const REVIEW_PILE: &[Binding] = &[
-    Binding {
-        keys: &[("space", Action::Close)],
-        shown: "space",
-        label: "done",
-        bar: Bar::Left,
-        narrow: Bar::Left,
-    },
-    Binding {
-        keys: &[("t", Action::ToToday)],
-        shown: "t",
-        label: "today",
-        bar: Bar::Left,
-        narrow: Bar::Left,
-    },
-    Binding {
-        keys: &[("b", Action::ToBacklog)],
-        shown: "b",
-        label: "backlog",
-        bar: Bar::Left,
-        narrow: Bar::Left,
-    },
-    Binding {
-        keys: &[("m", Action::MoveToDay)],
-        shown: "m",
-        label: "move…",
-        bar: Bar::Left,
-        narrow: Bar::Off,
-    },
-    Binding {
-        keys: &[("x", Action::Delete)],
-        shown: "x",
-        label: "delete",
-        bar: Bar::Left,
-        narrow: Bar::Short(Side::Left, "del"),
-    },
-    Binding {
-        keys: &[("u", Action::Undo)],
-        shown: "u",
-        label: "undo",
-        bar: Bar::Left,
-        narrow: Bar::Off,
-    },
-    Binding {
-        keys: &[("e", Action::Edit)],
-        shown: "e",
-        label: "edit",
-        bar: Bar::Left,
-        narrow: Bar::Off,
-    },
-    Binding {
-        keys: &[("enter", Action::Confirm)],
-        shown: "⏎",
-        label: "next step",
-        bar: Bar::Right,
-        narrow: Bar::Right,
-    },
-    Binding {
-        keys: &[("esc", Action::Cancel)],
-        shown: "esc",
-        label: "skip",
-        bar: Bar::Right,
-        narrow: Bar::Right,
-    },
-    // Review navigation uses the same keys as other lists.
-    Binding {
-        keys: &[
-            ("j", Action::Down),
-            ("k", Action::Up),
-            ("down", Action::Down),
-            ("up", Action::Up),
-        ],
-        shown: "j/k ↑/↓",
-        label: "move",
-        bar: Bar::Off,
-        narrow: Bar::Off,
-    },
-    Binding {
-        keys: &[("?", Action::Help)],
-        shown: "?",
-        label: "help",
-        bar: Bar::Off,
-        narrow: Bar::Off,
-    },
-    Binding {
-        keys: &[("q", Action::Quit)],
-        shown: "q",
-        label: "quit",
-        bar: Bar::Off,
-        narrow: Bar::Off,
-    },
-];
+/// The pile, with what Enter is called there: the next step while one
+/// is to come, and the start of the day on the last.
+macro_rules! review_pile {
+    ($enter:expr) => {
+        &[
+            Binding {
+                keys: &[("space", Action::Close)],
+                shown: "space",
+                label: "done",
+                bar: Bar::Left,
+                narrow: Bar::Left,
+            },
+            Binding {
+                keys: &[("t", Action::ToToday)],
+                shown: "t",
+                label: "to today",
+                bar: Bar::Short(Side::Left, "today"),
+                narrow: Bar::Short(Side::Left, "today"),
+            },
+            Binding {
+                keys: &[("b", Action::ToBacklog)],
+                shown: "b",
+                label: "to backlog",
+                bar: Bar::Short(Side::Left, "backlog"),
+                narrow: Bar::Short(Side::Left, "backlog"),
+            },
+            Binding {
+                keys: &[("m", Action::MoveToDay)],
+                shown: "m",
+                label: "move to day…",
+                bar: Bar::Short(Side::Left, "move…"),
+                narrow: Bar::Off,
+            },
+            Binding {
+                keys: &[("x", Action::Delete)],
+                shown: "x",
+                label: "delete",
+                bar: Bar::Left,
+                narrow: Bar::Short(Side::Left, "del"),
+            },
+            Binding {
+                keys: &[("u", Action::Undo)],
+                shown: "u",
+                label: "undo",
+                bar: Bar::Left,
+                narrow: Bar::Off,
+            },
+            Binding {
+                keys: &[("e", Action::Edit)],
+                shown: "e",
+                label: "edit",
+                bar: Bar::Left,
+                narrow: Bar::Off,
+            },
+            Binding {
+                keys: &[("enter", Action::Confirm)],
+                shown: "⏎",
+                label: $enter,
+                bar: Bar::Right,
+                narrow: Bar::Right,
+            },
+            Binding {
+                keys: &[("esc", Action::Cancel)],
+                shown: "esc",
+                label: "skip for now",
+                bar: Bar::Short(Side::Right, "skip"),
+                narrow: Bar::Short(Side::Right, "skip"),
+            },
+            // Review navigation uses the same keys as other lists.
+            Binding {
+                keys: &[
+                    ("j", Action::Down),
+                    ("k", Action::Up),
+                    ("down", Action::Down),
+                    ("up", Action::Up),
+                ],
+                shown: "j/k ↑/↓",
+                label: "move",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+            Binding {
+                keys: &[("?", Action::Help)],
+                shown: "?",
+                label: "help",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+            Binding {
+                keys: &[("q", Action::Quit)],
+                shown: "q",
+                label: "quit",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+        ]
+    };
+}
+
+const REVIEW_PILE: &[Binding] = review_pile!("next step");
+const REVIEW_PILE_LAST: &[Binding] = review_pile!("start the day");
 
 const REVIEW_SURFACED: &[Binding] = &[
     Binding {
         keys: &[("t", Action::ToToday)],
         shown: "t",
-        label: "today",
-        bar: Bar::Left,
-        narrow: Bar::Left,
+        label: "to today",
+        bar: Bar::Short(Side::Left, "today"),
+        narrow: Bar::Short(Side::Left, "today"),
     },
     Binding {
         keys: &[("s", Action::Keep)],
@@ -1220,15 +1232,15 @@ const REVIEW_SURFACED: &[Binding] = &[
     Binding {
         keys: &[("d", Action::DueBy)],
         shown: "d",
-        label: "due…",
-        bar: Bar::Left,
+        label: "due by",
+        bar: Bar::Short(Side::Left, "due…"),
         narrow: Bar::Off,
     },
     Binding {
         keys: &[("r", Action::RemindOn)],
         shown: "r",
-        label: "remind…",
-        bar: Bar::Left,
+        label: "remind on",
+        bar: Bar::Short(Side::Left, "remind…"),
         narrow: Bar::Off,
     },
     Binding {
@@ -1263,9 +1275,9 @@ const REVIEW_SURFACED: &[Binding] = &[
     Binding {
         keys: &[("esc", Action::Cancel)],
         shown: "esc",
-        label: "skip",
-        bar: Bar::Right,
-        narrow: Bar::Right,
+        label: "skip for now",
+        bar: Bar::Short(Side::Right, "skip"),
+        narrow: Bar::Short(Side::Right, "skip"),
     },
     Binding {
         keys: &[
@@ -1309,9 +1321,9 @@ const REVIEW_INFORMATION: &[Binding] = &[
     Binding {
         keys: &[("esc", Action::Cancel)],
         shown: "esc",
-        label: "skip",
-        bar: Bar::Right,
-        narrow: Bar::Right,
+        label: "skip for now",
+        bar: Bar::Short(Side::Right, "skip"),
+        narrow: Bar::Short(Side::Right, "skip"),
     },
     // Navigation stays available even when there is nothing to decide.
     Binding {
@@ -1500,6 +1512,9 @@ const MOVE_CARD: &[Binding] = &[
         bar: Bar::Off,
         narrow: Bar::Off,
     },
+    // The digits are the date card's picks, so a digit is the same day on
+    // both cards; the next work day, which only a move asks for, is on
+    // its own letter.
     Binding {
         keys: &[("1", Action::Tomorrow)],
         shown: "1",
@@ -1508,9 +1523,16 @@ const MOVE_CARD: &[Binding] = &[
         narrow: Bar::Off,
     },
     Binding {
-        keys: &[("2", Action::NextWorkDay)],
-        shown: "2",
+        keys: &[("w", Action::NextWorkDay)],
+        shown: "w",
         label: "Next work day",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("2", Action::EndOfWeek)],
+        shown: "2",
+        label: "End of week",
         bar: Bar::Off,
         narrow: Bar::Off,
     },
@@ -1518,6 +1540,20 @@ const MOVE_CARD: &[Binding] = &[
         keys: &[("3", Action::NextMonday)],
         shown: "3",
         label: "Next Monday",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("4", Action::InAWeek)],
+        shown: "4",
+        label: "In a week",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("5", Action::EndOfMonth)],
+        shown: "5",
+        label: "End of month",
         bar: Bar::Off,
         narrow: Bar::Off,
     },
@@ -1536,8 +1572,13 @@ const MOVE_CARD: &[Binding] = &[
         narrow: Bar::Off,
     },
     Binding {
-        keys: &[("up", Action::Up), ("down", Action::Down)],
-        shown: "↑/↓",
+        keys: &[
+            ("j", Action::Down),
+            ("k", Action::Up),
+            ("down", Action::Down),
+            ("up", Action::Up),
+        ],
+        shown: "j/k",
         label: "move",
         bar: Bar::Left,
         narrow: Bar::Left,
@@ -1916,8 +1957,13 @@ const SEARCH_BOX: &[Binding] = filter_box![
 /// row says which of the two it is.
 const SPELLING_CARD: &[Binding] = &[
     Binding {
-        keys: &[("up", Action::Up), ("down", Action::Down)],
-        shown: "↑/↓",
+        keys: &[
+            ("j", Action::Down),
+            ("k", Action::Up),
+            ("down", Action::Down),
+            ("up", Action::Up),
+        ],
+        shown: "j/k",
         label: "move",
         bar: Bar::Left,
         narrow: Bar::Left,
@@ -2178,8 +2224,13 @@ pub fn bindings(context: KeyContext) -> &'static [Binding] {
         KeyContext::Review { asks: false, .. } => REVIEW_INFORMATION,
         KeyContext::Review {
             step: ReviewStep::Pile,
+            last: false,
             ..
         } => REVIEW_PILE,
+        KeyContext::Review {
+            step: ReviewStep::Pile,
+            ..
+        } => REVIEW_PILE_LAST,
         KeyContext::Review {
             step: ReviewStep::Surfaced,
             ..

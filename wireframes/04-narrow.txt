@@ -89,5 +89,5 @@
 
 
 ────────────────────────────────────────────────────────────────────────────────
- ARCHIVE  y/alt-y copy note  ⏎ open  a new  x del  n back                ? more
+ ARCHIVE  y/alt-y copy note  ⏎ open  a add  x del  n back                ? more
 

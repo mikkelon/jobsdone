@@ -481,6 +481,7 @@ fn the_launch_opens_the_review_over_the_pile_and_writes_the_gate() {
     assert_eq!(
         app.key_context(),
         KeyContext::Review {
+            last: true,
             step: ReviewStep::Pile,
             asks: true,
             text_field: false
@@ -756,6 +757,7 @@ fn a_title_is_edited_in_place_in_the_review() {
     assert_eq!(
         app.page_context(),
         KeyContext::Review {
+            last: true,
             step: ReviewStep::Pile,
             asks: true,
             text_field: true
@@ -1310,11 +1312,16 @@ fn the_move_card_offers_the_days_and_moves_to_the_one_chosen() {
             MoveTarget::Day(on("2025-09-05")),
             MoveTarget::Day(on("2025-09-06")),
             MoveTarget::Day(on("2025-09-08")),
+            MoveTarget::Day(on("2025-09-05")),
             MoveTarget::Day(on("2025-09-08")),
+            MoveTarget::Day(on("2025-09-12")),
+            MoveTarget::Day(on("2025-09-30")),
             MoveTarget::Pick,
             MoveTarget::Backlog,
         ],
-        "today, tomorrow, the next work day, next Monday, a date, no day"
+        "today, tomorrow, the next work day, the end of the week (a Friday \
+         is its own), next Monday, in a week, the end of the month, a date, \
+         no day"
     );
 
     // The second row is tomorrow; Enter on it is the same as pressing 1.
@@ -4367,7 +4374,7 @@ fn the_move_cards_next_work_day_follows_the_work_days_setting() {
     // Today is a Friday, so the next work day of a Sunday-to-Thursday
     // week is the Sunday rather than the Monday next Monday is.
     assert_eq!(days[2], MoveTarget::Day(on("2025-09-07")));
-    assert_eq!(days[3], MoveTarget::Day(on("2025-09-08")));
+    assert_eq!(days[4], MoveTarget::Day(on("2025-09-08")));
 }
 
 #[test]

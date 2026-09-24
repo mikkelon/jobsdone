@@ -89,21 +89,25 @@ fn every_context() -> Vec<KeyContext> {
         notes(NotesPane::Note),
         notes(NotesPane::Filter),
         KeyContext::Review {
+            last: false,
             step: ReviewStep::Pile,
             asks: true,
             text_field: false,
         },
         KeyContext::Review {
+            last: false,
             step: ReviewStep::Surfaced,
             asks: true,
             text_field: false,
         },
         KeyContext::Review {
+            last: false,
             step: ReviewStep::Pile,
             asks: true,
             text_field: true,
         },
         KeyContext::Review {
+            last: false,
             step: ReviewStep::Surfaced,
             asks: false,
             text_field: false,
@@ -148,6 +152,12 @@ fn every_list_of_rows_moves_with_j_and_k() {
         browsing(Pane::Day),
         browsing(Pane::Backlog),
         notes(NotesPane::List),
+        popup(PopupKind::Move),
+        popup(PopupKind::Repeat),
+        popup(PopupKind::Spelling),
+        popup(PopupKind::Dictionary),
+        popup(PopupKind::Help),
+        KeyContext::Settings { field: false },
     ];
     for context in lists {
         for wanted in [
@@ -188,6 +198,7 @@ fn no_context_binds_a_key_twice() {
 fn every_key_the_review_panel_offers_is_a_key_of_that_step() {
     for step in [ReviewStep::Pile, ReviewStep::Surfaced] {
         let context = KeyContext::Review {
+            last: false,
             step,
             asks: true,
             text_field: false,
@@ -211,6 +222,7 @@ fn every_key_the_review_panel_offers_is_a_key_of_that_step() {
 #[test]
 fn the_step_that_asks_nothing_offers_no_outcome() {
     let context = KeyContext::Review {
+        last: false,
         step: ReviewStep::Surfaced,
         asks: false,
         text_field: false,
@@ -221,7 +233,7 @@ fn the_step_that_asks_nothing_offers_no_outcome() {
         .filter(|binding| binding.bar.slot(binding.label).is_some())
         .map(|binding| binding.label)
         .collect();
-    assert_eq!(named, ["start the day", "skip"]);
+    assert_eq!(named, ["start the day", "skip for now"]);
 
     for outcome in [
         KeyCode::Char('t'),
@@ -246,6 +258,7 @@ fn the_step_that_asks_nothing_offers_no_outcome() {
 #[test]
 fn a_title_typed_on_a_review_row_saves_with_enter() {
     let context = KeyContext::Review {
+        last: false,
         step: ReviewStep::Pile,
         asks: true,
         text_field: true,
@@ -363,6 +376,7 @@ fn a_key_means_what_its_context_says() {
         action_for(
             &press(KeyCode::Char(' ')),
             KeyContext::Review {
+                last: false,
                 step: ReviewStep::Pile,
                 asks: true,
                 text_field: false
@@ -584,11 +598,34 @@ fn the_move_card_offers_a_day_under_every_key_it_names() {
         .collect();
 
     assert!(days.contains(&("t", Action::ToToday)));
-    assert!(days.contains(&("1", Action::Tomorrow)));
-    assert!(days.contains(&("2", Action::NextWorkDay)));
-    assert!(days.contains(&("3", Action::NextMonday)));
+    assert!(days.contains(&("w", Action::NextWorkDay)));
     assert!(days.contains(&("g", Action::GoToDate)));
     assert!(days.contains(&("b", Action::ToBacklog)));
+}
+
+#[test]
+fn a_digit_is_the_same_day_on_the_move_card_and_the_date_card() {
+    let digits = |context: KeyContext, prefix: &str| -> Vec<(String, Action)> {
+        bindings(context)
+            .iter()
+            .flat_map(|binding| binding.keys)
+            .filter_map(|(key, action)| {
+                let digit = key.strip_prefix(prefix)?;
+                (digit.len() == 1 && digit.chars().all(|c| c.is_ascii_digit()))
+                    .then(|| (digit.to_owned(), *action))
+            })
+            .collect()
+    };
+    let mut on_the_move_card = digits(popup(PopupKind::Move), "");
+    // The date card also takes a date off with its zero, which a move
+    // has nothing to match.
+    let mut on_the_date_card: Vec<_> = digits(field(PopupKind::Date), "alt-")
+        .into_iter()
+        .filter(|(digit, _)| digit != "0")
+        .collect();
+    on_the_move_card.sort_by(|a, b| a.0.cmp(&b.0));
+    on_the_date_card.sort_by(|a, b| a.0.cmp(&b.0));
+    assert_eq!(on_the_move_card, on_the_date_card);
 }
 
 #[test]
@@ -719,11 +756,13 @@ fn clipboard_keys_edit_text_without_turning_shifted_copy_into_quit() {
 #[test]
 fn keep_is_the_surfaced_steps_word_and_not_the_piles() {
     let pile = KeyContext::Review {
+        last: false,
         step: ReviewStep::Pile,
         asks: true,
         text_field: false,
     };
     let surfaced = KeyContext::Review {
+        last: false,
         step: ReviewStep::Surfaced,
         asks: true,
         text_field: false,
@@ -916,6 +955,7 @@ fn shifted_navigation_selects_in_every_text_context() {
         KeyContext::Settings { field: true },
         notes(NotesPane::Note),
         KeyContext::Review {
+            last: false,
             step: ReviewStep::Pile,
             asks: true,
             text_field: true,
@@ -1065,4 +1105,46 @@ fn the_filter_types_every_letter_and_keeps_its_few_keys() {
         Some(Action::NextPane),
         "tab moves focus to the list, the next control"
     );
+}
+
+#[test]
+fn one_action_has_one_label_on_every_page() {
+    // What a key is called is learnt once. Confirm, Cancel and the keys
+    // that move between controls are named for where they lead, which is
+    // different on every page, and `A` names which way it archives.
+    let named_for_where_it_leads = [
+        Action::Confirm,
+        Action::Cancel,
+        Action::NextTab,
+        Action::NextPane,
+        Action::Left,
+        Action::Right,
+        Action::Pick,
+        Action::Archive,
+        // The key that opens a page is also the way back off it.
+        Action::NotesPage,
+        Action::SettingsPage,
+    ];
+    let mut seen: Vec<(Action, &str, KeyContext)> = Vec::new();
+    let pages = every_context()
+        .into_iter()
+        .filter(|context| !context.text_field() && !matches!(context, KeyContext::Popup { .. }));
+    for context in pages {
+        for binding in bindings(context) {
+            let Some((_, action)) = binding.keys.first() else {
+                continue;
+            };
+            if named_for_where_it_leads.contains(action) {
+                continue;
+            }
+            match seen.iter().find(|(other, _, _)| other == action) {
+                Some((_, label, first)) => assert_eq!(
+                    *label, binding.label,
+                    "{action:?} is {label:?} in {first:?} and {:?} in {context:?}",
+                    binding.label
+                ),
+                None => seen.push((*action, binding.label, context)),
+            }
+        }
+    }
 }

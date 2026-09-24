@@ -2515,7 +2515,10 @@ impl App {
                 Action::ToToday
                 | Action::Tomorrow
                 | Action::NextWorkDay
+                | Action::EndOfWeek
                 | Action::NextMonday
+                | Action::InAWeek
+                | Action::EndOfMonth
                 | Action::ToBacklog => self.target_for(action),
                 Action::GoToDate => MoveTarget::Pick,
                 _ => return None,
@@ -4136,6 +4139,10 @@ impl App {
                     .cursor(List::Review)
                     .and_then(RowId::task)
                     .is_some_and(|task| review.asked().contains(&task)),
+                last: {
+                    let (at, of) = review.steps();
+                    at == of
+                },
                 text_field: self.editor.is_some(),
             };
         }

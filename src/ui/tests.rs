@@ -861,7 +861,7 @@ fn the_narrow_window_makes_the_day_and_the_day_list_its_tabs() {
     assert!(tabs.contains("DAYS 11"), "and the backlog gives way to it");
     assert_eq!(
         drawn[drawn.len() - 1],
-        " PAST DAY  [/] day  . back  space close  t today  x del                  ? more",
+        " PAST DAY  [/] day  . back  space done  t today  x del                   ? more",
         "and the bar keeps the way home in it"
     );
 }
@@ -3100,7 +3100,7 @@ fn the_spelling_card_names_the_word_and_lists_what_to_put_in_its_place() {
     // teaches them the way it teaches every other card's.
     let bar = &drawn[35];
     assert!(bar.contains("SPELLING"), "{bar:?}");
-    assert!(bar.contains("↑/↓ move"), "{bar:?}");
+    assert!(bar.contains("j/k move"), "{bar:?}");
     assert!(bar.contains("⏎ choose"), "{bar:?}");
     assert!(bar.contains("esc cancel"), "{bar:?}");
 }
@@ -4021,7 +4021,7 @@ fn the_archive_takes_the_place_of_the_notes_and_dates_its_rows_by_archiving() {
     assert!(left(&drawn[2]).ends_with("A archive"), "{:?}", drawn[2]);
     assert_eq!(
         drawn[35],
-        " NOTES  y/alt-y copy note  ⏎ open  a new  A archive  x delete  n back to tasks                    tab archive  h/l pane"
+        " NOTES  y/alt-y copy note  ⏎ open  a add  A archive  x delete  n back to tasks                    tab archive  h/l pane"
     );
 
     app.update(Action::Archive);
@@ -4051,7 +4051,7 @@ fn the_archive_takes_the_place_of_the_notes_and_dates_its_rows_by_archiving() {
     assert_eq!(right(&drawn[4]), "│  Mention to Anna:");
     assert_eq!(
         drawn[35],
-        " ARCHIVE  y/alt-y copy note  ⏎ open  a new  A unarchive  x delete  n back to tasks                  tab notes  h/l pane"
+        " ARCHIVE  y/alt-y copy note  ⏎ open  a add  A unarchive  x delete  n back to tasks                  tab notes  h/l pane"
     );
 }
 

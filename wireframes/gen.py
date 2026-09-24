@@ -483,7 +483,7 @@ def p04():
     a.put(1, y, 'NOTE MON 22 SEP 09:12 · ARCHIVED TODAY', 'd'); a.hl(40, y, a.w - 41, 'd'); y += 1
     for l in ['Retro format ideas:', '- start / stop / continue', '- sailboat (wind, anchors, rocks)']:
         a.put(2, y, l); y += 1
-    hints(a, a.h - 1, 'Archive', [('y/alt-y', 'copy note'), ('⏎', 'open'), ('a', 'new'), ('x', 'del'), ('n', 'back')], [('?', 'more')])
+    hints(a, a.h - 1, 'Archive', [('y/alt-y', 'copy note'), ('⏎', 'open'), ('a', 'add'), ('x', 'del'), ('n', 'back')], [('?', 'more')])
     page('04-narrow', 'Half-width tile', [('80×44 · half-width tile, beside an editor', g),
                                           ('80×44 · the Archive, the fourth stop of tab', a)], '''
 <h2>Narrow: under 100 columns</h2>
@@ -543,12 +543,13 @@ def p05():
     g.put(5, y, 'Closing does not erase Focus; the row keeps "was focus".', 'd')
     grids.append(('D · Focus (f) and close (space)', g))
 
-    g = mini(13); y = 0
+    g = mini(16); y = 0
     task(g, 0, 80, y, 'Clean out the garage', cursor=True)
-    card(g, 6, 1, 50, 11, 'Move', 'Clean out the garage')
+    card(g, 6, 1, 50, 14, 'Move', 'Clean out the garage')
     y = 2
-    for i, (k, l, r) in enumerate([('t', 'Today', 'Fri 5 Sep'), ('1', 'Tomorrow', 'Sat 6 Sep'), ('2', 'Next work day', 'Mon 8 Sep'),
-                                   ('3', 'Next Monday', 'Mon 8 Sep'), ('g', 'Pick a date…', 'calendar'), ('b', 'Backlog', 'no day')]):
+    for i, (k, l, r) in enumerate([('t', 'Today', 'Fri 5 Sep'), ('1', 'Tomorrow', 'Sat 6 Sep'), ('w', 'Next work day', 'Mon 8 Sep'),
+                                   ('2', 'End of week', 'Fri 5 Sep'), ('3', 'Next Monday', 'Mon 8 Sep'), ('4', 'In a week', 'Fri 12 Sep'),
+                                   ('5', 'End of month', 'Tue 30 Sep'), ('g', 'Pick a date…', 'calendar'), ('b', 'Backlog', 'no day')]):
         item(g, 6, 50, y, k, l, r, sel=(i == 0)); y += 1
     y += 1
     g.put(8, y, 'no text field here: g opens the date card for typing', 'd')
@@ -569,7 +570,7 @@ def p05():
 <p><b>B</b> Editing never opens a form. For a recurring copy the app asks whether the new title applies forward, because title edits change future copies only.</p>
 <p><b>C</b> Reordering is explicit. No sort, no smart ordering, no drag between Focus and Plan (that is <kbd>f</kbd>).</p>
 <p><b>D</b> Closing moves a task to Done at the bottom with the time. Focus and Done are shown by position, not by a badge.</p>
-<p><b>E</b> The day picker covers "move onto today", "move to a day" and "back to backlog" in one card. It has no text field, so single keys work; <kbd>g</kbd> opens the date card when a typed date is wanted.</p>
+<p><b>E</b> The day picker covers "move onto today", "move to a day" and "back to backlog" in one card. It has no text field, so single keys work; a digit is the same day as the date card's <kbd>alt</kbd> and that digit, and <kbd>g</kbd> opens the date card when a typed date is wanted.</p>
 <p><b>F</b> Destructive actions are undoable rather than confirmed. The undo offer lives in the hint bar until the next keypress.</p>''')
 
 
@@ -580,13 +581,13 @@ def p06():
     lx, lw, rx, rw, y0, y1 = sample_today(g, focus='right')
     g.callout(rx + 32, y0 + 1, 1)
     g.callout(rx + 32, y0 + 12, 4)
-    cx, cy, cw, ch = 33, 5, 54, 21
+    cx, cy, cw, ch = 33, 5, 54, 22
     card(g, cx, cy, cw, ch, 'Due by', 'Write the Q4 planning doc')
     g.rput(cx + cw - 2, cy, ' alt-r remind on ', 'd'); g.callout(cx + cw - 3, cy + 1, 2)
     inp(g, cx + 2, cy + 2, 28, '30 sep'); g.put(cx + 32, cy + 2, 'Tue 30 Sep', 'd')
     y = cy + 4
-    for k, l, r in [('alt-1', 'Tomorrow', 'Sat 6 Sep'), ('alt-2', 'Next Monday', 'Mon 8 Sep'), ('alt-3', 'In a week', 'Fri 12 Sep'),
-                    ('alt-4', 'End of month', 'Tue 30 Sep'), ('alt-0', 'Clear date', 'no due date')]:
+    for k, l, r in [('alt-1', 'Tomorrow', 'Sat 6 Sep'), ('alt-2', 'End of week', 'Fri 5 Sep'), ('alt-3', 'Next Monday', 'Mon 8 Sep'),
+                    ('alt-4', 'In a week', 'Fri 12 Sep'), ('alt-5', 'End of month', 'Tue 30 Sep'), ('alt-0', 'Clear date', 'no due date')]:
         item(g, cx, cw, y, k, l, r); y += 1
     y += 1
     g.put(cx + 2, y, '       September 2026', 'd'); g.callout(cx + cw - 3, y, 3); y += 1
@@ -696,7 +697,7 @@ def p08():
     group(g, rx, rw, y, 'Earlier'); y += 1
     g.put(rx + 5, y, 'Fri 22 Aug'); g.rput(rx + rw - 1, y, '1 / 2 · 1 open', 'd'); y += 1
     g.put(rx + 5, y, '…'); g.rput(rx + rw - 1, y, 'days with nothing planned are skipped', 'd')
-    hints(g, g.h - 1, 'Past day', [('[/]', 'day'), ('.', 'today'), ('g', 'go to date'), ('space', 'close'), ('t', 'to today'), ('b', 'to backlog'), ('m', 'move…'), ('⏎', 'follow moved')], PANE_KEYS)
+    hints(g, g.h - 1, 'Past day', [('[/]', 'day'), ('.', 'today'), ('g', 'go to date'), ('space', 'done'), ('t', 'to today'), ('b', 'to backlog'), ('m', 'move…'), ('⏎', 'follow moved')], PANE_KEYS)
     page('08-history', 'History', [('120×36 · floating window', g)], '''
 <h2>History: browsing past days</h2>
 <p>History is not a separate screen: it is the same day view stepped backwards. A past day is drawn exactly as it was while it was today, and the two panes stay in place.</p>
@@ -771,10 +772,10 @@ def p10():
         g.put(rx + 2, y + i, l)
     g.put(rx + 2 + len(lines[-1]), y + len(lines) - 1, '█', 'b')
     g.callout(rx + rw - 2, y0, 4)
-    hints(g, g.h - 1, 'Note', [('type', 'to edit'), ('esc', 'back to the list')], [('in the list:', ''), ('⏎', 'open'), ('a', 'new'), ('x', 'delete'), ('n', 'back to today')])
+    hints(g, g.h - 1, 'Note', [('type', 'to edit'), ('esc', 'back to the list')], [('in the list:', ''), ('⏎', 'open'), ('a', 'add'), ('x', 'delete'), ('n', 'back to today')])
 
     notes_strip = [key('n', 'or') + key('esc', 'back to tasks'), key('/'), key(':'), key('?')]
-    list_hints = [('y/alt-y', 'copy note'), ('⏎', 'open'), ('a', 'new')]
+    list_hints = [('y/alt-y', 'copy note'), ('⏎', 'open'), ('a', 'add')]
 
     a = Grid(120, 36)
     strip(a, [[('4 notes', 'd')]], notes_strip)

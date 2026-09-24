@@ -371,6 +371,7 @@ fn panel(canvas: &mut Canvas, review: &Review, column: Column) {
 
 const KEYS_OF_THE_PILE: crate::input::KeyContext = crate::input::KeyContext::Review {
     step: ReviewStep::Pile,
+    last: false,
     asks: true,
     text_field: false,
 };

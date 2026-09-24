@@ -1267,6 +1267,7 @@ fn help_sections(context: KeyContext, all: bool) -> Vec<(&'static str, KeyContex
                 "REVIEW PILE",
                 KeyContext::Review {
                     step: ReviewStep::Pile,
+                    last: false,
                     asks: true,
                     text_field: false,
                 },
@@ -1275,6 +1276,7 @@ fn help_sections(context: KeyContext, all: bool) -> Vec<(&'static str, KeyContex
                 "DUE & REMINDERS",
                 KeyContext::Review {
                     step: ReviewStep::Surfaced,
+                    last: true,
                     asks: true,
                     text_field: false,
                 },

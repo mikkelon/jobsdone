@@ -34,7 +34,7 @@
                                             │
                                             │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- NOTE  type to edit  esc back to the list                       in the list:   ⏎ open  a new  x delete  n back to today
+ NOTE  type to edit  esc back to the list                       in the list:   ⏎ open  a add  x delete  n back to today
 
 
 == 120×36 · tab: the archive in the same pane
@@ -73,7 +73,7 @@
                                             │
                                             │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ARCHIVE  y/alt-y copy note  ⏎ open  a new  A unarchive  x delete  n back to tasks                  tab notes  h/l pane
+ ARCHIVE  y/alt-y copy note  ⏎ open  a add  A unarchive  x delete  n back to tasks                  tab notes  h/l pane
 
 
 == 120×36 · / filters the list shown
