@@ -3992,6 +3992,7 @@ fn the_help_overlay_is_read_rather_than_typed_in() {
 #[test]
 fn typing_in_a_field_narrows_the_palette() {
     let mut app = started();
+    add(&mut app, "Water the plants");
     app.update(Action::Commands);
     let all = app.palette_rows().len();
 
@@ -4077,13 +4078,18 @@ fn a_search_with_nothing_in_it_offers_to_add_what_was_typed() {
 fn enter_in_the_palette_runs_the_row_it_is_on() {
     let mut app = started();
     app.update(Action::Commands);
-    type_in(&mut app, "go…");
+    type_in(&mut app, "notes");
     assert_eq!(app.palette_rows().len(), 1);
+    assert_eq!(
+        app.palette_rows()[0].shown,
+        "gn",
+        "a place, under its chord"
+    );
 
     app.update(Action::Confirm);
 
     assert!(app.popup().is_none(), "the palette closes");
-    assert!(app.leading(), "and the command runs");
+    assert_eq!(app.page(), Page::Notes, "and the command runs");
 }
 
 #[test]
@@ -6456,4 +6462,86 @@ fn a_key_that_does_nothing_here_says_where_it_does_something() {
         before,
         "Escape on today and a key no page has say nothing"
     );
+}
+
+#[test]
+fn the_palette_offers_commands_rather_than_movement_and_every_place() {
+    let mut app = started();
+    add(&mut app, "Water the plants");
+    app.update(Action::Commands);
+    let rows = app.palette_rows();
+    let shown: Vec<&str> = rows.iter().map(|row| row.shown).collect();
+
+    for movement in ["j/k", "tab h/l", "g", "G", "ctrl-d/u", ":", "esc"] {
+        assert!(!shown.contains(&movement), "{movement} is not a command");
+    }
+    // A row that runs one of two things is two commands.
+    assert!(shown.contains(&"J") && shown.contains(&"K"));
+    assert!(shown.contains(&"[") && shown.contains(&"]"));
+    // A task that has not moved has nothing to follow.
+    assert!(!rows.iter().any(|row| row.label == "follow moved"));
+    // And every place, under its chord, last.
+    let places: Vec<&str> = rows
+        .iter()
+        .filter(|row| row.goes_somewhere())
+        .map(|row| row.shown)
+        .collect();
+    assert_eq!(places, ["gt", "gb", "gd", "gn", "ga", "gs", "gr"]);
+    assert_eq!(rows.last().map(|row| row.shown), Some("gr"));
+}
+
+#[test]
+fn a_moved_row_offers_following_it_and_nothing_a_task_would() {
+    let mut app = started();
+    add(&mut app, "Chase the hosting invoice");
+    app.update(Action::ToBacklog);
+    app.update(Action::Commands);
+    let labels: Vec<&str> = app
+        .palette_rows()
+        .iter()
+        .filter(|row| row.acts_on_the_row())
+        .map(|row| row.label)
+        .collect();
+
+    assert!(labels.contains(&"follow moved"), "{labels:?}");
+    assert!(!labels.contains(&"done") && !labels.contains(&"delete"));
+}
+
+#[test]
+fn escape_after_a_jump_goes_back_to_where_it_came_from() {
+    let mut app = started();
+    add(&mut app, "Water the plants");
+    let plants = cursor(&app, List::Day);
+    add(&mut app, "Feed the cat");
+
+    // A date gone to from today: Escape comes back, to the row it left.
+    app.update(Action::Up);
+    app.update(Action::GoToDate);
+    type_in(&mut app, "-3");
+    app.update(Action::Confirm);
+    assert_ne!(app.showing(), app.today());
+    assert_eq!(app.way_back().map(|(page, _)| page), Some(Page::Home));
+
+    app.update(Action::Cancel);
+    assert_eq!(app.showing(), app.today());
+    assert_eq!(cursor(&app, List::Day), plants);
+    assert!(app.way_back().is_none(), "once");
+
+    // From the notes page, the way back is the notes page.
+    app.update(Action::NotesPage);
+    app.update(Action::GoToDate);
+    type_in(&mut app, "-2");
+    app.update(Action::Confirm);
+    assert_eq!(app.page(), Page::Home);
+    app.update(Action::Cancel);
+    assert_eq!(app.page(), Page::Notes);
+
+    // Stepping by hand leaves the jump behind: Escape is today again.
+    app.update(Action::GoToDate);
+    type_in(&mut app, "-2");
+    app.update(Action::Confirm);
+    app.update(Action::PrevDay);
+    app.update(Action::Cancel);
+    assert_eq!(app.page(), Page::Home);
+    assert_eq!(app.showing(), app.today());
 }

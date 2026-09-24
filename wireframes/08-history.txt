@@ -34,5 +34,5 @@
                                                            │
                                                            │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- PAST DAY  [/] day  esc back to today  gd go to date  space done  t to today  b to backlog  m move…  ⏎ follow moved
+ PAST DAY  [/] day  esc back  gd go to date  space done  t to today  b to backlog  m move…  ⏎ follow moved        g go…
 

@@ -981,6 +981,17 @@ pub struct NoteFilter {
     pub caret: usize,
 }
 
+/// Where a jump came from, so that Escape can go back there: the page,
+/// the day the day pane was on, the pane the keyboard was in, and the row
+/// the cursor was on in it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct WayBack {
+    page: Page,
+    showing: Date,
+    pane: Pane,
+    row: Option<(List, RowId)>,
+}
+
 /// The cursor of each list, by id.
 #[derive(Clone, Copy, Debug, Default)]
 struct Cursors {
@@ -1070,6 +1081,10 @@ pub struct App {
     quit_refused: bool,
     /// Whether `g` has been pressed and the next key says where to go.
     leader: bool,
+    /// Where the last jump came from: a search result, a moved row, a
+    /// day in the list of days or a date gone to. Escape on the page the
+    /// jump landed on goes back there, once (DESIGN.md section 4).
+    returns_to: Option<WayBack>,
     layout: Layout,
     /// Where the clock comes from. The application is the only module
     /// that reads it (ARCHITECTURE.md section 3), which is also what
@@ -1129,6 +1144,7 @@ impl App {
             window_owed: false,
             quit_refused: false,
             leader: false,
+            returns_to: None,
             layout: Layout::default(),
             #[cfg(test)]
             clock: now.clone(),
@@ -2574,6 +2590,9 @@ impl App {
     /// so the keyboard stays in the pane it was in and the pane beside
     /// the day becomes the list of days.
     fn step_the_day(&mut self, days: i64) {
+        // Stepping is going somewhere by hand, which a way back from an
+        // earlier jump no longer answers for.
+        self.returns_to = None;
         if let Ok(day) = self.showing.checked_add(Span::new().days(days)) {
             self.show_the_day(day);
         }
@@ -2595,6 +2614,7 @@ impl App {
             return;
         };
         if let Some(day) = id.day() {
+            self.remember_the_way_back();
             self.show_the_day(day);
             // Going to a day means looking at it, so the keyboard goes
             // to the pane the day is drawn in.
@@ -2616,6 +2636,7 @@ impl App {
             self.say("That task is gone.", false);
             return;
         };
+        self.remember_the_way_back();
         self.page = Page::Home;
         match place {
             Place::Day(day) => {
@@ -2759,6 +2780,7 @@ impl App {
             if let Some(day) = date
                 && self.leave_the_note()
             {
+                self.remember_the_way_back();
                 self.review = None;
                 self.leave_the_page_for_home();
                 self.show_the_day(day);
@@ -4379,13 +4401,47 @@ impl App {
         let wanted = typed.trim();
         let mut rows: Vec<&'static Binding> = input::bindings(self.page_context())
             .iter()
-            .filter(|binding| !binding.keys.is_empty())
+            .flat_map(input::in_the_palette)
+            .filter(|binding| self.row_offers(binding))
+            .chain(input::PLACES)
             .filter(|binding| {
                 binding.label.to_lowercase().contains(wanted) || binding.shown == wanted
             })
             .collect();
-        rows.sort_by_key(|binding| !binding.acts_on_the_row());
+        // The row's, then the app's, then where to go (wireframe 11).
+        rows.sort_by_key(|binding| {
+            if binding.acts_on_the_row() {
+                0
+            } else if binding.goes_somewhere() {
+                2
+            } else {
+                1
+            }
+        });
         rows
+    }
+
+    /// Whether a command that acts on the cursor row means anything on
+    /// the row the cursor is on. A moved row is a pointer, so the one
+    /// thing to do with it is follow it (or copy its title); a task row
+    /// has nothing to follow; and with no row there is nothing to act on.
+    fn row_offers(&self, binding: &Binding) -> bool {
+        let Some((_, action)) = binding.keys.first() else {
+            return false;
+        };
+        if !binding.acts_on_the_row() {
+            return true;
+        }
+        let list = self.focused();
+        let Some(row) = self.cursor(list) else {
+            return false;
+        };
+        let pointer = list == List::Day && self.group_of(list, row) == Some(Group::Moved);
+        match action {
+            Action::Confirm if list == List::Day => pointer,
+            Action::Confirm | Action::CopyTask => true,
+            _ => !pointer,
+        }
     }
 
     /// What the search box has found.
@@ -4577,6 +4633,7 @@ impl App {
         if !self.leave_the_note() {
             return;
         }
+        self.returns_to = None;
         self.review = None;
         self.leave_the_page_for_home();
         self.pane = pane;
@@ -4608,6 +4665,39 @@ impl App {
             Page::Home => {}
         }
         self.page = Page::Home;
+    }
+
+    /// The place the keyboard is, for Escape to come back to after the
+    /// jump about to be made.
+    fn remember_the_way_back(&mut self) {
+        let list = self.focused();
+        self.returns_to = Some(WayBack {
+            page: self.page,
+            showing: self.showing,
+            pane: self.pane,
+            row: self.cursor(list).map(|row| (list, row)),
+        });
+    }
+
+    fn go_back(&mut self, back: WayBack) {
+        match back.page {
+            // The notes page is always come to afresh (DESIGN.md section
+            // 9), on the row it was left on.
+            Page::Notes => self.enter_the_notes(),
+            Page::Settings => self.page = Page::Settings,
+            Page::Home => self.page = Page::Home,
+        }
+        self.pane = back.pane;
+        self.show_the_day(back.showing);
+        if let Some((list, row)) = back.row {
+            self.set_cursor(list, row);
+        }
+    }
+
+    /// Where Escape goes back to after a jump, if one was made: the page,
+    /// and on the home page the day.
+    pub fn way_back(&self) -> Option<(Page, Date)> {
+        self.returns_to.map(|back| (back.page, back.showing))
     }
 
     /// A key that means nothing where it was pressed. After `g` that is a
@@ -4949,6 +5039,11 @@ impl App {
             } else {
                 self.turn_the_page();
             }
+            return;
+        }
+        // After a jump, back to where it came from, once.
+        if let Some(back) = self.returns_to.take() {
+            self.go_back(back);
             return;
         }
         // Another day is one level out from today, and today is as far

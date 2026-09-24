@@ -142,23 +142,30 @@ fn palette(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     let commands = app.palette_rows();
     let width = PALETTE_WIDTH.min(canvas.width().saturating_sub(4));
 
-    // Two sections, as wireframe 11 draws them: what a key would do to the
-    // row the cursor is on, then what it does to the app. The rows come
-    // in that order, so the headings fall where the kind changes.
+    // Three sections, as wireframe 11 draws them: what a key would do to
+    // the row the cursor is on, what it does to the app, and where `g`
+    // goes. The rows come in that order, so the headings fall where the
+    // kind changes.
     let mut lines: Vec<Command> = Vec::new();
     let mut section = None;
     for command in &commands {
-        let on_row = command.acts_on_the_row();
-        if section != Some(on_row) {
+        let kind = if command.acts_on_the_row() {
+            0
+        } else if command.goes_somewhere() {
+            2
+        } else {
+            1
+        };
+        if section != Some(kind) {
             if section.is_some() {
                 lines.push(Command::Blank);
             }
-            lines.push(Command::Heading(if on_row {
-                about_the_row(app)
-            } else {
-                "APP".to_owned()
+            lines.push(Command::Heading(match kind {
+                0 => about_the_row(app),
+                1 => "APP".to_owned(),
+                _ => "GO TO".to_owned(),
             }));
-            section = Some(on_row);
+            section = Some(kind);
         }
         lines.push(Command::Row(command));
     }

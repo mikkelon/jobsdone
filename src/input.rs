@@ -373,6 +373,23 @@ pub struct Binding {
 }
 
 impl Binding {
+    /// Whether the row goes to a place: the rows of [`PLACES`], which is
+    /// the palette's third section.
+    pub fn goes_somewhere(&self) -> bool {
+        self.keys.first().is_some_and(|(_, action)| {
+            matches!(
+                action,
+                Action::Today
+                    | Action::BacklogPane
+                    | Action::GoToDate
+                    | Action::NotesPage
+                    | Action::ArchivePage
+                    | Action::SettingsPage
+                    | Action::OpenReview
+            )
+        })
+    }
+
     /// Whether the row does something to the row the cursor is on, rather
     /// than to the page or the program. The command palette is in two
     /// sections along this line, the row's and the app's (wireframe 11).
@@ -404,6 +421,139 @@ impl Binding {
             )
         })
     }
+}
+
+// ---- the palette -----------------------------------------------------
+
+/// The places `g` goes to, as the command palette lists them: every one
+/// under its whole chord, so the palette teaches the chord as it teaches
+/// any other key. `gg` is a movement rather than a place, so it is not
+/// here.
+pub const PLACES: &[Binding] = &[
+    Binding {
+        keys: &[("t", Action::Today)],
+        shown: "gt",
+        label: "today",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("b", Action::BacklogPane)],
+        shown: "gb",
+        label: "backlog",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("d", Action::GoToDate)],
+        shown: "gd",
+        label: "go to date",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("n", Action::NotesPage)],
+        shown: "gn",
+        label: "notes",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("a", Action::ArchivePage)],
+        shown: "ga",
+        label: "archive",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("s", Action::SettingsPage)],
+        shown: "gs",
+        label: "settings",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("r", Action::OpenReview)],
+        shown: "gr",
+        label: "morning review",
+        bar: Bar::Off,
+        narrow: Bar::Off,
+    },
+];
+
+/// The two halves of a row that runs one of two actions, each a command
+/// of its own in the palette, where Enter runs one thing.
+const SPLIT_FOR_THE_PALETTE: &[(Action, [Binding; 2])] = &[
+    (
+        Action::MoveDown,
+        [
+            Binding {
+                keys: &[("J", Action::MoveDown)],
+                shown: "J",
+                label: "reorder down",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+            Binding {
+                keys: &[("K", Action::MoveUp)],
+                shown: "K",
+                label: "reorder up",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+        ],
+    ),
+    (
+        Action::PrevDay,
+        [
+            Binding {
+                keys: &[("[", Action::PrevDay)],
+                shown: "[",
+                label: "previous day",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+            Binding {
+                keys: &[("]", Action::NextDay)],
+                shown: "]",
+                label: "next day",
+                bar: Bar::Off,
+                narrow: Bar::Off,
+            },
+        ],
+    ),
+];
+
+/// What a row of a page's table is as commands of the palette: itself;
+/// its two halves, when it runs one of two actions; or nothing, when it
+/// only moves the cursor or the keyboard, or backs out, which the palette
+/// has no use for since it runs one command and closes.
+pub fn in_the_palette(binding: &'static Binding) -> Vec<&'static Binding> {
+    let Some((_, action)) = binding.keys.first() else {
+        return Vec::new();
+    };
+    if let Some((_, halves)) = SPLIT_FOR_THE_PALETTE
+        .iter()
+        .find(|(split, _)| split == action)
+    {
+        return halves.iter().collect();
+    }
+    let moves = matches!(
+        action,
+        Action::Down
+            | Action::Up
+            | Action::PaneLeft
+            | Action::PaneRight
+            | Action::NextPane
+            | Action::First
+            | Action::Last
+            | Action::HalfPageDown
+            | Action::HalfPageUp
+            | Action::Go
+            | Action::Commands
+            | Action::Cancel
+    );
+    if moves { Vec::new() } else { vec![binding] }
 }
 
 // ---- the key table ---------------------------------------------------
@@ -558,14 +708,23 @@ const QUIT: Binding = Binding {
 /// The way home from another day: Escape, one level back towards today,
 /// the way it backs out of anything. Stepping through days is what the
 /// pane is for, and coming back is the next thing to know (wireframe 08).
+///
+/// After a jump Escape goes back to where the jump came from instead, and
+/// the status line says where, so the bar calls it "back" alone.
 const BACK_TO_TODAY: Binding = Binding {
     keys: &[("esc", Action::Cancel)],
     shown: "esc",
-    label: "back to today",
+    label: "back",
     bar: Bar::Left,
-    // The narrow bar calls it "back", because `t today` is beside it and
-    // means something else.
-    narrow: Bar::Short(Side::Left, "back"),
+    narrow: Bar::Left,
+};
+
+/// Escape on today, which is as far back as there is, until a jump has
+/// been made from somewhere; then it is the way back there.
+const BACK_FROM_A_JUMP: Binding = Binding {
+    bar: Bar::Off,
+    narrow: Bar::Off,
+    ..BACK_TO_TODAY
 };
 
 const GO_TO_A_DATE: Binding = Binding {
@@ -686,6 +845,7 @@ const PANES_NARROW: Binding = Binding {
 home_tables![
     HOME_DAY, HOME_DAY_NARROW;
     steps: Bar::Off, Bar::Off;
+    BACK_FROM_A_JUMP,
     Binding {
         keys: &[("J", Action::MoveDown), ("K", Action::MoveUp)],
         shown: "J/K",
@@ -780,6 +940,7 @@ home_tables![
 home_tables![
     HOME_BACKLOG, HOME_BACKLOG_NARROW;
     steps: Bar::Off, Bar::Off;
+    BACK_FROM_A_JUMP,
     // The backlog is ordered by hand, like a day, so it reorders by
     // keyboard, like a day (DOMAIN.md section 4). Ten keys already fill
     // the bar here, so the palette and the help overlay teach it.

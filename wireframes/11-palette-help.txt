@@ -4,23 +4,23 @@
  PLAN ─────────────────────────────────────────────────────
  [ ] Book dentist
  [ ] Write standup notes      ┌──────────────────────────────────────────────────────────┐
-                              │ :  wa█                                                   │
+                              │ :                                                        │
                               │──────────────────────────────────────────────────────────│
                               │ FOR "BOOK DENTIST"                                       │
-                              │ Mark waiting                                           w │
-                              │ Move to a day…                                         m │
+                              │ Waiting                                                w │
+                              │ Move to day…                                           m │
                               │                                                          │
                               │ APP                                                      │
-                              │ Show waiting only                                        │
-                              │ Open morning review                        2 on the pile │
-                              │ Repeating schedules                                    R │
-                              │ Go to date…                                            g │
+                              │ Undo: Moved "Book dentist" to today                    u │
+                              │ Search                                                 / │
+                              │ Help                                                   ? │
+                              │                                                          │
+                              │ GO TO                                                    │
+                              │ Go to date                                            gd │
+                              │ Morning review                                        gr │
                               │                                                          │
                               │──────────────────────────────────────────────────────────│
                               │ ⏎ run esc close · right column: the direct key, for next time
-                              │                                                          │
-                              └──────────────────────────────────────────────────────────┘
-
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  COMMANDS  type to filter  ↑/↓ move
 
@@ -34,7 +34,7 @@
   │  EVERYWHERE                  DAY                         BACKLOG                     SETTINGS                    │
   │  j/k move · h/l pane         J/K reorder · f focus       t to today · m move…        h/l adjust                  │
   │  a add · e edit · x delete   b to backlog                d due by · r remind on      space ⏎ change              │
-  │  u undo · space done         m move to day…              w waiting · R repeat        esc , back                  │
+  │  u undo · space done         m move to day…              w waiting · R repeat        esc back                    │
   │  / search · : commands       [/] prev/next day                                                                   │
   │  ? help · gn notes           gt today · gd go to date    REVIEW                                                  │
   │  gs settings · q quit        R repeat                    d done · t today                                        │

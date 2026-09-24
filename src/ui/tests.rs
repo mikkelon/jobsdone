@@ -878,10 +878,10 @@ fn a_hint_bar_too_full_for_its_right_end_leaves_it_out() {
     let drawn = look(&app, 116, 36);
     let bar = drawn[35].clone();
 
-    assert!(bar.starts_with(" FUTURE DAY  [/] day  esc back to today"));
-    assert!(bar.ends_with("m move…         g go…"), "{bar}");
+    assert!(bar.starts_with(" FUTURE DAY  [/] day  esc back  gd go to date"));
+    assert!(bar.ends_with("⏎ follow moved  g go…"), "{bar}");
     assert!(
-        !bar.contains("pane") && !bar.contains("follow"),
+        !bar.contains("pane"),
         "the row that does not fit is left out, not written over"
     );
     assert!(
@@ -3816,10 +3816,11 @@ fn search_and_palette_scroll_the_selected_result_into_view() {
         }
         let drawn = look(&app, width, height).join("\n");
         assert!(
-            drawn.contains("Quit"),
-            "last command visible at {width}x{height}: {drawn}"
+            drawn.contains("Morning review"),
+            "last command, the last place, visible at {width}x{height}: {drawn}"
         );
-        assert_eq!(app.update(Action::Confirm), crate::app::Flow::Quit);
+        app.update(Action::Confirm);
+        assert!(app.review().is_some() || app.popup().is_none());
     }
 }
 

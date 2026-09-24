@@ -194,7 +194,12 @@ Conventions, so the map is guessable:
   run towards today: a field, then a card, then a `g` waiting for its
   place, then the review, then the notes or settings page, then another
   day, then today, where Escape is as far back as there is and does
-  nothing.
+  nothing. A jump is the exception, and one level deep: after Enter on a
+  search result, a moved row or a day in the list of days, or a date
+  gone to with `gd`, Escape goes back to where the jump came from, to
+  the page, the day and the row, and the status line says where ("esc
+  back to Wed 3 Sep"). Stepping with `[` `]` or going home with `gt`
+  leaves the jump behind.
 - A key that does nothing where it is pressed says where it does
   something, in the hint bar: "Nothing here for d. It is due by on
   backlog and surfaced." A key that used to be a place says what it is
@@ -239,9 +244,15 @@ Conventions, so the map is guessable:
   navigate other lists. In the surfaced step, `s` means "leave in backlog":
   acknowledge the row in this review without changing or snoozing it.
 - The command palette lists every action with its direct key beside it,
-  in two sections: what the key would do to the row the cursor is on,
-  under that row's own title, and then what it does to the app. A pane
-  with no row under the cursor names the page instead. Inside the palette
+  in three sections: what the key would do to the row the cursor is on,
+  under that row's own title; what it does to the app; and, under GO TO,
+  every place `g` goes, each under its whole chord (`gt`, `gn`, …). A
+  row verb is only offered where it means something: a moved row offers
+  following it and copying its title and nothing a task would do, a task
+  row has nothing to follow, and a pane with no row under the cursor
+  offers none and names the page instead. Keys that only move the cursor
+  or the keyboard are not commands and are left out, and a key that runs
+  one of two things, `J`/`K` or `[`/`]`, is two commands. Inside the palette
   you filter and press Enter; the key shown is for next time, outside the
   palette, so it teaches the map and then stops being needed. Search and
   palette lists scroll with selection and show position when they overflow.

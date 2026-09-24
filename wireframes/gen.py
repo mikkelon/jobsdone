@@ -707,7 +707,7 @@ def p08():
     group(g, rx, rw, y, 'Earlier'); y += 1
     g.put(rx + 5, y, 'Fri 22 Aug'); g.rput(rx + rw - 1, y, '1 / 2 · 1 open', 'd'); y += 1
     g.put(rx + 5, y, '…'); g.rput(rx + rw - 1, y, 'days with nothing planned are skipped', 'd')
-    hints(g, g.h - 1, 'Past day', [('[/]', 'day'), ('esc', 'back to today'), ('gd', 'go to date'), ('space', 'done'), ('t', 'to today'), ('b', 'to backlog'), ('m', 'move…'), ('⏎', 'follow moved')], PANE_KEYS)
+    hints(g, g.h - 1, 'Past day', [('[/]', 'day'), ('esc', 'back'), ('gd', 'go to date'), ('space', 'done'), ('t', 'to today'), ('b', 'to backlog'), ('m', 'move…'), ('⏎', 'follow moved')], PANE_KEYS)
     page('08-history', 'History', [('120×36 · floating window', g)], '''
 <h2>History: browsing past days</h2>
 <p>History is not a separate screen: it is the same day view stepped backwards. A past day is drawn exactly as it was while it was today, and the two panes stay in place.</p>
@@ -857,20 +857,24 @@ def p11():
     group(g, 0, 60, 0, 'Plan')
     task(g, 0, 60, 1, 'Book dentist', cursor=True)
     task(g, 0, 60, 2, 'Write standup notes')
-    cx, cy, cw, ch = 30, 2, 60, 17
+    cx, cy, cw, ch = 30, 2, 60, 19
     g.box(cx, cy, cw, ch)
-    g.put(cx + 2, cy + 1, ':', 'b'); inp(g, cx + 4, cy + 1, 52, 'wa')
+    g.put(cx + 2, cy + 1, ':', 'b'); inp(g, cx + 4, cy + 1, 52, '')
     g.hl(cx + 1, cy + 2, cw - 2, 'd')
     y = cy + 3
     g.put(cx + 2, y, 'FOR "BOOK DENTIST"', 'd'); y += 1
-    for i, (l, r) in enumerate([('Mark waiting', 'w'), ('Move to a day…', 'm')]):
+    for i, (l, r) in enumerate([('Waiting', 'w'), ('Move to day…', 'm')]):
         g.put(cx + 2, y, l); g.rput(cx + cw - 2, y, r, 'k')
         if i == 0: g.add_attr(cx + 1, y, cw - 2, 'c')
         y += 1
     y += 1
     g.put(cx + 2, y, 'APP', 'd'); y += 1
-    for l, r in [('Show waiting only', ''), ('Open morning review', '2 on the pile'), ('Repeating schedules', 'R'), ('Go to date…', 'g')]:
-        g.put(cx + 2, y, l); g.rput(cx + cw - 2, y, r, 'k' if len(r) == 1 else 'd'); y += 1
+    for l, r in [('Undo: Moved "Book dentist" to today', 'u'), ('Search', '/'), ('Help', '?')]:
+        g.put(cx + 2, y, l); g.rput(cx + cw - 2, y, r, 'k'); y += 1
+    y += 1
+    g.put(cx + 2, y, 'GO TO', 'd'); y += 1
+    for l, r in [('Go to date', 'gd'), ('Morning review', 'gr')]:
+        g.put(cx + 2, y, l); g.rput(cx + cw - 2, y, r, 'k'); y += 1
     y += 1
     g.hl(cx + 1, y, cw - 2, 'd'); y += 1
     g.seg(cx + 2, y, [('⏎', 'k'), ('run', 'd'), ('esc', 'k'), ('close', 'd'), ('· right column: the direct key, for next time', 'd')], gap=1)
@@ -888,7 +892,7 @@ def p11():
                              [('w', 'waiting'), ('R', 'repeat')], [],
                              'REVIEW', [('d', 'done'), ('t', 'today')], [('b', 'backlog'), ('m', 'move…')],
                              [('s', 'leave in backlog'), ('⏎', 'next step')]]),
-            (89, 'Settings', [[('h/l', 'adjust')], [('space ⏎', 'change')], [('esc ,', 'back')]])]
+            (89, 'Settings', [[('h/l', 'adjust')], [('space ⏎', 'change')], [('esc', 'back')]])]
     for x, title, lines in cols:
         h.put(x, 3, title.upper(), 'd')
         for i, l in enumerate(lines):
@@ -902,10 +906,10 @@ def p11():
     page('11-palette-help', 'Command palette & help', [('A · Command palette (:) over the home screen', g), ('B · Help overlay (?), the full key map', h)], '''
 <h2>Command palette and help</h2>
 <p>Two escape hatches so nobody has to memorise the key map before the app is usable.</p>
-<p><b>A</b> The palette is the Omarchy launcher shape: a centred box with a fuzzy filter and the selected row highlighted. Actions for the cursor task come first, app-level ones after. Inside the palette you type to filter, move with ↑/↓ and run with Enter; letters type, as in every text field. The key in the right column is not for pressing here: it is the direct key for next time, on the home screen, so the palette teaches itself out of use.</p>
+<p><b>A</b> The palette is the Omarchy launcher shape: a centred box with a fuzzy filter and the selected row highlighted. Actions for the cursor task come first, app-level ones after, and every place <kbd>g</kbd> goes last, under its chord. Keys that only move are not listed. Inside the palette you type to filter, move with ↑/↓ and run with Enter; letters type, as in every text field. The key in the right column is not for pressing here: it is the direct key for next time, on the home screen, so the palette teaches itself out of use.</p>
 <p><b>B</b> Help is a static overlay of the same keys the hint bar shows, grouped by context. It is the whole map; there are no hidden keys.</p>
-<div class="flow"><b>Key conventions</b>Lowercase acts on the cursor row. Uppercase reorders or opens schedule editing. Punctuation navigates. Enter confirms, Escape backs out one level, <kbd>u</kbd> undoes.</div>
-<p>Settings are a page of their own (screen 13), reached with <kbd>gs</kbd> and listed in the palette under the app's section. Colour and font are not on it: they come from the terminal, which Omarchy themes.</p>''')
+<div class="flow"><b>Key conventions</b>Lowercase acts on the cursor row. Uppercase reorders or opens schedule editing. <kbd>g</kbd> goes places. Enter confirms, Escape backs out one level, <kbd>u</kbd> undoes.</div>
+<p>Settings are a page of their own (screen 13), reached with <kbd>gs</kbd> and listed in the palette under GO TO. Colour and font are not on it: they come from the terminal, which Omarchy themes.</p>''')
 
 
 # 12 --------------------------------------------------------------------

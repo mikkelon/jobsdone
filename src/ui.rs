@@ -543,6 +543,16 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
         return;
     }
     let browsing = app.shown() != Shown::Today;
+    // Escape goes back to where a jump came from, or from another day to
+    // today; the line says which.
+    let back = match app.way_back() {
+        Some((Page::Notes, _)) => "back to notes".to_owned(),
+        Some((Page::Settings, _)) => "back to settings".to_owned(),
+        Some((Page::Home, day)) if day != app.today() => {
+            format!("back to {}", day_label(day, app.dates()))
+        }
+        _ => "back to today".to_owned(),
+    };
     let notes = vec![
         words(&counted(app.notes().count, "note", "notes"), dim()),
         Part::Key("gn".to_owned()),
@@ -568,25 +578,25 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
     // back, which leaves the right end no room for its own words.
     let (left, right) = match (app.page(), narrow) {
         (Page::Home, true) => (
-            if browsing {
-                vec![key("esc", "back to today")]
+            if browsing || app.way_back().is_some() {
+                vec![key("esc", &back)]
             } else {
                 vec![quiet(&day_label(app.today(), app.dates()))]
             },
             with(alert(""), vec![key("/", ""), key(":", ""), key("?", "")]),
         ),
         (Page::Home, false) if browsing => (
-            vec![
-                quiet(&ago(app.showing(), app.today())),
-                key("esc", "back to today"),
-            ],
+            vec![quiet(&ago(app.showing(), app.today())), key("esc", &back)],
             with(
                 alert(" on the pile"),
                 vec![notes, key("/", ""), key(":", ""), key("?", "")],
             ),
         ),
         (Page::Home, false) => (
-            vec![key("[/]", "day"), key("gd", "go to date")],
+            with(
+                app.way_back().map(|_| key("esc", &back)),
+                vec![key("[/]", "day"), key("gd", "go to date")],
+            ),
             with(
                 alert(" on the pile"),
                 vec![
