@@ -6,6 +6,27 @@ runs inside an Omarchy terminal. Wireframes live in `wireframes/` (open
 `wireframes/index.html`); they are character grids at real terminal sizes,
 grey by default, and can be switched to any installed Omarchy theme.
 
+## Words for the screen
+
+The domain has its own words (DOMAIN.md section 1). These are the words
+for what is on the screen, and the rest of this document uses them
+strictly.
+
+| Word        | Meaning |
+|-------------|---------|
+| page        | What fills the window between the status line and the hint bar: home (a day beside the backlog), notes, or settings. One page at a time. |
+| pane        | A part of the page that is visible right now. Panes sit side by side, and exactly one of them has the keyboard, the focused pane. A pane may never take the keyboard at all, like the settings page's description column or the review's panel. `h` and `l` move between panes. |
+| tab         | One of a short, fixed set of things a single pane can show, named in its header or tab row and chosen with `tab`. The notes list pane has two tabs, Notes and Archive. A narrow window has one pane, and its tabs are Today, Backlog and Notes. |
+| popup, card | A box drawn over the panes. It takes the keyboard while it is open, and is not a pane. A card is a popup that asks for an answer: date, repeat, move, and the two questions. |
+| field       | A place where text is being typed. While one has the keyboard, letters type rather than act. |
+| mode        | What the keyboard is in right now, named at the left of the hint bar: a pane, a field, a popup, or the review. |
+
+What a pane changes to by itself is not a tab. The backlog pane shows
+the list of days while another day is shown, and the note pane shows
+whichever note the cursor is on, but neither is chosen with `tab`.
+Neither are the days the day pane steps through with `[` and `]`: there
+is no fixed set of them to name.
+
 ## 1. Opened for a moment, mostly
 
 The usual way in is a keybind that opens the app in a floating terminal,
@@ -26,7 +47,8 @@ half width. Both must feel right, and the floating case comes first.
   the pile, in red with `M` beside it, until it is dealt with, and says
   nothing at all once the pile is empty.
 - The layout targets 120×36. A full-width tile shows the same layout with
-  more rows. Under 100 columns the two panes collapse to tabs.
+  more rows. Under 100 columns only one pane fits, and the two panes
+  become tabs of it.
 - Hyprland does the windowing: a window rule on the app's class floats and
   sizes it. The rule is the app's own to write, from the `floating_window`
   and `window_size` settings. The app never positions or resizes its
@@ -122,9 +144,10 @@ still does everything.
 
 Conventions, so the map is guessable:
 
-- `j` `k` move; `h` `l` switch between panes side by side; `tab` switches
-  between tabs: the tabs of a narrow window, and Notes and Archive on the
-  notes page. `J` `K` reorder.
+- `j` `k` move; `h` `l` move between panes; `tab` switches the focused
+  pane's tab: Today, Backlog and Notes in a narrow window, and Notes and
+  Archive on the notes list. A pane with no tabs ignores `tab`, and a
+  window with one pane ignores `h` and `l`. `J` `K` reorder.
 - Lowercase acts on the cursor row: `space` done, `f` focus, `a` add,
   `e` edit, `x` delete, `t` to today, `b` to backlog, `m` move to a day,
   `d` due by, `r` remind on, `w` waiting, `y` copy. `R` opens the repeat
