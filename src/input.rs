@@ -1916,6 +1916,21 @@ macro_rules! date_picks {
     };
 }
 
+/// What a pick of the date card is called when the card goes to a day
+/// rather than giving a task one. A day is gone to mostly to look back,
+/// so each pick is the mirror of its forward one, on the same key: the
+/// key keeps its place and only the direction turns round.
+pub fn looking_back(pick: Action) -> Option<&'static str> {
+    match pick {
+        Action::Tomorrow => Some("Yesterday"),
+        Action::EndOfWeek => Some("Start of week"),
+        Action::NextMonday => Some("Last Monday"),
+        Action::InAWeek => Some("A week ago"),
+        Action::EndOfMonth => Some("Start of month"),
+        _ => None,
+    }
+}
+
 /// A date card table: its picks, then the keys of the control that has
 /// the keyboard, then the two that leave.
 macro_rules! date_table {

@@ -716,8 +716,10 @@ fn dictionary_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
 const DATE_WIDTH: u16 = 54;
 
 /// The shapes the field reads (DOMAIN.md section 2), shown while it is
-/// empty so that they are found without leaving it.
+/// empty so that they are found without leaving it, in the direction the
+/// card looks: ahead for a date given, back for a day gone to.
 const DATE_SHAPES: &str = "e.g. 12 sep, +3, -3, mon, tomorrow";
+const DATE_SHAPES_BACK: &str = "e.g. 12 sep, -3, +3, mon, yesterday";
 
 /// The columns the month grid takes: seven days of two figures, each
 /// under a space.
@@ -754,7 +756,7 @@ fn compact_date(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows, widt
     );
     super::caret_line(canvas, x + 2, y + 1, width - 4, &popup.text, popup.caret);
     let resolved = if popup.text.trim().is_empty()
-        || domain::parse_date(popup.text.trim(), app.today()).is_some()
+        || domain::parse_date(popup.text.trim(), app.today(), draft.kind.looking()).is_some()
     {
         day_label(draft.on, app.dates())
     } else {
@@ -827,7 +829,9 @@ fn date_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     // What has been typed, and the day it and the calendar agree on; or
     // that the typed line is not a date yet, since Enter would say so.
     let typed = popup.text.trim();
-    let day = if typed.is_empty() || domain::parse_date(typed, app.today()).is_some() {
+    let day = if typed.is_empty()
+        || domain::parse_date(typed, app.today(), draft.kind.looking()).is_some()
+    {
         day_label(draft.on, app.dates())
     } else {
         "not a date".to_owned()
@@ -835,7 +839,11 @@ fn date_card(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     let room = width.saturating_sub(6 + count(&day));
     super::caret_line(canvas, x + 3, y + 2, room, &popup.text, popup.caret);
     if typed.is_empty() {
-        canvas.put(x + 5, y + 2, DATE_SHAPES, dim());
+        let shapes = match draft.kind.looking() {
+            domain::Looking::Ahead => DATE_SHAPES,
+            domain::Looking::Back => DATE_SHAPES_BACK,
+        };
+        canvas.put(x + 5, y + 2, shapes, dim());
     }
     canvas.rput(x + width - 2, y + 2, &day, dim());
 

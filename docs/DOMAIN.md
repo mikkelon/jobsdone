@@ -71,28 +71,38 @@ back as the zoned timestamp that was written.
 ### Reading a typed date
 
 The date card is the one place a date is written rather than picked, and
-what the shapes mean is a rule about dates. `parse_date(text, today)`
-reads, case and spacing aside:
+what the shapes mean is a rule about dates. `parse_date(text, today,
+looking)` reads, case and spacing aside, looking `Ahead` for a date a
+task is given and `Back` for a day gone to:
 
 | Typed                          | Means                                        |
 |--------------------------------|----------------------------------------------|
 | `2026-09-30`                   | That date.                                   |
 | `30 sep`, `sep 30`, `30/9`     | Day and month, in either order, any of ` / - . ,` between them. |
 | `30 sep 2027`, `1/10/2027`     | The same with a year.                        |
-| `30`                           | The next month that has a 30th.              |
-| `mon`, `monday`                | The next such weekday, never today.          |
-| `today`, `tomorrow`            | Those days.                                  |
+| `30`                           | The next month that has a 30th; looking back, the last one that has had it. |
+| `mon`, `monday`                | The next such weekday, never today; looking back, the last one. |
+| `today`, `tomorrow`, `yesterday` | Those days.                                |
 | `+3`, `-3`                     | Three days from today, or three days ago.    |
 
 A month or a weekday is written out or cut to three letters. A date with
 no year is the next one that has not passed, so `1 sep` typed in
-December is next September. Nothing else is guessed: text that is not
+December is next September; looking back it is the last one that has,
+so `30 sep` typed in August is last September. Nothing else is guessed: text that is not
 one of these shapes is not a date, and the card says so rather than
 choosing a day.
 
 The card's "end of week" pick is `end_of_week(today, week_starts_on,
 work_days)`: the last work day of the week today is in, which is today
 itself on that day, or the same day of the next week once it has passed.
+
+Going to a day, the card's picks look back and are never today:
+`start_of_week(today, week_starts_on, work_days)` is the first work day
+of the week today is in, or of the week before on that day or before
+it; `last_weekday(today, Mon)` is the last Monday before today;
+`start_of_month(today)` is the first of the month, or of the month
+before on the first itself; and a week ago and yesterday are what they
+say.
 
 ## 3. Task
 

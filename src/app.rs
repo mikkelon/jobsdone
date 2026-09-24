@@ -755,6 +755,17 @@ pub enum DateKind {
     Go,
 }
 
+impl DateKind {
+    /// Which way the card looks for a date: back for a day gone to, which
+    /// is mostly one that has been, and ahead for a date a task is given.
+    pub fn looking(self) -> domain::Looking {
+        match self {
+            DateKind::Go => domain::Looking::Back,
+            DateKind::Due | DateKind::Remind | DateKind::Move => domain::Looking::Ahead,
+        }
+    }
+}
+
 /// The date card: the day it is on, however that day was arrived at, and
 /// which of its two controls has the keyboard.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -2526,6 +2537,26 @@ impl App {
         }
     }
 
+    /// The day a pick of the date card means: the forward day it names
+    /// when a task is given a date, and its mirror when the card goes to
+    /// a day, which is mostly a day that has been (DESIGN.md section 8).
+    fn day_picked(&self, action: Action, kind: DateKind) -> Option<Date> {
+        if kind.looking() == domain::Looking::Ahead {
+            return self.day_for(action);
+        }
+        let settings = &self.model.settings;
+        match action {
+            Action::Tomorrow => self.today.yesterday().ok(),
+            Action::EndOfWeek => {
+                domain::start_of_week(self.today, settings.week_starts_on(), &settings.work_days())
+            }
+            Action::NextMonday => domain::last_weekday(self.today, Weekday::Mon),
+            Action::InAWeek => self.today.checked_sub(Span::new().days(7)).ok(),
+            Action::EndOfMonth => domain::start_of_month(self.today),
+            _ => None,
+        }
+    }
+
     /// The day each row of the move card sends a task to.
     fn target_for(&self, action: Action) -> MoveTarget {
         // A day the calendar cannot reach, which is only ever the last
@@ -2542,8 +2573,8 @@ impl App {
     /// A quick pick, on whichever card is open: a day to move a task to,
     /// or a day to write on it.
     fn quick_pick(&mut self, action: Action) {
-        if self.popup.as_ref().and_then(Popup::date).is_some() {
-            if let Some(date) = self.day_for(action) {
+        if let Some(draft) = self.popup.as_ref().and_then(Popup::date).copied() {
+            if let Some(date) = self.day_picked(action, draft.kind) {
                 self.take_the_date(Some(date));
             }
             return;
@@ -2719,11 +2750,16 @@ impl App {
     /// a task with no day is in the backlog, which is a place, not a
     /// missing date.
     pub fn date_choices(&self) -> Vec<DateChoice> {
-        let clears = self
+        let Some(kind) = self
             .popup
             .as_ref()
             .and_then(Popup::date)
-            .is_some_and(|draft| matches!(draft.kind, DateKind::Due | DateKind::Remind));
+            .map(|draft| draft.kind)
+        else {
+            return Vec::new();
+        };
+        let clears = matches!(kind, DateKind::Due | DateKind::Remind);
+        let back = kind.looking() == domain::Looking::Back;
         input::bindings(KeyContext::Popup {
             kind: PopupKind::Date,
             text_field: true,
@@ -2736,15 +2772,15 @@ impl App {
                 | Action::EndOfWeek
                 | Action::NextMonday
                 | Action::InAWeek
-                | Action::EndOfMonth => Some(self.day_for(action)?),
+                | Action::EndOfMonth => Some(self.day_picked(action, kind)?),
                 Action::ClearDate if clears => None,
                 _ => return None,
             };
-            Some(DateChoice {
-                key,
-                label: binding.label,
-                date,
-            })
+            let label = match input::looking_back(action) {
+                Some(mirror) if back => mirror,
+                _ => binding.label,
+            };
+            Some(DateChoice { key, label, date })
         })
         .collect()
     }
@@ -2760,7 +2796,9 @@ impl App {
         let Some(draft) = popup.date().copied() else {
             return;
         };
-        if !typed.is_empty() && domain::parse_date(&typed, self.today).is_none() {
+        if !typed.is_empty()
+            && domain::parse_date(&typed, self.today, draft.kind.looking()).is_none()
+        {
             self.say("That is not a date I can read.", false);
             return;
         }
@@ -5395,7 +5433,10 @@ impl App {
         let Some(popup) = &mut self.popup else {
             return;
         };
-        let Some(date) = domain::parse_date(&popup.text, today) else {
+        let Some(looking) = popup.date().map(|draft| draft.kind.looking()) else {
+            return;
+        };
+        let Some(date) = domain::parse_date(&popup.text, today, looking) else {
             return;
         };
         if let Card::Date(draft) = &mut popup.card {

@@ -38,6 +38,48 @@ pub fn stamp_label(instant: &Zoned, order: DateOrder) -> String {
     )
 }
 
+/// Which way a date is looked for when the words for it leave that open:
+/// ahead, for a date a task is given, or back, for a day gone to, which is
+/// mostly a day that has been (DOMAIN.md section 2).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Looking {
+    Ahead,
+    Back,
+}
+
+/// The first work day of the week today is in, or of the week before
+/// when today is that day or comes before it: a day to look back at, so
+/// never today.
+pub fn start_of_week(today: Date, start: WeekStart, work_days: &WorkDays) -> Option<Date> {
+    let first = week_start_of(today, start);
+    let day = (0..7)
+        .filter_map(|days| first.checked_add(Span::new().days(days)).ok())
+        .find(|day| work_days.contains(Weekday::of(*day)))?;
+    if day < today {
+        Some(day)
+    } else {
+        day.checked_sub(Span::new().days(7)).ok()
+    }
+}
+
+/// The first of this month, or of the month before on the first itself:
+/// a day to look back at, so never today.
+pub fn start_of_month(today: Date) -> Option<Date> {
+    let first = today.first_of_month();
+    if first < today {
+        Some(first)
+    } else {
+        first.checked_sub(Span::new().months(1)).ok()
+    }
+}
+
+/// The last such weekday before today, never today itself.
+pub fn last_weekday(today: Date, weekday: Weekday) -> Option<Date> {
+    (1..=7)
+        .filter_map(|days| today.checked_sub(Span::new().days(days)).ok())
+        .find(|day| Weekday::of(*day) == weekday)
+}
+
 /// The last work day of the week today is in, or of the next week once
 /// that day has passed. Today is the end of the week when it is that day.
 pub fn end_of_week(today: Date, start: WeekStart, work_days: &WorkDays) -> Option<Date> {
@@ -59,10 +101,13 @@ const MONTHS: u8 = 12;
 
 /// The date a typed line means, on the day it was typed.
 ///
-/// A date with no year is the next one that has not passed, so "30 sep"
-/// in December is next September. Nothing else is guessed: what cannot be
-/// read is nothing, and the card says so rather than choosing a day.
-pub fn parse_date(text: &str, today: Date) -> Option<Date> {
+/// Looking ahead, a date with no year is the next one that has not
+/// passed, so "30 sep" in December is next September, and a weekday is
+/// the next one. Looking back, they are the last ones: "30 sep" in
+/// August is last September, and "mon" is last Monday. Nothing else is
+/// guessed: what cannot be read is nothing, and the card says so rather
+/// than choosing a day.
+pub fn parse_date(text: &str, today: Date, looking: Looking) -> Option<Date> {
     let text = text.trim().to_lowercase();
     if text.is_empty() {
         return None;
@@ -85,7 +130,13 @@ pub fn parse_date(text: &str, today: Date) -> Option<Date> {
     match text.as_str() {
         "today" => return Some(today),
         "tomorrow" => return today.tomorrow().ok(),
+        "yesterday" => return today.yesterday().ok(),
         _ => {}
+    }
+    if let Some(weekday) = weekday(&text)
+        && looking == Looking::Back
+    {
+        return last_weekday(today, weekday);
     }
     if let Some(weekday) = weekday(&text) {
         // A weekly shape names its own days, so which days are worked
@@ -112,10 +163,10 @@ pub fn parse_date(text: &str, today: Date) -> Option<Date> {
         .filter(|part| !part.is_empty())
         .collect();
     match parts.as_slice() {
-        [day] => day_of_a_month(number(day)?, today),
+        [day] => day_of_a_month(number(day)?, today, looking),
         [one, other] => {
             let (day, month) = day_and_month(one, other)?;
-            in_a_year_not_yet_gone(day, month, today)
+            in_the_nearest_year(day, month, today, looking)
         }
         [one, other, year] => {
             let (day, month) = day_and_month(one, other)?;
@@ -137,28 +188,40 @@ fn day_and_month(one: &str, other: &str) -> Option<(u8, u8)> {
     Some((number(one)?, number(other)?))
 }
 
-/// The next day of the month with that number, this month or a later
-/// one, skipping the months too short to have it.
-fn day_of_a_month(day: u8, today: Date) -> Option<Date> {
+/// The day of the month with that number nearest today the way it is
+/// looked for: this month or a later one ahead, this month or an earlier
+/// one back, skipping the months too short to have it.
+fn day_of_a_month(day: u8, today: Date, looking: Looking) -> Option<Date> {
+    let step = match looking {
+        Looking::Ahead => 1,
+        Looking::Back => -1,
+    };
     let mut first = today.first_of_month();
     for _ in 0..MONTHS {
-        if let Ok(date) = Date::new(first.year(), first.month(), day as i8)
-            && date >= today
-        {
-            return Some(date);
+        if let Ok(date) = Date::new(first.year(), first.month(), day as i8) {
+            let on_the_way = match looking {
+                Looking::Ahead => date >= today,
+                Looking::Back => date <= today,
+            };
+            if on_the_way {
+                return Some(date);
+            }
         }
-        first = first.checked_add(Span::new().months(1)).ok()?;
+        first = first.checked_add(Span::new().months(step)).ok()?;
     }
     None
 }
 
-/// The first such day and month that has not passed, which is this year
-/// or the next.
-fn in_a_year_not_yet_gone(day: u8, month: u8, today: Date) -> Option<Date> {
+/// Such a day and month in the nearest year the way it is looked for:
+/// the first that has not passed ahead, which is this year or the next,
+/// and the last that has back, which is this year or the one before.
+fn in_the_nearest_year(day: u8, month: u8, today: Date, looking: Looking) -> Option<Date> {
     let (day, month) = (day as i8, month as i8);
-    match Date::new(today.year(), month, day) {
-        Ok(date) if date >= today => Some(date),
-        _ => Date::new(today.year() + 1, month, day).ok(),
+    match (Date::new(today.year(), month, day), looking) {
+        (Ok(date), Looking::Ahead) if date >= today => Some(date),
+        (Ok(date), Looking::Back) if date <= today => Some(date),
+        (_, Looking::Ahead) => Date::new(today.year() + 1, month, day).ok(),
+        (_, Looking::Back) => Date::new(today.year() - 1, month, day).ok(),
     }
 }
 
@@ -248,18 +311,18 @@ mod boundary_tests {
             "+1.5",
             "+1d",
         ] {
-            assert_eq!(parse_date(text, today), None, "{text}");
+            assert_eq!(parse_date(text, today, Looking::Ahead), None, "{text}");
         }
         for (text, offset) in [("+3", 3), ("-3", -3), ("+0", 0), ("-0", 0), (" + 1 ", 1)] {
             assert_eq!(
-                parse_date(text, today),
+                parse_date(text, today, Looking::Ahead),
                 today.checked_add(Span::new().days(offset)).ok(),
                 "{text}"
             );
         }
-        assert_eq!(parse_date("+1", Date::MAX), None);
-        assert_eq!(parse_date("-1", Date::MIN), None);
-        assert_eq!(parse_date("+0", Date::MAX), Some(Date::MAX));
-        assert_eq!(parse_date("-0", Date::MIN), Some(Date::MIN));
+        assert_eq!(parse_date("+1", Date::MAX, Looking::Ahead), None);
+        assert_eq!(parse_date("-1", Date::MIN, Looking::Ahead), None);
+        assert_eq!(parse_date("+0", Date::MAX, Looking::Ahead), Some(Date::MAX));
+        assert_eq!(parse_date("-0", Date::MIN, Looking::Ahead), Some(Date::MIN));
     }
 }

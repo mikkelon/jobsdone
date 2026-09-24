@@ -6545,3 +6545,51 @@ fn escape_after_a_jump_goes_back_to_where_it_came_from() {
     assert_eq!(app.page(), Page::Home);
     assert_eq!(app.showing(), app.today());
 }
+
+#[test]
+fn going_to_a_date_looks_back_and_giving_one_looks_ahead() {
+    let mut app = started();
+
+    // Friday 5 September: the go-to card's picks are the mirrors of the
+    // due card's, on the same keys.
+    app.update(Action::GoToDate);
+    let picks: Vec<(&str, Option<Date>)> = app
+        .date_choices()
+        .iter()
+        .map(|choice| (choice.label, choice.date))
+        .collect();
+    assert_eq!(
+        picks,
+        [
+            ("Yesterday", Some(on("2025-09-04"))),
+            ("Start of week", Some(on("2025-09-01"))),
+            ("Last Monday", Some(on("2025-09-01"))),
+            ("A week ago", Some(on("2025-08-29"))),
+            ("Start of month", Some(on("2025-09-01"))),
+        ],
+        "and no clearing, since a day gone to is no date a task has"
+    );
+    type_in(&mut app, "mon");
+    app.update(Action::Confirm);
+    assert_eq!(app.showing(), on("2025-09-01"), "the last Monday");
+
+    app.update(Action::Today);
+    app.update(Action::PaneRight);
+    add(&mut app, "File the VAT return");
+    app.update(Action::DueBy);
+    assert_eq!(
+        app.date_choices()
+            .first()
+            .map(|choice| (choice.label, choice.date)),
+        Some(("Tomorrow", Some(on("2025-09-06"))))
+    );
+    type_in(&mut app, "mon");
+    app.update(Action::Confirm);
+    assert_eq!(
+        app.model()
+            .task(cursor(&app, List::Backlog).expect("the task"))
+            .and_then(|task| task.due_on),
+        Some(on("2025-09-08")),
+        "the next Monday"
+    );
+}

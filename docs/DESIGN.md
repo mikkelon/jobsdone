@@ -415,6 +415,17 @@ quick date on the date card apply and close it, the way a key on a row
 does. Only what has to be composed first waits for Enter: a typed date, a
 day walked to in the calendar, a repeat rule.
 
+A date given to a task is nearly always ahead, and a day gone to with
+`gd` is mostly one that has been, so the date card looks the way it is
+used. Giving a date (due, remind, the move card's "Pick a date…") its
+picks are Tomorrow, End of week, Next Monday, In a week and End of
+month on `alt-1` to `alt-5`. Going to a date, the same keys are their
+mirrors: Yesterday, Start of week, Last Monday, A week ago and Start of
+month, none of them ever today, which is `gt`, and there is nothing to
+clear. What is typed follows the same way: `mon` or `30 sep` is the
+next one on a date given and the last one on a day gone to (DOMAIN.md
+section 2).
+
 At the supported date limits, unavailable calendar days are blank, and
 navigation stops at the boundary. An out-of-range typed date keeps the card
 open with its validation message.

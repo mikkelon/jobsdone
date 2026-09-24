@@ -1822,7 +1822,7 @@ fn the_rule_shapes_are_the_json_of_domain_section_10() {
 
 /// The date card's field, read on Friday 5 September 2025.
 fn typed(text: &str) -> Option<String> {
-    parse_date(text, on("2025-09-05")).map(|date| date.to_string())
+    parse_date(text, on("2025-09-05"), Looking::Ahead).map(|date| date.to_string())
 }
 
 #[test]
@@ -1852,7 +1852,7 @@ fn a_typed_date_with_no_year_is_the_next_one_that_has_not_passed() {
     assert_eq!(typed("30").as_deref(), Some("2025-09-30"));
     assert_eq!(typed("3").as_deref(), Some("2025-10-03"));
     assert_eq!(
-        parse_date("30", on("2026-01-31")).map(|date| date.to_string()),
+        parse_date("30", on("2026-01-31"), Looking::Ahead).map(|date| date.to_string()),
         Some("2026-03-30".to_owned())
     );
 }
@@ -3699,4 +3699,56 @@ fn compound_commands_allocate_one_durable_undo_identity() {
     model.apply(&undone.change);
     assert!(model.undo.is_empty());
     assert_eq!(model.meta["undo_high_water"], "1");
+}
+
+/// The go-to card's field, read on Friday 5 September 2025, which looks
+/// back for a day to go to.
+fn typed_back(text: &str) -> Option<String> {
+    parse_date(text, on("2025-09-05"), Looking::Back).map(|date| date.to_string())
+}
+
+#[test]
+fn looking_back_a_typed_date_with_no_year_is_the_last_one_that_has_passed() {
+    // 1 September has gone, so it is this year's; 30 September has not,
+    // so it is last year's.
+    assert_eq!(typed_back("1 sep").as_deref(), Some("2025-09-01"));
+    assert_eq!(typed_back("30 sep").as_deref(), Some("2024-09-30"));
+    // A bare day is the last month that has had such a day.
+    assert_eq!(typed_back("3").as_deref(), Some("2025-09-03"));
+    assert_eq!(typed_back("30").as_deref(), Some("2025-08-30"));
+    assert_eq!(
+        parse_date("30", on("2026-03-01"), Looking::Back).map(|date| date.to_string()),
+        Some("2026-01-30".to_owned()),
+        "February is skipped for a 30th, looking back as ahead"
+    );
+    // A weekday is the last one, never today.
+    assert_eq!(typed_back("mon").as_deref(), Some("2025-09-01"));
+    assert_eq!(typed_back("fri").as_deref(), Some("2025-08-29"));
+    // What names its own direction keeps it.
+    assert_eq!(typed_back("-3").as_deref(), Some("2025-09-02"));
+    assert_eq!(typed_back("+3").as_deref(), Some("2025-09-08"));
+    assert_eq!(typed_back("tomorrow").as_deref(), Some("2025-09-06"));
+    assert_eq!(typed_back("yesterday").as_deref(), Some("2025-09-04"));
+    assert_eq!(typed_back("2025-12-24").as_deref(), Some("2025-12-24"));
+}
+
+#[test]
+fn the_days_looked_back_to_are_never_today() {
+    let week = WorkDays::DEFAULT;
+    // Friday 5 September: this week began on Monday the 1st.
+    assert_eq!(
+        start_of_week(on("2025-09-05"), WeekStart::Monday, &week),
+        Some(on("2025-09-01"))
+    );
+    // On the Monday itself, the week before's.
+    assert_eq!(
+        start_of_week(on("2025-09-01"), WeekStart::Monday, &week),
+        Some(on("2025-08-25"))
+    );
+    assert_eq!(start_of_month(on("2025-09-05")), Some(on("2025-09-01")));
+    assert_eq!(start_of_month(on("2025-09-01")), Some(on("2025-08-01")));
+    assert_eq!(
+        last_weekday(on("2025-09-01"), Weekday::Mon),
+        Some(on("2025-08-25"))
+    );
 }

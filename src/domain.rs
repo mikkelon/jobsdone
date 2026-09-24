@@ -23,7 +23,10 @@ mod view;
 pub(crate) mod tests;
 
 pub use self::command::{Command, Undone, apply, apply_many, undo};
-pub use self::date::{day_label, end_of_week, parse_date, short_label, stamp_label};
+pub use self::date::{
+    Looking, day_label, end_of_week, last_weekday, parse_date, short_label, stamp_label,
+    start_of_month, start_of_week,
+};
 pub use self::dictionary::{
     add_dictionary_word, dictionary_key, edit_dictionary_word, remove_dictionary_word,
 };
