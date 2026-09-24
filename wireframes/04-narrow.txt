@@ -1,7 +1,7 @@
 == 80×44 · half-width tile, beside an editor
 
 
- Fri 5 Sep                                                    ● 2 M   /   :   ?
+ Fri 5 Sep                                                   ● 2 gr   /   :   ?
 ────────────────────────────────────────────────────────────────────────────────
   TODAY 6   BACKLOG 12   NOTES 4
 ────────────────────────────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@
 == 80×44 · the Archive, the fourth stop of tab
 
 
-                                             n or esc back to tasks   /   :   ?
+                                                  esc back to tasks   /   :   ?
 ────────────────────────────────────────────────────────────────────────────────
   TODAY 6   BACKLOG 12   ARCHIVE 3
 ────────────────────────────────────────────────────────────────────────────────
@@ -89,5 +89,5 @@
 
 
 ────────────────────────────────────────────────────────────────────────────────
- ARCHIVE  y/alt-y copy note  ⏎ open  a add  x del  n back                ? more
+ ARCHIVE  y/alt-y copy note  ⏎ open  a add  x del  esc back              ? more
 

@@ -42,9 +42,9 @@ half width. Both must feel right, and the floating case comes first.
   closing the window never asks anything; reopening lands where you were.
 - The morning review runs once per day, on the first open of a work day
   that has something to review, when it is set to open itself; otherwise
-  it waits for `M`. Later opens go straight to Today. Closing the window
+  it waits for `gr`. Later opens go straight to Today. Closing the window
   mid-review leaves the pile intact; the status line counts what is on
-  the pile, in red with `M` beside it, until it is dealt with, and says
+  the pile, in red with `gr` beside it, until it is dealt with, and says
   nothing at all once the pile is empty.
 - The layout targets 120×36. A full-width tile shows the same layout with
   more rows. Under 100 columns only one pane fits, and the two panes
@@ -152,14 +152,36 @@ Conventions, so the map is guessable:
   `e` edit, `x` delete, `t` to today, `b` to backlog, `m` move to a day,
   `d` due by, `r` remind on, `w` waiting, `y` copy. `R` opens the repeat
   schedule.
-- Punctuation navigates: `[` `]` previous and next day, `.` today, `g` go
-  to a date, `/` search, `:` command palette, `?` help, `n` notes page,
-  `,` settings, `q` quit. `n` and `,` are also the way back off the page
-  they open, as `Escape` is.
-- `M` opens the morning review again: the review opens itself once a day,
-  and this is how it is picked up after it was left half done. It is the
-  one uppercase key that is not about the cursor row, which is what makes
-  it hard to press by accident.
+- `g` is the only way to go somewhere. It is a leader: on its own it
+  does nothing, and the key after it says where to go, from every page
+  and from the review alike. While it waits the hint bar is headed GO
+  and lists what can follow, so there is nothing to remember but `g`;
+  Escape takes it back, and a key that is no place says so.
+
+  | Keys | Goes to |
+  |------|---------|
+  | `gg` | the first row of the list |
+  | `gt` | today, with the keyboard on the day |
+  | `gb` | the backlog beside today |
+  | `gd` | a date, picked on the date card |
+  | `gn` | the notes page |
+  | `ga` | the notes page, on the archive |
+  | `gs` | the settings page |
+  | `gr` | the morning review, which opens itself once a day; this is how it is picked up after it was left half done |
+
+  No place has a key of its own besides. Doing is single keys and going
+  is `g`: a key for a place would be a letter every page has to keep
+  free, and a key pressed over and over, such as a row verb or `j`, would
+  be twice the keys as a chord. Going from the review leaves it first,
+  with the pile as it was, the way Escape does.
+- A few keys find or explain rather than go, and are single keys on every
+  page: `/` search (on the notes page it filters the list instead), `:`
+  command palette, `?` help, `q` quit. `[` `]` step to the previous and
+  next day, because stepping is pressed over and over.
+- `G` is the last row and `ctrl-d` and `ctrl-u` move half of what the list
+  shows, in every list and every card that is a list. `G` is, with `gg`,
+  the one uppercase key that is not about the cursor row. `ctrl-d` and
+  `ctrl-u` also page the palette and search, where letters type.
 - `Enter` confirms, `Escape` backs out one level, `u` undoes.
 - `ctrl-c` quits from wherever the keyboard is, a card or an open field
   included, and puts the terminal back the way `q` does. It is the one key
@@ -246,7 +268,7 @@ their original date. A pile task leaves only by being closed, moved or
 deleted; `k` moves up in both steps. An empty step is skipped; when both
 are empty the app opens straight to Today. The review is never an empty ceremony, and it is never
 shown twice in a day. Whether it opens itself at all is a setting: off,
-the app opens on Today and `M` is the way in, for someone who would
+the app opens on Today and `gr` is the way in, for someone who would
 rather choose the moment.
 
 "step 1 of 2" counts the steps that have something in them, so a morning
@@ -271,22 +293,22 @@ was done to it, so the list never moves under the hand working it down.
 ## 6. Three pages, and popups over them
 
 The window shows one of three pages. The home page is today (or another
-day) beside the backlog. The notes page, reached with `n`, is the list of
-notes beside the open note. The settings page, reached with `,`, is the
-list of settings beside what the row under the cursor does (section 11).
-Everything else is a popup over a page: the date card, the repeat card,
-the day picker, search, the palette, help.
+day) beside the backlog. The notes page, reached with `gn`, is the list
+of notes beside the open note. The settings page, reached with `gs`, is
+the list of settings beside what the row under the cursor does (section
+11). Everything else is a popup over a page: the date card, the repeat
+card, the day picker, search, the palette, help.
 
-Both of the pages that are not home are opened and left with the same
-key, and `Escape` leaves them as well. `,` goes back to whichever page it
-was pressed on, so a setting can be changed from the notes page without
-losing it.
+Both of the pages that are not home are left with `Escape`, or with `g`
+to anywhere else. Escape from the settings goes back to whichever page
+they were opened from, so a setting can be changed from the notes page
+without losing it.
 
 History is not a separate screen. It is the day pane stepped backwards with
 `[`, while the backlog pane becomes a list of days with their done counts,
 newest first, under a rule per week: this week, last week, earlier, and
-later for a day ahead. Future days work the same way forwards. `.` comes
-back to today and `g` goes straight to a date.
+later for a day ahead. Future days work the same way forwards. `gt` comes
+back to today and `gd` goes straight to a date.
 
 The header of a day that is not today is the date itself, with "past day"
 or "future day" beside it where today has the word "Today" before the
@@ -521,7 +543,7 @@ shown at all.
 The Settings heading shows the running app's version in dim text, taken
 from the build's package version, as `jobsdone --version` is.
 
-`,` opens a page of the fourteen settings of DOMAIN.md section 19, in
+`gs` opens a page of the fourteen settings of DOMAIN.md section 19, in
 six groups: the day, the work days, the review, the window, the
 looks and notes. Every row is a label dotted across to its value, because a
 page of settings is read down the labels and across to the values. A toggle reads
@@ -533,8 +555,8 @@ the accent colour, because it is the one value a key would change.
 Beside the list, in a column of 40, what the cursor row does and what it
 holds when nobody has changed it. Under 100 columns that column goes and
 the list has the window, the way the review's panel does. The page is
-never one of the narrow window's tabs: `,` is the whole of the way on and
-off it.
+never one of the narrow window's tabs: `gs` is the way on and Escape the
+way off.
 
 `h` and `l` step a value: `l` turns a toggle on and `h` off, a row of two
 or three states moves to the one beside it and stops at the ends, a

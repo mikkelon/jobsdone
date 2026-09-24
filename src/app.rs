@@ -1068,6 +1068,8 @@ pub struct App {
     /// Whether a quit has already been refused because what was typed in
     /// the open note reached no row, so that the next one goes through.
     quit_refused: bool,
+    /// Whether `g` has been pressed and the next key says where to go.
+    leader: bool,
     layout: Layout,
     /// Where the clock comes from. The application is the only module
     /// that reads it (ARCHITECTURE.md section 3), which is also what
@@ -1126,6 +1128,7 @@ impl App {
             dragging: None,
             window_owed: false,
             quit_refused: false,
+            leader: false,
             layout: Layout::default(),
             #[cfg(test)]
             clock: now.clone(),
@@ -1278,6 +1281,14 @@ impl App {
         if matches!(action, Action::Tick) {
             self.forget_an_old_message();
         }
+        // A pending `g` lasts one key: the one that says where to go, or
+        // Escape, which is all it takes back.
+        if !matches!(action, Action::Tick | Action::Resize | Action::FocusGained)
+            && std::mem::take(&mut self.leader)
+            && action == Action::Cancel
+        {
+            return Flow::Continue;
+        }
 
         match action {
             Action::Quit => {
@@ -1356,12 +1367,25 @@ impl App {
             Action::PaneRight => self.shift_pane(true),
             Action::NextPane => self.next_control(),
             Action::NextTab => self.next_tab(),
-            Action::NotesPage => self.turn_the_page(),
+            Action::Go => self.leader = true,
+            Action::First => self.jump(isize::MIN),
+            Action::Last => self.jump(isize::MAX),
+            Action::HalfPageDown => self.jump(self.half_page()),
+            Action::HalfPageUp => self.jump(-self.half_page()),
+            Action::BacklogPane => self.go_home(Pane::Backlog),
+            Action::NotesPage => self.go_to_the_notes(NotesList::Notes),
+            Action::ArchivePage => self.go_to_the_notes(NotesList::Archive),
             Action::SettingsPage => self.turn_to_the_settings(),
             Action::OpenReview => self.reopen_the_review(),
 
             Action::Commands => self.open(PopupKind::Palette, None),
-            Action::Search => self.open(PopupKind::Search, None),
+            Action::Search => {
+                // Search goes to what it finds, which the review would
+                // stand in front of, so the review is left first, with
+                // the pile intact.
+                self.review = None;
+                self.open(PopupKind::Search, None);
+            }
             Action::Filter => self.open_the_filter(),
             Action::Help => self.open(PopupKind::Help, None),
             Action::Cancel => self.back_out(),
@@ -1410,7 +1434,7 @@ impl App {
 
             Action::PrevDay => self.step_the_day(-1),
             Action::NextDay => self.step_the_day(1),
-            Action::Today => self.show_the_day(self.today),
+            Action::Today => self.go_home(Pane::Day),
             Action::DueBy => self.open_the_date_card(DateKind::Due),
             Action::RemindOn => self.open_the_date_card(DateKind::Remind),
             Action::PrevMonth => {
@@ -1700,6 +1724,10 @@ impl App {
     /// it has already run on or after it was left half done.
     fn reopen_the_review(&mut self) {
         if self.review.is_some() {
+            self.say("The morning review is already open.", false);
+            return;
+        }
+        if !self.leave_the_note() {
             return;
         }
         if !self.open_the_review(false) {
@@ -1707,7 +1735,13 @@ impl App {
                 "Nothing to review: the pile is empty and nothing is due.",
                 false,
             );
+            return;
         }
+        // The review is over today's plan, and today is where starting
+        // the day or skipping it leaves the keyboard.
+        self.leave_the_page_for_home();
+        self.pane = Pane::Day;
+        self.show_the_day(self.today);
     }
 
     /// The steps a review shows. The pile is the one it opened with; the
@@ -2510,7 +2544,8 @@ impl App {
         })
         .iter()
         .filter_map(|binding| {
-            let (key, action) = *binding.keys.first()?;
+            let (_, action) = *binding.keys.first()?;
+            let key = binding.shown;
             let target = match action {
                 Action::ToToday
                 | Action::Tomorrow
@@ -2520,7 +2555,8 @@ impl App {
                 | Action::InAWeek
                 | Action::EndOfMonth
                 | Action::ToBacklog => self.target_for(action),
-                Action::GoToDate => MoveTarget::Pick,
+                // The row a date is picked on is the leader, `gd`.
+                Action::Go => MoveTarget::Pick,
                 _ => return None,
             };
             Some(MoveChoice {
@@ -2720,7 +2756,11 @@ impl App {
         // before the task is looked for.
         if draft.kind == DateKind::Go {
             self.popup = None;
-            if let Some(day) = date {
+            if let Some(day) = date
+                && self.leave_the_note()
+            {
+                self.review = None;
+                self.leave_the_page_for_home();
                 self.show_the_day(day);
             }
             return;
@@ -3052,12 +3092,12 @@ impl App {
     /// is put away first (DESIGN.md section 11).
     fn turn_to_the_settings(&mut self) {
         if self.page == Page::Settings {
-            self.leave_the_settings();
             return;
         }
         if !self.leave_the_note() {
             return;
         }
+        self.review = None;
         self.editor = None;
         self.came_from = self.page;
         self.page = Page::Settings;
@@ -4104,6 +4144,11 @@ impl App {
     // ---- what the keyboard is on ------------------------------------
 
     pub fn key_context(&self) -> KeyContext {
+        if self.leader {
+            return KeyContext::Leader {
+                over: self.popup.as_ref().map(|popup| popup.kind),
+            };
+        }
         match &self.popup {
             Some(popup) => KeyContext::Popup {
                 kind: popup.kind,
@@ -4476,6 +4521,99 @@ impl App {
             Some(PopupKind::Dictionary) => self.dictionary_rows().len(),
             _ => 0,
         }
+    }
+
+    /// `gg`, `G`, `ctrl-d` and `ctrl-u`: the cursor a number of rows on or
+    /// back, held at the ends of the list, in the popup if one is open
+    /// and in the focused list otherwise.
+    fn jump(&mut self, rows: isize) {
+        let to = |at: usize, len: usize| -> usize {
+            let last = len.saturating_sub(1) as isize;
+            (at as isize).saturating_add(rows).clamp(0, last) as usize
+        };
+        if self.popup.is_some() {
+            let len = self.popup_rows();
+            if let Some(popup) = &mut self.popup {
+                popup.selected = to(popup.selected, len);
+            }
+            return;
+        }
+        let list = self.focused();
+        let ids: Vec<RowId> = self.rows_of(list).into_iter().map(|(id, _)| id).collect();
+        let Some(at) = self
+            .cursor(list)
+            .and_then(|id| ids.iter().position(|other| *other == id))
+        else {
+            return;
+        };
+        self.set_cursor(list, ids[to(at, ids.len())]);
+    }
+
+    /// Half of what the focused list shows, which is what `ctrl-d` and
+    /// `ctrl-u` move by. A popup's lists are short, so it is a few rows.
+    fn half_page(&self) -> isize {
+        if self.popup.is_some() {
+            return 5;
+        }
+        let list = self.focused();
+        self.layout
+            .lists
+            .iter()
+            .find(|drawn| drawn.list == list)
+            .map_or(1, |drawn| (drawn.area.height / 2).max(1) as isize)
+    }
+
+    /// `gt` and `gb`: today, with the keyboard in the pane asked for,
+    /// from wherever the keyboard was.
+    fn go_home(&mut self, pane: Pane) {
+        if !self.leave_the_note() {
+            return;
+        }
+        self.review = None;
+        self.leave_the_page_for_home();
+        self.pane = pane;
+        self.show_the_day(self.today);
+    }
+
+    /// `gn` and `ga`: the notes page, on the list asked for, from
+    /// wherever the keyboard was.
+    fn go_to_the_notes(&mut self, list: NotesList) {
+        if !self.leave_the_note() {
+            return;
+        }
+        self.review = None;
+        self.setting_draft = None;
+        if self.page != Page::Notes {
+            self.enter_the_notes();
+        }
+        self.notes_pane = NotesPane::List;
+        self.show_the_list(list);
+    }
+
+    /// What going home leaves behind of the page it leaves: the notes
+    /// page's filter, or a number half typed on a settings row. The note
+    /// has been saved and the review left by the time this runs.
+    fn leave_the_page_for_home(&mut self) {
+        match self.page {
+            Page::Notes => self.leave_the_notes(),
+            Page::Settings => self.setting_draft = None,
+            Page::Home => {}
+        }
+        self.page = Page::Home;
+    }
+
+    /// A key that means nothing where it was pressed. After `g` that is a
+    /// place there is not, which is worth saying, since the next key
+    /// would otherwise be read as if `g` had never been pressed.
+    pub fn unbound(&mut self, key: &str) {
+        if std::mem::take(&mut self.leader) {
+            self.say(format!("g{key} is not a place to go."), false);
+        }
+    }
+
+    /// Whether `g` is waiting for the key that says where to go.
+    pub fn leading(&self) -> bool {
+        self.leader
     }
 
     /// `h` and `l`: the other pane, where there are two side by side.

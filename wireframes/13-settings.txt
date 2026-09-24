@@ -1,7 +1,7 @@
 == 120×36 · floating window, settings page
 
 
-                                                                                                  , or esc back   :   ?
+                                                                                                       esc back   :   ?
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  Settings                               colour and font come from the terminal   Day starts at
 ───────────────────────────────────────────────────────────────────────────────┬────────────────────────────────────────
@@ -34,5 +34,5 @@
   Hint bar messages stand for ..................................... 4 seconds  │
   Confirm before delete ................................................. off  │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- SETTINGS  h/l adjust  space ⏎ change  esc , back                                                                ? help
+ SETTINGS  h/l adjust  space ⏎ change  esc back                                                           g go…  ? help
 

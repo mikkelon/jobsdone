@@ -186,6 +186,10 @@ def hints(g, y, ctx, items, right=()):
     left_end = x
     rx = g.w - 1
     for k, lbl in reversed(right):
+        # As the app does: a key that would reach the left end is left
+        # out whole rather than written over it.
+        if rx - (len(lbl) + len(k) + 1) < left_end:
+            break
         rx = g.rput(rx, y, lbl, 'd') - len(lbl) - 1
         rx = g.rput(rx, y, k, 'k') - len(k) - 2
     return left_end
@@ -298,19 +302,19 @@ def sample_today(g, focus='left', cursor=True, div=None, wide=False):
 
 def pile(review, words=' on the pile'):
     """The alert: red, with the key that opens the review; nothing at zero."""
-    return [[(f'● {review}{words}', 'R b'), ('M', 'k')]] if review else []
+    return [[(f'● {review}{words}', 'R b'), ('gr', 'k')]] if review else []
 
 
 def today_strip(g, review=2):
-    strip(g, [key('[/]', 'day'), key('g', 'go to date')],
-          pile(review) + [[('4 notes', 'd'), ('n', 'k')], key('/', 'search'), key(':', 'commands'), key('?')])
+    strip(g, [key('[/]', 'day'), key('gd', 'go to date')],
+          pile(review) + [[('4 notes', 'd'), ('gn', 'k')], key('/', 'search'), key(':', 'commands'), key('?')])
 
 
 TODAY_HINTS = [('J/K', 'reorder'), ('space', 'done'), ('f', 'focus'), ('a', 'add'), ('e', 'edit'),
                ('b', 'to backlog'), ('m', 'move to day…'), ('R', 'repeat'), ('x', 'delete')]
 BACKLOG_HINTS = [('t', 'to today'), ('m', 'move…'), ('d', 'due by'), ('r', 'remind on'), ('w', 'waiting'),
                  ('R', 'repeat'), ('a', 'add'), ('e', 'edit'), ('x', 'delete')]
-PANE_KEYS = [('h/l', 'pane')]
+PANE_KEYS = [('h/l', 'pane'), ('g', 'go…')]
 
 
 # 03 --------------------------------------------------------------------
@@ -387,7 +391,7 @@ def p01():
           [('⏎', 'next step'), ('esc', 'skip')])
     page('01-review', 'Morning review: the pile', [('120×36 · floating window', g)], '''
 <h2>Morning review, step 1: the pile</h2>
-<p>Shown once per day, on the first open of a work day, when the pile is non-empty and the review is set to open itself; otherwise <kbd>M</kbd> opens it. Full window: the review is a ritual, not a sidebar. Later opens that day go straight to Today. An empty pile skips the step.</p>
+<p>Shown once per day, on the first open of a work day, when the pile is non-empty and the review is set to open itself; otherwise <kbd>gr</kbd> opens it. Full window: the review is a ritual, not a sidebar. Later opens that day go straight to Today. An empty pile skips the step.</p>
 <ol>
 <li>The status line becomes a step indicator. Escape (or closing the window) leaves the pile intact; the home screen then shows the red count until it is dealt with.</li>
 <li>Grouped by the day the task was planned for, newest first, with relative age on old groups; the age is on the group, not repeated on every row. Nothing is carried over automatically.</li>
@@ -466,7 +470,7 @@ def p04():
     g.callout(g.w - 10, g.h - 1, 3)
 
     a = Grid(80, 44)
-    strip(a, [], [key('n', 'or') + key('esc', 'back to tasks'), key('/'), key(':'), key('?')])
+    strip(a, [], [key('esc', 'back to tasks'), key('/'), key(':'), key('?')])
     x = a.put(1, 2, ' TODAY 6 ', 'd')
     x = a.put(x + 1, 2, ' BACKLOG 12 ', 'd')
     x = a.put(x + 1, 2, ' ARCHIVE 3 ', 'A b r')
@@ -483,7 +487,7 @@ def p04():
     a.put(1, y, 'NOTE MON 22 SEP 09:12 · ARCHIVED TODAY', 'd'); a.hl(40, y, a.w - 41, 'd'); y += 1
     for l in ['Retro format ideas:', '- start / stop / continue', '- sailboat (wind, anchors, rocks)']:
         a.put(2, y, l); y += 1
-    hints(a, a.h - 1, 'Archive', [('y/alt-y', 'copy note'), ('⏎', 'open'), ('a', 'add'), ('x', 'del'), ('n', 'back')], [('?', 'more')])
+    hints(a, a.h - 1, 'Archive', [('y/alt-y', 'copy note'), ('⏎', 'open'), ('a', 'add'), ('x', 'del'), ('esc', 'back')], [('?', 'more')])
     page('04-narrow', 'Half-width tile', [('80×44 · half-width tile, beside an editor', g),
                                           ('80×44 · the Archive, the fourth stop of tab', a)], '''
 <h2>Narrow: under 100 columns</h2>
@@ -549,10 +553,10 @@ def p05():
     y = 2
     for i, (k, l, r) in enumerate([('t', 'Today', 'Fri 5 Sep'), ('1', 'Tomorrow', 'Sat 6 Sep'), ('w', 'Next work day', 'Mon 8 Sep'),
                                    ('2', 'End of week', 'Fri 5 Sep'), ('3', 'Next Monday', 'Mon 8 Sep'), ('4', 'In a week', 'Fri 12 Sep'),
-                                   ('5', 'End of month', 'Tue 30 Sep'), ('g', 'Pick a date…', 'calendar'), ('b', 'Backlog', 'no day')]):
+                                   ('5', 'End of month', 'Tue 30 Sep'), ('gd', 'Pick a date…', 'calendar'), ('b', 'Backlog', 'no day')]):
         item(g, 6, 50, y, k, l, r, sel=(i == 0)); y += 1
     y += 1
-    g.put(8, y, 'no text field here: g opens the date card for typing', 'd')
+    g.put(8, y, 'no text field here: gd opens the date card for typing', 'd')
     grids.append(('E · Move to a day… (m), the only popup here', g))
 
     g = mini(7); y = 0
@@ -570,7 +574,7 @@ def p05():
 <p><b>B</b> Editing never opens a form. For a recurring copy the app asks whether the new title applies forward, because title edits change future copies only.</p>
 <p><b>C</b> Reordering is explicit. No sort, no smart ordering, no drag between Focus and Plan (that is <kbd>f</kbd>).</p>
 <p><b>D</b> Closing moves a task to Done at the bottom with the time. Focus and Done are shown by position, not by a badge.</p>
-<p><b>E</b> The day picker covers "move onto today", "move to a day" and "back to backlog" in one card. It has no text field, so single keys work; a digit is the same day as the date card's <kbd>alt</kbd> and that digit, and <kbd>g</kbd> opens the date card when a typed date is wanted.</p>
+<p><b>E</b> The day picker covers "move onto today", "move to a day" and "back to backlog" in one card. It has no text field, so single keys work; a digit is the same day as the date card's <kbd>alt</kbd> and that digit, and <kbd>gd</kbd> opens the date card when a typed date is wanted.</p>
 <p><b>F</b> Destructive actions are undoable rather than confirmed. The undo offer lives in the hint bar until the next keypress.</p>''')
 
 
@@ -664,10 +668,10 @@ def p07():
 # 08 --------------------------------------------------------------------
 def p08():
     g = Grid(120, 36)
-    strip(g, [[('4 days ago', 'd')], key('.', 'back to today')],
-          pile(5) + [[('4 notes', 'd'), ('n', 'k')], key('/'), key(':'), key('?')])
+    strip(g, [[('4 days ago', 'd')], key('gt', 'back to today')],
+          pile(5) + [[('4 notes', 'd'), ('gn', 'k')], key('/'), key(':'), key('?')])
     g.callout(48, 0, 1)
-    lx, lw, rx, rw, y0, y1 = frame2(g, ('Mon 1 Sep', 'past day', '8 planned · 3 done · 2 open · 3 moved'), ('Days', '', key('g', 'go to date')), 'left')
+    lx, lw, rx, rw, y0, y1 = frame2(g, ('Mon 1 Sep', 'past day', '8 planned · 3 done · 2 open · 3 moved'), ('Days', '', key('gd', 'go to date')), 'left')
     g.callout(rx + rw - 15, 2, 4)
     y = y0
     group(g, lx, lw, y, 'Plan'); y += 1
@@ -697,7 +701,7 @@ def p08():
     group(g, rx, rw, y, 'Earlier'); y += 1
     g.put(rx + 5, y, 'Fri 22 Aug'); g.rput(rx + rw - 1, y, '1 / 2 · 1 open', 'd'); y += 1
     g.put(rx + 5, y, '…'); g.rput(rx + rw - 1, y, 'days with nothing planned are skipped', 'd')
-    hints(g, g.h - 1, 'Past day', [('[/]', 'day'), ('.', 'today'), ('g', 'go to date'), ('space', 'done'), ('t', 'to today'), ('b', 'to backlog'), ('m', 'move…'), ('⏎', 'follow moved')], PANE_KEYS)
+    hints(g, g.h - 1, 'Past day', [('[/]', 'day'), ('gt', 'today'), ('gd', 'go to date'), ('space', 'done'), ('t', 'to today'), ('b', 'to backlog'), ('m', 'move…'), ('⏎', 'follow moved')], PANE_KEYS)
     page('08-history', 'History', [('120×36 · floating window', g)], '''
 <h2>History: browsing past days</h2>
 <p>History is not a separate screen: it is the same day view stepped backwards. A past day is drawn exactly as it was while it was today, and the two panes stay in place.</p>
@@ -705,7 +709,7 @@ def p08():
 <li>Stepping back with <kbd>[</kbd> changes the day pane. The status line says how far back you are and offers one key home.</li>
 <li>Unfinished tasks on a past day are the review pile seen from the other side, and can be dealt with here with the same keys.</li>
 <li>Closed tasks sit in Done in the order they were closed, with the time, exactly where they dropped while the day was today; one closed out of Focus carries <em>was focus</em>, so the marking is kept without the row jumping back up. Focus is empty on this day and so is not drawn: a day is not re-arranged just because it is no longer today.</li>
-<li>While browsing the past, the backlog pane gives way to a day list with done counts. Days with nothing planned are skipped. <kbd>l</kbd> then <kbd>.</kbd> restores the backlog.</li>
+<li>While browsing the past, the backlog pane gives way to a day list with done counts. Days with nothing planned are skipped. <kbd>gb</kbd> restores the backlog.</li>
 <li>Tasks moved off this day get their own group at the bottom, under Done. An arrow in the box says "not here any more", and the right side says where: today, another day, or the backlog. Normal weight, because they are not finished; only Done is dim. Each row is a pointer, not a copy: <kbd>⏎</kbd> jumps there. "On the pile" stays reserved for tasks still open on this day.</li>
 </ol>
 <div class="flow"><b>Future days</b><kbd>]</kbd> from today steps forward. A future day holds only what has actually been put there: tasks moved onto it, and whatever is added to it. Recurring copies are not drawn ahead of the day that creates them.</div>''')
@@ -751,7 +755,7 @@ def p09():
 # 10 --------------------------------------------------------------------
 def p10():
     g = Grid(120, 36)
-    strip(g, [[('4 notes', 'd')]], [key('n', 'or') + key('esc', 'back to today'), key('/'), key(':'), key('?')])
+    strip(g, [[('4 notes', 'd')]], [key('esc', 'back to today'), key('/'), key(':'), key('?')])
     g.callout(20, 0, 1)
     lx, lw, rx, rw, y0, y1 = frame2(g, ('Notes', '', key('A', 'archive')), ('Note', 'Thu 4 Sep 16:40', key('esc', 'back')), 'right', div=44)
     g.callout(rx + 24, 2, 3)
@@ -772,9 +776,9 @@ def p10():
         g.put(rx + 2, y + i, l)
     g.put(rx + 2 + len(lines[-1]), y + len(lines) - 1, '█', 'b')
     g.callout(rx + rw - 2, y0, 4)
-    hints(g, g.h - 1, 'Note', [('type', 'to edit'), ('esc', 'back to the list')], [('in the list:', ''), ('⏎', 'open'), ('a', 'add'), ('x', 'delete'), ('n', 'back to today')])
+    hints(g, g.h - 1, 'Note', [('type', 'to edit'), ('esc', 'back to the list')], [('in the list:', ''), ('⏎', 'open'), ('a', 'add'), ('x', 'delete'), ('esc', 'back to today')])
 
-    notes_strip = [key('n', 'or') + key('esc', 'back to tasks'), key('/'), key(':'), key('?')]
+    notes_strip = [key('esc', 'back to tasks'), key('/'), key(':'), key('?')]
     list_hints = [('y/alt-y', 'copy note'), ('⏎', 'open'), ('a', 'add')]
 
     a = Grid(120, 36)
@@ -798,8 +802,8 @@ def p10():
     for i, l in enumerate(['Retro format ideas:', '- start / stop / continue', '- sailboat (wind, anchors, rocks)',
                            '- one-word check-in first', '', 'Ask Anna which one the team did last time.']):
         a.put(rx + 2, y + i, l)
-    hints(a, a.h - 1, 'Archive', list_hints + [('A', 'unarchive'), ('x', 'delete'), ('n', 'back to tasks')],
-          [('tab', 'notes'), ('h/l', 'pane')])
+    hints(a, a.h - 1, 'Archive', list_hints + [('A', 'unarchive'), ('x', 'delete'), ('esc', 'back to tasks')],
+          [('tab', 'notes'), ('h/l', 'pane'), ('g', 'go…')])
 
     f = Grid(120, 36)
     strip(f, [[('4 notes', 'd')]], notes_strip)
@@ -823,12 +827,12 @@ def p10():
                                           ('120×36 · tab: the archive in the same pane', a),
                                           ('120×36 · / filters the list shown', f)], '''
 <h2>Scratchpad</h2>
-<p>A post-it block, on its own page. <kbd>n</kbd> switches the whole window to Notes and back, so a note gets real width; the day and backlog are one key away, not squeezed beside it. Text only.</p>
+<p>A post-it block, on its own page. <kbd>gn</kbd> switches the whole window to Notes and <kbd>esc</kbd> back, so a note gets real width; the day and backlog are one key away, not squeezed beside it. Text only.</p>
 <ol>
 <li>The pane header names Notes and the key that archives one; the status line counts them and says how to get back. Commands and help still work here; <kbd>/</kbd> filters the notes instead of searching the tasks.</li>
 <li>Notes are a list, newest first: first line and age. No titles, no folders. Create, open, archive, throw away; neither archiving nor deleting asks, and both undo. Nothing expires on its own.</li>
 <li>An open note takes the wide pane and shows when it was made, so a stale note is easy to spot and bin.</li>
-<li>The note is a plain multi-line text area with a cursor. No formatting, no toolbar. Every key types; <kbd>esc</kbd> returns focus to the list, where <kbd>a</kbd>, <kbd>x</kbd> and <kbd>n</kbd> work as keys.</li>
+<li>The note is a plain multi-line text area with a cursor. No formatting, no toolbar. Every key types; <kbd>esc</kbd> returns focus to the list, where <kbd>a</kbd>, <kbd>x</kbd> and <kbd>g</kbd> work as keys.</li>
 </ol>
 <div class="flow"><b>Why a page and not a drawer</b>A drawer beside the day left a note about 40 columns wide, which is a strip, not a sheet. A page gives it 75 columns in the floating window and everything in a tile. The cost is one keypress to see the day again.</div>
 <ol start="5">
@@ -869,9 +873,9 @@ def p11():
     h.put(4, 1, ' Keys ', 'A b'); h.rseg(116, 1, [(' ', 'd'), ('?', 'k'), (' or ', 'd'), ('esc', 'k'), (' close ', 'd')], gap=0)
     cols = [(5, 'Everywhere', [[('j/k', 'move'), ('h/l', 'pane')], [('a', 'add'), ('e', 'edit'), ('x', 'delete')],
                                [('u', 'undo'), ('space', 'done')], [('/', 'search'), (':', 'commands')],
-                               [('?', 'help'), ('n', 'notes')], [(',', 'settings'), ('q', 'quit')]]),
+                               [('?', 'help'), ('gn', 'notes')], [('gs', 'settings'), ('q', 'quit')]]),
             (33, 'Day', [[('J/K', 'reorder'), ('f', 'focus')], [('b', 'to backlog')], [('m', 'move to day…')],
-                         [('[/]', 'prev/next day')], [('.', 'today'), ('g', 'go to date')], [('R', 'repeat')]]),
+                         [('[/]', 'prev/next day')], [('gt', 'today'), ('gd', 'go to date')], [('R', 'repeat')]]),
             (61, 'Backlog', [[('t', 'to today'), ('m', 'move…')], [('d', 'due by'), ('r', 'remind on')],
                              [('w', 'waiting'), ('R', 'repeat')], [],
                              'REVIEW', [('d', 'done'), ('t', 'today')], [('b', 'backlog'), ('m', 'move…')],
@@ -893,7 +897,7 @@ def p11():
 <p><b>A</b> The palette is the Omarchy launcher shape: a centred box with a fuzzy filter and the selected row highlighted. Actions for the cursor task come first, app-level ones after. Inside the palette you type to filter, move with ↑/↓ and run with Enter; letters type, as in every text field. The key in the right column is not for pressing here: it is the direct key for next time, on the home screen, so the palette teaches itself out of use.</p>
 <p><b>B</b> Help is a static overlay of the same keys the hint bar shows, grouped by context. It is the whole map; there are no hidden keys.</p>
 <div class="flow"><b>Key conventions</b>Lowercase acts on the cursor row. Uppercase reorders or opens schedule editing. Punctuation navigates. Enter confirms, Escape backs out one level, <kbd>u</kbd> undoes.</div>
-<p>Settings are a page of their own (screen 13), reached with <kbd>,</kbd> and listed in the palette under the app's section. Colour and font are not on it: they come from the terminal, which Omarchy themes.</p>''')
+<p>Settings are a page of their own (screen 13), reached with <kbd>gs</kbd> and listed in the palette under the app's section. Colour and font are not on it: they come from the terminal, which Omarchy themes.</p>''')
 
 
 # 12 --------------------------------------------------------------------
@@ -905,11 +909,11 @@ def p12():
     g = Grid(60, 11); header(g, 0, 60, 0, 'Backlog', '', '0'); g.hl(0, 1, 60)
     g.put(14, 4, 'Backlog is empty.', 'd'); g.seg(8, 5, key('a', 'add ·') + key('b', 'on a day task sends it here'), gap=1)
     grids.append(('B · Empty backlog', g))
-    g = Grid(60, 7); strip(g, [[('Fri 5 Sep', 'd')]], [[('4 notes', 'd'), ('n', 'k')], key('?')])
+    g = Grid(60, 7); strip(g, [[('Fri 5 Sep', 'd')]], [[('4 notes', 'd'), ('gn', 'k')], key('?')])
     g.put(1, 3, 'Opens straight to Today. Nothing on the pile, so no count.', 'd')
     grids.append(('C · Nothing to review: the review is skipped, not shown', g))
     g = Grid(60, 11); header(g, 0, 60, 0, 'Sun 31 Aug', 'past day', 'nothing was planned', focus=True); g.hl(0, 1, 60)
-    g.put(10, 4, 'Nothing was planned on this day.', 'd'); g.seg(8, 5, key('[', 'keeps stepping back ·') + key('g', 'pick a date'), gap=1)
+    g.put(10, 4, 'Nothing was planned on this day.', 'd'); g.seg(8, 5, key('[', 'keeps stepping back ·') + key('gd', 'pick a date'), gap=1)
     grids.append(('D · Past day with nothing planned', g))
     g = Grid(60, 10); g.box(2, 0, 56, 7)
     g.put(4, 1, '/', 'b'); inp(g, 6, 1, 38, 'tax return'); g.rput(56, 1, '0 matches', 'd'); g.hl(3, 2, 54, 'd')
@@ -938,7 +942,7 @@ def p12():
 def p13():
     g = Grid(120, 36)
     strip(g, [],
-          [key(',', 'or') + key('esc', 'back'), key(':'), key('?')])
+          [key('esc', 'back'), key(':'), key('?')])
     lx, lw, rx, rw, y0, y1 = frame2(g, ('Settings', '', 'colour and font come from the terminal'),
                                     ('Day starts at',), 'left', div=79)
     rows = [('g', 'Day'),
@@ -996,11 +1000,11 @@ def p13():
     g.callout(lx + 20, y0 + 4, 3)
     g.callout(rx + 2, y0, 4)
     g.callout(rx + 2, y0 + len(about) + 1, 5)
-    hints(g, g.h - 1, 'Settings', [('h/l', 'adjust'), ('space ⏎', 'change'), ('esc ,', 'back')],
-          [('?', 'help')])
+    hints(g, g.h - 1, 'Settings', [('h/l', 'adjust'), ('space ⏎', 'change'), ('esc', 'back')],
+          [('g', 'go…'), ('?', 'help')])
     page('13-settings', 'Settings', [('120×36 · floating window, settings page', g)], '''
 <h2>Settings</h2>
-<p>Fourteen settings on one page, reached with <kbd>,</kbd> from either other page and left with <kbd>,</kbd> or <kbd>esc</kbd>. They are kept in the database beside the tasks, so a second window picks a change up the way it picks up any other.</p>
+<p>Fourteen settings on one page, reached with <kbd>gs</kbd> from any other page and left with <kbd>esc</kbd>. They are kept in the database beside the tasks, so a second window picks a change up the way it picks up any other.</p>
 <ol>
 <li>The pane header names the page; the status line offers the two keys that leave it. There is no review count and no notes count here: the settings are about the program, not about a day.</li>
 <li>What the app does not hold, said where somebody looking for it would look: colour, font and size come from the terminal, which Omarchy themes.</li>

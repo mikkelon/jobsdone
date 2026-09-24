@@ -63,8 +63,8 @@ The hint bar shows the keys available on the current screen.
 | Key | Action |
 | --- | --- |
 | `?` | Show help |
-| `,` | Open settings |
-| `n` | Open notes |
+| `g` | Go somewhere: the hint bar lists where (`gt` today, `gn` notes, `gs` settings, `gd` a date, `gr` the morning review, `gg` the top) |
+| `:` | Every command, with its key |
 | `Ctrl+C` | Quit |
 
 In a note, Ctrl+Z undoes text edits, Ctrl+Y redoes them, and Alt+h opens

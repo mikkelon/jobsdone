@@ -36,8 +36,8 @@
   │  a add · e edit · x delete   b to backlog                d due by · r remind on      space ⏎ change              │
   │  u undo · space done         m move to day…              w waiting · R repeat        esc , back                  │
   │  / search · : commands       [/] prev/next day                                                                   │
-  │  ? help · n notes            . today · g go to date      REVIEW                                                  │
-  │  , settings · q quit         R repeat                    d done · t today                                        │
+  │  ? help · gn notes           gt today · gd go to date    REVIEW                                                  │
+  │  gs settings · q quit        R repeat                    d done · t today                                        │
   │                                                          b backlog · m move…                                     │
   │                                                          s leave in backlog · ⏎ next step                        │
   │                                                                                                                  │

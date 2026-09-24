@@ -1,7 +1,7 @@
 == 120×36 · floating window (the default)
 
 
- [/] day  g go to date                                        ● 2 on the pile M   4 notes n   / search   : commands   ?
+ [/] day  gd go to date                                     ● 2 on the pile gr   4 notes gn   / search   : commands   ?
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  Today Fri 5 Sep                 6 open · 2 done · 1 moved   Backlog                                     12 · 3 waiting
 ───────────────────────────────────────────────────────────┬────────────────────────────────────────────────────────────
@@ -34,13 +34,13 @@
                                                            │
                                                            │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- TODAY  J/K reorder  space done  f focus  a add  e edit  b to backlog  m move to day…  R repeat  x delete      h/l pane
+ TODAY  J/K reorder  space done  f focus  a add  e edit  b to backlog  m move to day…  R repeat  x delete         g go…
 
 
 == 160×48 · full-width tile: same layout, more rows
 
 
- [/] day  g go to date                                                                                ● 2 on the pile M   4 notes n   / search   : commands   ?
+ [/] day  gd go to date                                                                             ● 2 on the pile gr   4 notes gn   / search   : commands   ?
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  Today Fri 5 Sep                                     6 open · 2 done · 1 moved   Backlog                                                         12 · 3 waiting
 ───────────────────────────────────────────────────────────────────────────────┬────────────────────────────────────────────────────────────────────────────────
@@ -85,5 +85,5 @@
                                                                                │
                                                                                │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- TODAY  J/K reorder  space done  f focus  a add  e edit  b to backlog  m move to day…  R repeat  x delete                                              h/l pane
+ TODAY  J/K reorder  space done  f focus  a add  e edit  b to backlog  m move to day…  R repeat  x delete                                       h/l pane  g go…
 

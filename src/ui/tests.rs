@@ -845,7 +845,7 @@ fn a_past_day_with_nothing_on_it_names_the_keys_that_leave_it() {
         "and the header says so"
     );
     assert!(text.contains("Nothing was planned on this day."));
-    assert!(text.contains("[ keeps stepping back · g pick a date"));
+    assert!(text.contains("[ keeps stepping back · gd pick a date"));
     assert!(
         text.contains("Sun 31 Aug"),
         "the day list still skips it, but the pane is there"
@@ -861,7 +861,7 @@ fn the_narrow_window_makes_the_day_and_the_day_list_its_tabs() {
     assert!(tabs.contains("DAYS 11"), "and the backlog gives way to it");
     assert_eq!(
         drawn[drawn.len() - 1],
-        " PAST DAY  [/] day  . back  space done  t today  x del                   ? more",
+        " PAST DAY  [/] day  gt back  space done  t today  x del                  ? more",
         "and the bar keeps the way home in it"
     );
 }
@@ -878,8 +878,8 @@ fn a_hint_bar_too_full_for_its_right_end_leaves_it_out() {
     let drawn = look(&app, 116, 36);
     let bar = drawn[35].clone();
 
-    assert!(bar.starts_with(" FUTURE DAY  [/] day  . today"));
-    assert!(bar.ends_with("⏎ follow moved"), "{bar}");
+    assert!(bar.starts_with(" FUTURE DAY  [/] day  gt today"));
+    assert!(bar.ends_with("⏎ follow moved  g go…"), "{bar}");
     assert!(
         !bar.contains("pane"),
         "the row that does not fit is left out, not written over"
@@ -1092,7 +1092,7 @@ fn a_pile_left_behind_is_counted_in_red() {
 
     let text = look(&app, 120, 36).join("\n");
     assert!(
-        text.contains("● 5 on the pile M"),
+        text.contains("● 5 on the pile gr"),
         "two of the seven were dealt with, and the key that opens the review is on the count"
     );
     let buffer = terminal.backend().buffer();
@@ -1258,7 +1258,7 @@ fn an_empty_list_names_the_keys_that_fill_it() {
         "nothing on the pile is no alert, so the line does not count to zero"
     );
     assert!(
-        text.contains("[/] day  g go to date"),
+        text.contains("[/] day  gd go to date"),
         "the two keys stand apart, so they do not read as one phrase"
     );
 }
@@ -1313,7 +1313,7 @@ fn the_hint_bar_says_what_just_happened_and_offers_to_undo_it() {
         "the keys that fit follow: {bar:?}"
     );
     assert!(
-        !bar.contains("x delete") && bar.ends_with("h/l pane"),
+        !bar.contains("x delete") && bar.ends_with("g go…"),
         "the keys that no longer fit are left out whole: {bar:?}"
     );
 }
@@ -1579,7 +1579,7 @@ fn the_notes_list_is_newest_first_with_the_age_of_each_note() {
     let wanted = wireframe("10-scratchpad", 0, 36);
 
     assert!(drawn[0].contains("4 notes"));
-    assert!(drawn[0].contains("n or esc back to tasks"));
+    assert!(drawn[0].contains("esc back to tasks"));
     let divider = drawn[3].chars().position(|glyph| glyph == '┬');
     assert_eq!(
         divider,
@@ -3914,7 +3914,7 @@ fn page_headers_do_not_repeat_names_dates_or_note_counts() {
             if app.shown() == Shown::Today {
                 assert_eq!(headings.matches("today").count(), 1, "{headings}");
             } else {
-                assert!(drawn[0].contains(". "), "return to today stays visible");
+                assert!(drawn[0].contains("gt "), "return to today stays visible");
             }
         }
         app.update(Action::NotesPage);
@@ -4021,7 +4021,7 @@ fn the_archive_takes_the_place_of_the_notes_and_dates_its_rows_by_archiving() {
     assert!(left(&drawn[2]).ends_with("A archive"), "{:?}", drawn[2]);
     assert_eq!(
         drawn[35],
-        " NOTES  y/alt-y copy note  ⏎ open  a add  A archive  x delete  n back to tasks                    tab archive  h/l pane"
+        " NOTES  y/alt-y copy note  ⏎ open  a add  A archive  x delete  esc back to tasks           tab archive  h/l pane  g go…"
     );
 
     app.update(Action::Archive);
@@ -4051,7 +4051,7 @@ fn the_archive_takes_the_place_of_the_notes_and_dates_its_rows_by_archiving() {
     assert_eq!(right(&drawn[4]), "│  Mention to Anna:");
     assert_eq!(
         drawn[35],
-        " ARCHIVE  y/alt-y copy note  ⏎ open  a add  A unarchive  x delete  n back to tasks                  tab notes  h/l pane"
+        " ARCHIVE  y/alt-y copy note  ⏎ open  a add  A unarchive  x delete  esc back to tasks         tab notes  h/l pane  g go…"
     );
 }
 

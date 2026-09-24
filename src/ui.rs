@@ -531,7 +531,11 @@ fn with(first: Option<Item>, rest: Vec<Item>) -> Vec<Item> {
 ///
 /// A narrow window keeps the indicators and drops the words around them.
 fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
-    if app.popup().is_some() || app.editor().is_some() || app.setting_draft().is_some() {
+    if app.popup().is_some()
+        || app.editor().is_some()
+        || app.setting_draft().is_some()
+        || app.leading()
+    {
         canvas.put(1, y, input::name(app.key_context()), bold());
         canvas.rsegments(canvas.width() - 1, y, &[key("ctrl-c", "quit")], 2);
         return;
@@ -544,7 +548,7 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
     let browsing = app.shown() != Shown::Today;
     let notes = vec![
         words(&counted(app.notes().count, "note", "notes"), dim()),
-        Part::Key("n".to_owned()),
+        Part::Key("gn".to_owned()),
     ];
 
     // What was left on the pile is an alert: red, first, and with the key
@@ -558,7 +562,7 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
                     format!("● {on_pile}{words}"),
                     Style::new().fg(Color::Red).add_modifier(Modifier::BOLD),
                 ),
-                Part::Key("M".to_owned()),
+                Part::Key("gr".to_owned()),
             ]
         })
     };
@@ -568,7 +572,7 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
     let (left, right) = match (app.page(), narrow) {
         (Page::Home, true) => (
             if browsing {
-                vec![key(".", "today")]
+                vec![key("gt", "today")]
             } else {
                 vec![quiet(&day_label(app.today(), app.dates()))]
             },
@@ -577,7 +581,7 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
         (Page::Home, false) if browsing => (
             vec![
                 quiet(&ago(app.showing(), app.today())),
-                key(".", "back to today"),
+                key("gt", "back to today"),
             ],
             with(
                 alert(" on the pile"),
@@ -585,7 +589,7 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
             ),
         ),
         (Page::Home, false) => (
-            vec![key("[/]", "day"), key("g", "go to date")],
+            vec![key("[/]", "day"), key("gd", "go to date")],
             with(
                 alert(" on the pile"),
                 vec![
@@ -624,7 +628,7 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
                 vec![quiet(&counted(app.notes().count, "note", "notes"))]
             },
             vec![
-                keys(&[("n", "or"), ("esc", "back to tasks")]),
+                key("esc", "back to tasks"),
                 key("/", ""),
                 key(":", ""),
                 key("?", ""),
@@ -633,14 +637,7 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
         // The settings are about the program rather than about a day, so
         // the indicators the other pages carry mean nothing here. The way
         // out is where the notes page puts its own.
-        (Page::Settings, _) => (
-            vec![],
-            vec![
-                keys(&[(",", "or"), ("esc", "back")]),
-                key(":", ""),
-                key("?", ""),
-            ],
-        ),
+        (Page::Settings, _) => (vec![], vec![key("esc", "back"), key(":", ""), key("?", "")]),
     };
 
     canvas.segments(1, y, &left, 2);
@@ -1070,11 +1067,11 @@ fn day_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
             ],
             Shown::Past => [
                 quiet("Nothing was planned on this day."),
-                keys(&[("[", "keeps stepping back ·"), ("g", "pick a date")]),
+                keys(&[("[", "keeps stepping back ·"), ("gd", "pick a date")]),
             ],
             Shown::Future => [
                 quiet("Nothing planned for this day."),
-                keys(&[("]", "keeps stepping on ·"), ("g", "pick a date")]),
+                keys(&[("]", "keeps stepping on ·"), ("gd", "pick a date")]),
             ],
         },
     }
@@ -1099,12 +1096,12 @@ fn days_pane(app: &App) -> PaneView<'_> {
     PaneView {
         title: "Days".to_owned(),
         sub: String::new(),
-        right: key("g", "go to date"),
+        right: key("gd", "go to date"),
         sections,
         foot: Some("days with nothing planned are skipped"),
         empty: [
             quiet("Nothing has been planned on any day yet."),
-            key(".", "back to today"),
+            key("gt", "back to today"),
         ],
     }
 }

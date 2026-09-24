@@ -1,7 +1,7 @@
 == 120×36 · floating window, notes page
 
 
- 4 notes                                                                             n or esc back to today   /   :   ?
+ 4 notes                                                                                  esc back to today   /   :   ?
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  Notes                            A archive   Note Thu 4 Sep 16:40                                             esc back
 ────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────
@@ -34,13 +34,13 @@
                                             │
                                             │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- NOTE  type to edit  esc back to the list                       in the list:   ⏎ open  a add  x delete  n back to today
+ NOTE  type to edit  esc back to the list                     in the list:   ⏎ open  a add  x delete  esc back to today
 
 
 == 120×36 · tab: the archive in the same pane
 
 
- 4 notes                                                                             n or esc back to tasks   /   :   ?
+ 4 notes                                                                                  esc back to tasks   /   :   ?
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  Archive 12                     A unarchive   Note Mon 22 Sep 09:12 · archived today
 ────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────
@@ -73,13 +73,13 @@
                                             │
                                             │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ARCHIVE  y/alt-y copy note  ⏎ open  a add  A unarchive  x delete  n back to tasks                  tab notes  h/l pane
+ ARCHIVE  y/alt-y copy note  ⏎ open  a add  A unarchive  x delete  esc back to tasks         tab notes  h/l pane  g go…
 
 
 == 120×36 · / filters the list shown
 
 
- 4 notes                                                                             n or esc back to tasks   /   :   ?
+ 4 notes                                                                                  esc back to tasks   /   :   ?
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  Notes                         A archive 12   Note Thu 4 Sep 16:40
 ────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────

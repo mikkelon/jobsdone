@@ -10,7 +10,7 @@ machine.
 The product is shaped by one habit: the morning review.
 
 1. Open the app at the start of the work day. The review opens itself on
-   the first open of the day, unless it is set to wait for `M` instead.
+   the first open of the day, unless it is set to wait for `gr` instead.
 2. Deal with the review pile: every unfinished task that was planned for a
    day that has now passed, back as far as the pile is set to reach. Each
    one is either closed (it was actually done), moved onto today, sent back
@@ -127,7 +127,7 @@ mention X" or drafting a message before sending it.
 
 ## Settings
 
-The program runs on its defaults, and a page reached with `,` changes the
+The program runs on its defaults, and a page reached with `gs` changes the
 few things worth changing. There is no configuration file: the settings
 are kept with the tasks, so every open window picks a change up at once.
 
@@ -136,7 +136,7 @@ are kept with the tasks, so every open window picks a change up at once.
 | Day starts at               | 05:00                  | The hour a new day begins, so a late night belongs to the day it started in. |
 | Week starts on              | Monday                 | Where the history's weeks are broken, and the first column of a calendar. |
 | Work days                   | Monday to Friday       | What "every work day" repeats on, and what "next work day" means. |
-| Open the review on launch   | on                     | Off, the morning review waits for `M` instead of opening itself. |
+| Open the review on launch   | on                     | Off, the morning review waits for `gr` instead of opening itself. |
 | Surface due tasks early     | on its day             | How many days before its due date a backlog task is put in front of you in the morning review. At 0 it surfaces on the due date and on every day after until it is dealt with; at 3 it also surfaces on the three days before. |
 | Catch up recurring tasks    | every missed day       | A recurring task gets a fresh copy on every day its schedule names. After days away from the app, the copies for the days you missed are made on the next launch, each landing on the review pile. This caps how far back that goes: at 7, only the last week's missed copies are made and older ones are skipped for good. Every missed day makes them all. |
 | Hide pile tasks older than  | never                  | How far back the review pile reaches. Older tasks stay on their day. |

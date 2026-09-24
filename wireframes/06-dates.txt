@@ -1,7 +1,7 @@
 == 120×36 · floating window
 
 
- [/] day  g go to date                                        ● 2 on the pile M   4 notes n   / search   : commands   ?
+ [/] day  gd go to date                                     ● 2 on the pile gr   4 notes gn   / search   : commands   ?
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  Today Fri 5 Sep                 6 open · 2 done · 1 moved   Backlog                                     12 · 3 waiting
 ───────────────────────────────────────────────────────────┬────────────────────────────────────────────────────────────
@@ -34,5 +34,5 @@
                                                            │
                                                            │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- BACKLOG  t to today  m move…  d due by  r remind on  w waiting  R repeat  a add  e edit  x delete             h/l pane
+ BACKLOG  t to today  m move…  d due by  r remind on  w waiting  R repeat  a add  e edit  x delete      h/l pane  g go…
 

@@ -128,6 +128,13 @@ fn every_context() -> Vec<KeyContext> {
         field(PopupKind::Dictionary),
         KeyContext::Settings { field: false },
         KeyContext::Settings { field: true },
+        KeyContext::Leader { over: None },
+        KeyContext::Leader {
+            over: Some(PopupKind::Move),
+        },
+        KeyContext::Leader {
+            over: Some(PopupKind::Repeat),
+        },
     ]
 }
 
@@ -599,7 +606,7 @@ fn the_move_card_offers_a_day_under_every_key_it_names() {
 
     assert!(days.contains(&("t", Action::ToToday)));
     assert!(days.contains(&("w", Action::NextWorkDay)));
-    assert!(days.contains(&("g", Action::GoToDate)));
+    assert!(days.contains(&("g", Action::Go)));
     assert!(days.contains(&("b", Action::ToBacklog)));
 }
 
@@ -1146,5 +1153,110 @@ fn one_action_has_one_label_on_every_page() {
                 None => seen.push((*action, binding.label, context)),
             }
         }
+    }
+}
+
+#[test]
+fn g_leads_somewhere_from_every_page_and_every_list() {
+    let places = every_context().into_iter().filter(|context| {
+        !context.text_field()
+            && !matches!(context, KeyContext::Leader { .. })
+            && !matches!(
+                context,
+                KeyContext::Popup {
+                    kind: PopupKind::Date | PopupKind::CopyQuestion | PopupKind::DeleteQuestion,
+                    ..
+                }
+            )
+    });
+    for context in places {
+        assert_eq!(
+            action_for(&typing('g'), context),
+            Some(Action::Go),
+            "{context:?}"
+        );
+        assert_eq!(
+            action_for(&typing('G'), context),
+            Some(Action::Last),
+            "{context:?}"
+        );
+        assert_eq!(
+            action_for(
+                &press_with(KeyCode::Char('d'), KeyModifiers::CONTROL),
+                context
+            ),
+            Some(Action::HalfPageDown),
+            "{context:?}"
+        );
+    }
+}
+
+#[test]
+fn after_g_every_place_is_one_key_and_escape_goes_nowhere() {
+    let leader = KeyContext::Leader { over: None };
+    for (key, place) in [
+        ('g', Action::First),
+        ('t', Action::Today),
+        ('b', Action::BacklogPane),
+        ('d', Action::GoToDate),
+        ('n', Action::NotesPage),
+        ('a', Action::ArchivePage),
+        ('s', Action::SettingsPage),
+        ('r', Action::OpenReview),
+    ] {
+        assert_eq!(action_for(&typing(key), leader), Some(place), "g{key}");
+    }
+    assert_eq!(
+        action_for(&press(KeyCode::Esc), leader),
+        Some(Action::Cancel)
+    );
+    assert_eq!(action_for(&typing('z'), leader), None, "gz is no place");
+
+    // In a card, the first row is the one place, and on the move card a
+    // date as well.
+    let move_card = KeyContext::Leader {
+        over: Some(PopupKind::Move),
+    };
+    assert_eq!(action_for(&typing('g'), move_card), Some(Action::First));
+    assert_eq!(action_for(&typing('d'), move_card), Some(Action::GoToDate));
+    assert_eq!(action_for(&typing('n'), move_card), None);
+}
+
+#[test]
+fn no_place_has_a_key_of_its_own_on_any_page() {
+    let places = [
+        Action::Today,
+        Action::GoToDate,
+        Action::NotesPage,
+        Action::ArchivePage,
+        Action::SettingsPage,
+        Action::OpenReview,
+        Action::BacklogPane,
+    ];
+    for context in every_context() {
+        if matches!(context, KeyContext::Leader { .. }) {
+            continue;
+        }
+        for binding in bindings(context) {
+            for (key, action) in binding.keys {
+                assert!(
+                    !places.contains(action),
+                    "{key:?} goes to {action:?} in {context:?}; places are under g"
+                );
+            }
+        }
+    }
+}
+
+#[test]
+fn the_palette_and_search_page_with_ctrl_d_and_ctrl_u() {
+    for kind in [PopupKind::Palette, PopupKind::Search] {
+        assert_eq!(
+            action_for(
+                &press_with(KeyCode::Char('u'), KeyModifiers::CONTROL),
+                field(kind)
+            ),
+            Some(Action::HalfPageUp)
+        );
     }
 }

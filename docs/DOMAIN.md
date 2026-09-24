@@ -528,7 +528,7 @@ The meta table holds two dates:
 On launch, after generation: if `review_opens_itself`, `review_on` ≠
 today, and the pile or the surfaced set is non-empty, the review opens
 and StartReview runs. With the setting off a launch writes no gate at
-all, and `M` opens the review, which runs StartReview then. An
+all, and `gr` opens the review, which runs StartReview then. An
 empty step is skipped; if both are empty nothing opens and the gate is
 not written. Escape leaves the review with the pile intact. The review
 can be started again any time from the command palette; that also runs
@@ -784,7 +784,7 @@ page only draws them.
 | `day_starts_at`      | hour, 0..=23                           | `5`        | Day starts at         | The hour the working day rolls over. 01:30 on Saturday belongs to Friday while it is 5. |
 | `week_starts_on`     | `monday` or `sunday`                   | `monday`   | Week starts on        | Where the history's "this week"/"last week" rules fall, and the first column of the calendar and the weekday row of the repeat card. |
 | `work_days`          | comma list of `mon`..`sun`, at least 1 | `mon,tue,wed,thu,fri` | Work days (seven toggle rows) | What "every work day" repeats on and what "next work day" on the move card means. |
-| `review_opens_itself`| `true`/`false`                         | `true`     | Open the review on launch | Whether the morning review opens itself on the first launch of a day. Off, it is only opened with `M`. |
+| `review_opens_itself`| `true`/`false`                         | `true`     | Open the review on launch | Whether the morning review opens itself on the first launch of a day. Off, it is only opened with `gr`. |
 | `due_ahead_days`     | days, 0..=365                          | `0`        | Surface due tasks early | How many days before its due date a backlog task is put in front of you in the morning review. At 0 it surfaces on the due date and on every day after until it is dealt with; at 3 it also surfaces on the three days before. The row reads `on its day` at 0 and `N days before` otherwise. |
 | `backfill_days`      | days, 0..=365; 0 means no cap          | `0`        | Catch up recurring tasks | A recurring task gets a fresh copy on every day its schedule names. After days away from the app, the copies for the days you missed are made on the next launch, each landing on the review pile. This caps how far back that goes: at 7, only the last week's missed copies are made and older ones are skipped for good. Every missed day makes them all. The row reads `every missed day` at 0 and `the last N days` otherwise. |
 | `pile_horizon_days`  | days, 0..=3650; 0 means never          | `0`        | Hide pile tasks older than | An unfinished task from a day more than N days ago stays on its day but is left out of the pile and its count. 0 hides nothing. |

@@ -29,7 +29,7 @@
 == C · Nothing to review: the review is skipped, not shown
 
 
- Fri 5 Sep                                    4 notes n   ?
+ Fri 5 Sep                                   4 notes gn   ?
 ────────────────────────────────────────────────────────────
 
  Opens straight to Today. Nothing on the pile, so no count.
@@ -44,7 +44,7 @@
 
 
           Nothing was planned on this day.
-        [ keeps stepping back · g pick a date
+        [ keeps stepping back · gd pick a date
 
 
 

@@ -74,7 +74,13 @@ fn go_round(
             } else if !*mouse && matches!(event, Event::Mouse(_)) {
                 None
             } else {
-                input::action_for(&event, app.key_context())
+                let action = input::action_for(&event, app.key_context());
+                if action.is_none()
+                    && let Some(key) = input::pressed(&event)
+                {
+                    app.unbound(&key);
+                }
+                action
             }
         } else {
             Some(Action::Tick)

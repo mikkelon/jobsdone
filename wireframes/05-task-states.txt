@@ -69,10 +69,10 @@
       │ 3     Next Monday                    Mon 8 Sep │
       │ 4     In a week                     Fri 12 Sep │
       │ 5     End of month                  Tue 30 Sep │
-      │ g     Pick a date…                    calendar │
+      │ gd    Pick a date…                    calendar │
       │ b     Backlog                           no day │
       │                                                │
-      │ no text field here: g opens the date card for typing
+      │ no text field here: gd opens the date card for typing
       │                                                │
       └────────────────────────────────────────────────┘
 

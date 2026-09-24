@@ -2537,7 +2537,7 @@ fn an_app_opened_on_the_notes_starts_in_the_list_of_notes() {
 }
 
 #[test]
-fn n_turns_the_page_and_turns_it_back() {
+fn gn_goes_to_the_notes_and_escape_comes_back() {
     let mut app = started();
     app.update(Action::NotesPage);
 
@@ -2553,6 +2553,9 @@ fn n_turns_the_page_and_turns_it_back() {
     );
 
     app.update(Action::NotesPage);
+    assert_eq!(app.page(), Page::Notes, "going there again stays there");
+
+    app.update(Action::Cancel);
     assert_eq!(app.page(), Page::Home);
 }
 
@@ -2863,7 +2866,7 @@ fn leaving_the_notes_page_drops_the_filter() {
     app.update(Action::Filter);
     type_in(&mut app, "milk");
     app.update(Action::NextPane);
-    app.update(Action::NotesPage);
+    app.update(Action::Today);
     app.update(Action::NotesPage);
 
     assert!(app.filter().is_none());
@@ -4053,13 +4056,13 @@ fn a_search_with_nothing_in_it_offers_to_add_what_was_typed() {
 fn enter_in_the_palette_runs_the_row_it_is_on() {
     let mut app = started();
     app.update(Action::Commands);
-    type_in(&mut app, "notes page");
+    type_in(&mut app, "go…");
     assert_eq!(app.palette_rows().len(), 1);
 
     app.update(Action::Confirm);
 
     assert!(app.popup().is_none(), "the palette closes");
-    assert_eq!(app.page(), Page::Notes, "and the command runs");
+    assert!(app.leading(), "and the command runs");
 }
 
 #[test]
@@ -4559,7 +4562,7 @@ fn cursor_to(app: &mut App, row: SettingRow) {
 }
 
 #[test]
-fn a_comma_opens_the_settings_and_the_same_key_brings_the_page_back() {
+fn gs_goes_to_the_settings_and_escape_goes_back_where_it_came_from() {
     let mut app = started();
     app.update(Action::NotesPage);
     assert_eq!(app.page(), Page::Notes);
@@ -4574,10 +4577,12 @@ fn a_comma_opens_the_settings_and_the_same_key_brings_the_page_back() {
     );
 
     app.update(Action::SettingsPage);
+    assert_eq!(app.page(), Page::Settings, "going there again stays there");
+
+    app.update(Action::Cancel);
     assert_eq!(app.page(), Page::Notes, "back to the page it was opened on");
 
-    // And `esc` is the other way off it, back to wherever it came from.
-    app.update(Action::NotesPage);
+    app.update(Action::Today);
     app.update(Action::SettingsPage);
     app.update(Action::Cancel);
     assert_eq!(app.page(), Page::Home);
@@ -5218,7 +5223,7 @@ fn turning_the_setting_off_takes_the_marks_away_and_on_brings_them_back() {
     app.update(Action::Pick);
     assert!(!app.settings().spell_check_notes());
 
-    app.update(Action::SettingsPage);
+    app.update(Action::Cancel);
     assert_eq!(app.page(), Page::Notes);
     assert!(
         app.misspellings().is_empty(),
@@ -5228,7 +5233,7 @@ fn turning_the_setting_off_takes_the_marks_away_and_on_brings_them_back() {
     app.update(Action::SettingsPage);
     cursor_to(&mut app, SettingRow::SpellCheckNotes);
     app.update(Action::Pick);
-    app.update(Action::SettingsPage);
+    app.update(Action::Cancel);
     assert_eq!(misspelt(&app), ["teh"]);
 }
 
@@ -6274,4 +6279,117 @@ fn calendar_navigation_stays_at_the_edges_of_the_supported_date_range() {
         app.update(inward);
         assert_ne!(app.popup().unwrap().date().unwrap().on, date);
     }
+}
+
+#[test]
+fn g_waits_for_where_to_go_and_escape_takes_it_back() {
+    let mut app = started();
+    add(&mut app, "Water the plants");
+    app.update(Action::MoveToDay);
+
+    app.update(Action::Go);
+    assert!(app.leading());
+    assert_eq!(
+        app.key_context(),
+        KeyContext::Leader {
+            over: Some(PopupKind::Move)
+        }
+    );
+
+    app.update(Action::Cancel);
+    assert!(!app.leading());
+    assert_eq!(
+        app.popup().map(|popup| popup.kind),
+        Some(PopupKind::Move),
+        "Escape takes back the g, not the card under it"
+    );
+}
+
+#[test]
+fn g_then_a_key_that_is_no_place_says_so_and_waits_no_longer() {
+    let mut app = started();
+    app.update(Action::Go);
+
+    app.unbound("z");
+
+    assert!(!app.leading());
+    assert_eq!(hint(&app), "gz is not a place to go.");
+}
+
+#[test]
+fn every_place_is_reached_from_every_page() {
+    let mut app = app_at(left_behind(&[("Send the invoice", "2025-09-04")]), NOW);
+    assert!(app.review().is_some());
+
+    // From the review: the notes, with the pile left as it was.
+    app.update(Action::Go);
+    app.update(Action::NotesPage);
+    assert!(app.review().is_none());
+    assert_eq!(app.page(), Page::Notes);
+    assert_eq!(app.notes_list(), NotesList::Notes);
+
+    // From the notes: the settings, and from there the archive.
+    app.update(Action::SettingsPage);
+    assert_eq!(app.page(), Page::Settings);
+    app.update(Action::ArchivePage);
+    assert_eq!(app.page(), Page::Notes);
+    assert_eq!(app.notes_list(), NotesList::Archive);
+
+    // From the notes: the backlog beside today, then today itself.
+    app.update(Action::BacklogPane);
+    assert_eq!(app.page(), Page::Home);
+    assert_eq!(app.focused(), List::Backlog);
+    app.update(Action::PrevDay);
+    app.update(Action::Today);
+    assert_eq!(app.showing(), app.today());
+    assert_eq!(app.focused(), List::Day);
+
+    // And the review again, from the settings, which leaves it on today.
+    app.update(Action::SettingsPage);
+    app.update(Action::OpenReview);
+    assert!(app.review().is_some());
+    assert_eq!(app.page(), Page::Home);
+    app.update(Action::OpenReview);
+    assert_eq!(hint(&app), "The morning review is already open.");
+}
+
+#[test]
+fn a_date_gone_to_from_the_notes_page_is_shown_on_the_home_page() {
+    let mut app = started();
+    app.update(Action::NotesPage);
+
+    app.update(Action::GoToDate);
+    assert_eq!(app.page(), Page::Notes, "the card opens over the page");
+    type_in(&mut app, "tomorrow");
+    app.update(Action::Confirm);
+
+    assert_eq!(app.page(), Page::Home);
+    assert_eq!(app.showing(), on("2025-09-06"));
+}
+
+#[test]
+fn gg_and_capital_g_are_the_ends_of_the_list() {
+    let mut app = started();
+    for title in ["One", "Two", "Three", "Four"] {
+        add(&mut app, title);
+    }
+
+    app.update(Action::First);
+    assert_eq!(cursor_title(&app, List::Day), "One");
+    app.update(Action::Last);
+    assert_eq!(cursor_title(&app, List::Day), "Four");
+    app.update(Action::HalfPageUp);
+    assert_eq!(
+        cursor_title(&app, List::Day),
+        "Three",
+        "with no window drawn yet, half a page is a row"
+    );
+}
+
+fn cursor_title(app: &App, list: List) -> String {
+    app.cursor(list)
+        .and_then(RowId::task)
+        .and_then(|id| app.model().task(id))
+        .map(|task| task.title.clone())
+        .unwrap_or_default()
 }

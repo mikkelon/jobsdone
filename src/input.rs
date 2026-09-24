@@ -137,6 +137,12 @@ pub enum KeyContext {
     Settings {
         field: bool,
     },
+    /// `g` has been pressed and the next key says where to go. `over` is
+    /// the card it was pressed in, where only the first row, and on the
+    /// move card a date, are places to go; on a page it is `None`.
+    Leader {
+        over: Option<PopupKind>,
+    },
 }
 
 impl KeyContext {
@@ -148,6 +154,7 @@ impl KeyContext {
             | KeyContext::Review { text_field, .. }
             | KeyContext::Popup { text_field, .. } => text_field,
             KeyContext::Settings { field } => field,
+            KeyContext::Leader { .. } => false,
         }
     }
 }
@@ -164,6 +171,18 @@ pub enum Action {
     // Moving about.
     Down,
     Up,
+    /// `g`, the leader: the key after it says where to go.
+    Go,
+    /// `gg` and `G`: the first and the last row of the list.
+    First,
+    Last,
+    /// `ctrl-d` and `ctrl-u`: half of what the list shows, down or up.
+    HalfPageDown,
+    HalfPageUp,
+    /// `gb`: the backlog beside today.
+    BacklogPane,
+    /// `ga`: the notes page on its archive.
+    ArchivePage,
     PaneLeft,
     PaneRight,
     NextPane,
@@ -403,8 +422,6 @@ impl Binding {
 macro_rules! home_table {
     (
         steps: $steps:expr, $steps_narrow:expr;
-        today: $today:expr, $today_narrow:expr;
-        go_to: $goto:expr, $goto_narrow:expr;
         panes: $panes:expr;
         $($own:expr),* $(,)?
     ) => {
@@ -415,20 +432,6 @@ macro_rules! home_table {
                 label: "prev/next day",
                 bar: $steps,
                 narrow: $steps_narrow,
-            },
-            Binding {
-                keys: &[(".", Action::Today)],
-                shown: ".",
-                label: "today",
-                bar: $today,
-                narrow: $today_narrow,
-            },
-            Binding {
-                keys: &[("g", Action::GoToDate)],
-                shown: "g",
-                label: "go to date",
-                bar: $goto,
-                narrow: $goto_narrow,
             },
             $($own,)*
             $panes,
@@ -451,57 +454,13 @@ macro_rules! home_table {
                 bar: Bar::Off,
                 narrow: Bar::Off,
             },
-            Binding {
-                keys: &[("/", Action::Search)],
-                shown: "/",
-                label: "search",
-                bar: Bar::Off,
-                narrow: Bar::Off,
-            },
-            Binding {
-                keys: &[(":", Action::Commands)],
-                shown: ":",
-                label: "commands",
-                bar: Bar::Off,
-                narrow: Bar::Off,
-            },
-            Binding {
-                keys: &[("?", Action::Help)],
-                shown: "?",
-                label: "help",
-                bar: Bar::Off,
-                narrow: Bar::Short(Side::Right, "more"),
-            },
-            Binding {
-                keys: &[("n", Action::NotesPage)],
-                shown: "n",
-                label: "notes page",
-                bar: Bar::Off,
-                narrow: Bar::Off,
-            },
-            Binding {
-                keys: &[(",", Action::SettingsPage)],
-                shown: ",",
-                label: "settings",
-                bar: Bar::Off,
-                narrow: Bar::Off,
-            },
-            // The review opens itself once a morning; this is how it is
-            // picked up again after it was left (DOMAIN.md section 13).
-            Binding {
-                keys: &[("M", Action::OpenReview)],
-                shown: "M",
-                label: "morning review",
-                bar: Bar::Off,
-                narrow: Bar::Off,
-            },
-            Binding {
-                keys: &[("q", Action::Quit)],
-                shown: "q",
-                label: "quit",
-                bar: Bar::Off,
-                narrow: Bar::Off,
-            },
+            GO,
+            LAST_ROW,
+            HALF_PAGE,
+            SEARCH,
+            COMMANDS,
+            HELP,
+            QUIT,
         ]
     };
 }
@@ -514,28 +473,193 @@ macro_rules! home_tables {
         $(#[$doc:meta])*
         $wide:ident, $narrow:ident;
         steps: $steps:expr, $steps_narrow:expr;
-        today: $today:expr, $today_narrow:expr;
-        go_to: $goto:expr, $goto_narrow:expr;
         $($own:expr),* $(,)?
     ) => {
         $(#[$doc])*
         const $wide: &[Binding] = home_table![
             steps: $steps, $steps_narrow;
-            today: $today, $today_narrow;
-            go_to: $goto, $goto_narrow;
             panes: PANES;
             $($own),*
         ];
         $(#[$doc])*
         const $narrow: &[Binding] = home_table![
             steps: $steps, $steps_narrow;
-            today: $today, $today_narrow;
-            go_to: $goto, $goto_narrow;
             panes: TABS;
             $($own),*
         ];
     };
 }
+
+/// The leader. What can follow it is the table of `KeyContext::Leader`,
+/// which the hint bar shows while it waits, so the one key a page has to
+/// name for every place there is to go is this one.
+const GO: Binding = Binding {
+    keys: &[("g", Action::Go)],
+    shown: "g",
+    label: "go…",
+    bar: Bar::Right,
+    narrow: Bar::Off,
+};
+
+/// `G`, the partner of `gg`, on the page because it is a key pressed on
+/// its own rather than a place under the leader.
+const LAST_ROW: Binding = Binding {
+    keys: &[("G", Action::Last)],
+    shown: "G",
+    label: "last row",
+    bar: Bar::Off,
+    narrow: Bar::Off,
+};
+
+const HALF_PAGE: Binding = Binding {
+    keys: &[
+        ("ctrl-d", Action::HalfPageDown),
+        ("ctrl-u", Action::HalfPageUp),
+    ],
+    shown: "ctrl-d/u",
+    label: "half a page",
+    bar: Bar::Off,
+    narrow: Bar::Off,
+};
+
+const SEARCH: Binding = Binding {
+    keys: &[("/", Action::Search)],
+    shown: "/",
+    label: "search",
+    bar: Bar::Off,
+    narrow: Bar::Off,
+};
+
+const COMMANDS: Binding = Binding {
+    keys: &[(":", Action::Commands)],
+    shown: ":",
+    label: "commands",
+    bar: Bar::Off,
+    narrow: Bar::Off,
+};
+
+const HELP: Binding = Binding {
+    keys: &[("?", Action::Help)],
+    shown: "?",
+    label: "help",
+    bar: Bar::Off,
+    narrow: Bar::Short(Side::Right, "more"),
+};
+
+const QUIT: Binding = Binding {
+    keys: &[("q", Action::Quit)],
+    shown: "q",
+    label: "quit",
+    bar: Bar::Off,
+    narrow: Bar::Off,
+};
+
+/// The way home from another day, which is a place under the leader and
+/// so a line of the bar rather than a key of the table: stepping through
+/// days is what the pane is for, and coming back is the next thing to
+/// know (wireframe 08).
+const BACK_TO_TODAY: Binding = Binding {
+    keys: &[],
+    shown: "gt",
+    label: "today",
+    bar: Bar::Left,
+    // The narrow bar calls it "back", because `t today` is beside it and
+    // means something else.
+    narrow: Bar::Short(Side::Left, "back"),
+};
+
+const GO_TO_A_DATE: Binding = Binding {
+    keys: &[],
+    shown: "gd",
+    label: "go to date",
+    bar: Bar::Left,
+    narrow: Bar::Off,
+};
+
+/// The leader in a card, where it leads only to the first row and the
+/// card's hint bar has no room to name it.
+const QUIET_GO: Binding = Binding {
+    bar: Bar::Off,
+    narrow: Bar::Off,
+    ..GO
+};
+
+/// Where `g` leads from a page (DESIGN.md section 4). Every place the
+/// program has is one of these, and none of them has a key of its own.
+const AFTER_G: &[Binding] = &[
+    Binding {
+        keys: &[("g", Action::First)],
+        shown: "g",
+        label: "first row",
+        bar: Bar::Left,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("t", Action::Today)],
+        shown: "t",
+        label: "today",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("b", Action::BacklogPane)],
+        shown: "b",
+        label: "backlog",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("d", Action::GoToDate)],
+        shown: "d",
+        label: "go to date",
+        bar: Bar::Left,
+        narrow: Bar::Short(Side::Left, "date"),
+    },
+    Binding {
+        keys: &[("n", Action::NotesPage)],
+        shown: "n",
+        label: "notes",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("a", Action::ArchivePage)],
+        shown: "a",
+        label: "archive",
+        bar: Bar::Left,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("s", Action::SettingsPage)],
+        shown: "s",
+        label: "settings",
+        bar: Bar::Left,
+        narrow: Bar::Off,
+    },
+    Binding {
+        keys: &[("r", Action::OpenReview)],
+        shown: "r",
+        label: "morning review",
+        bar: Bar::Left,
+        narrow: Bar::Off,
+    },
+    GO_NOWHERE,
+];
+
+/// Where `g` leads in the move card: its first row, or a date typed or
+/// walked to in the calendar.
+const AFTER_G_ON_THE_MOVE_CARD: &[Binding] = &[AFTER_G[0], AFTER_G[3], GO_NOWHERE];
+
+/// Where `g` leads in a card that is a list and nothing else.
+const AFTER_G_IN_A_LIST: &[Binding] = &[AFTER_G[0], GO_NOWHERE];
+
+const GO_NOWHERE: Binding = Binding {
+    keys: &[("esc", Action::Cancel)],
+    shown: "esc",
+    label: "cancel",
+    bar: Bar::Right,
+    narrow: Bar::Right,
+};
 
 /// Two panes side by side.
 const PANES: Binding = Binding {
@@ -559,8 +683,6 @@ const TABS: Binding = Binding {
 home_tables![
     HOME_DAY, HOME_DAY_NARROW;
     steps: Bar::Off, Bar::Off;
-    today: Bar::Off, Bar::Off;
-    go_to: Bar::Off, Bar::Off;
     Binding {
         keys: &[("J", Action::MoveDown), ("K", Action::MoveUp)],
         shown: "J/K",
@@ -655,8 +777,6 @@ home_tables![
 home_tables![
     HOME_BACKLOG, HOME_BACKLOG_NARROW;
     steps: Bar::Off, Bar::Off;
-    today: Bar::Off, Bar::Off;
-    go_to: Bar::Off, Bar::Off;
     // The backlog is ordered by hand, like a day, so it reorders by
     // keyboard, like a day (DOMAIN.md section 4). Ten keys already fill
     // the bar here, so the palette and the help overlay teach it.
@@ -753,10 +873,8 @@ home_tables![
     /// 08).
     HOME_OTHER_DAY, HOME_OTHER_DAY_NARROW;
     steps: Bar::Short(Side::Left, "day"), Bar::Short(Side::Left, "day");
-    // The narrow bar calls the way home "back", as the notes page does,
-    // because `t to today` is beside it and means something else.
-    today: Bar::Left, Bar::Short(Side::Left, "back");
-    go_to: Bar::Left, Bar::Off;
+    BACK_TO_TODAY,
+    GO_TO_A_DATE,
     Binding {
         keys: &[("space", Action::Close)],
         shown: "space",
@@ -830,8 +948,8 @@ home_tables![
     /// bound here.
     HOME_DAYS, HOME_DAYS_NARROW;
     steps: Bar::Short(Side::Left, "day"), Bar::Short(Side::Left, "day");
-    today: Bar::Left, Bar::Short(Side::Left, "back");
-    go_to: Bar::Left, Bar::Off;
+    BACK_TO_TODAY,
+    GO_TO_A_DATE,
     Binding {
         keys: &[("enter", Action::Confirm)],
         shown: "⏎",
@@ -875,21 +993,13 @@ macro_rules! notes_table {
                 bar: Bar::Left,
                 narrow: Bar::Short(Side::Left, "del"),
             },
-            // `esc` leaves the page as well, which is what the status
-            // line promises; `n` is the key the bar has room to name.
+            // Escape backs out of the page, one level towards today.
             Binding {
-                keys: &[("n", Action::NotesPage), ("esc", Action::Cancel)],
-                shown: "n",
+                keys: &[("esc", Action::Cancel)],
+                shown: "esc",
                 label: "back to tasks",
                 bar: Bar::Left,
                 narrow: Bar::Short(Side::Left, "back"),
-            },
-            Binding {
-                keys: &[(",", Action::SettingsPage)],
-                shown: ",",
-                label: "settings",
-                bar: Bar::Off,
-                narrow: Bar::Off,
             },
             $tab,
             Binding {
@@ -918,6 +1028,9 @@ macro_rules! notes_table {
                 bar: Bar::Off,
                 narrow: Bar::Off,
             },
+            GO,
+            LAST_ROW,
+            HALF_PAGE,
             // The notes page filters its own list rather than searching
             // the tasks (DESIGN.md section 9).
             Binding {
@@ -927,27 +1040,9 @@ macro_rules! notes_table {
                 bar: Bar::Off,
                 narrow: Bar::Off,
             },
-            Binding {
-                keys: &[(":", Action::Commands)],
-                shown: ":",
-                label: "commands",
-                bar: Bar::Off,
-                narrow: Bar::Off,
-            },
-            Binding {
-                keys: &[("?", Action::Help)],
-                shown: "?",
-                label: "help",
-                bar: Bar::Off,
-                narrow: Bar::Short(Side::Right, "more"),
-            },
-            Binding {
-                keys: &[("q", Action::Quit)],
-                shown: "q",
-                label: "quit",
-                bar: Bar::Off,
-                narrow: Bar::Off,
-            },
+            COMMANDS,
+            HELP,
+            QUIT,
         ]
     };
 }
@@ -1112,6 +1207,25 @@ const NOTES_NOTE: &[Binding] = &[
     },
 ];
 
+/// The keys every page has, in the review, where the bar has room only
+/// for the decisions and the one thing to press, so none of them is in
+/// it; the palette and the help overlay teach them.
+const REVIEW_GLOBALS: [Binding; 7] = [
+    Binding {
+        bar: Bar::Off,
+        ..GO
+    },
+    LAST_ROW,
+    HALF_PAGE,
+    SEARCH,
+    COMMANDS,
+    Binding {
+        narrow: Bar::Off,
+        ..HELP
+    },
+    QUIT,
+];
+
 /// The pile, with what Enter is called there: the next step while one
 /// is to come, and the start of the day on the last.
 macro_rules! review_pile {
@@ -1193,20 +1307,13 @@ macro_rules! review_pile {
                 bar: Bar::Off,
                 narrow: Bar::Off,
             },
-            Binding {
-                keys: &[("?", Action::Help)],
-                shown: "?",
-                label: "help",
-                bar: Bar::Off,
-                narrow: Bar::Off,
-            },
-            Binding {
-                keys: &[("q", Action::Quit)],
-                shown: "q",
-                label: "quit",
-                bar: Bar::Off,
-                narrow: Bar::Off,
-            },
+            REVIEW_GLOBALS[0],
+            REVIEW_GLOBALS[1],
+            REVIEW_GLOBALS[2],
+            REVIEW_GLOBALS[3],
+            REVIEW_GLOBALS[4],
+            REVIEW_GLOBALS[5],
+            REVIEW_GLOBALS[6],
         ]
     };
 }
@@ -1291,20 +1398,13 @@ const REVIEW_SURFACED: &[Binding] = &[
         bar: Bar::Off,
         narrow: Bar::Off,
     },
-    Binding {
-        keys: &[("?", Action::Help)],
-        shown: "?",
-        label: "help",
-        bar: Bar::Off,
-        narrow: Bar::Off,
-    },
-    Binding {
-        keys: &[("q", Action::Quit)],
-        shown: "q",
-        label: "quit",
-        bar: Bar::Off,
-        narrow: Bar::Off,
-    },
+    REVIEW_GLOBALS[0],
+    REVIEW_GLOBALS[1],
+    REVIEW_GLOBALS[2],
+    REVIEW_GLOBALS[3],
+    REVIEW_GLOBALS[4],
+    REVIEW_GLOBALS[5],
+    REVIEW_GLOBALS[6],
 ];
 
 /// A step whose rows are all information: the copies a schedule started
@@ -1338,20 +1438,13 @@ const REVIEW_INFORMATION: &[Binding] = &[
         bar: Bar::Off,
         narrow: Bar::Off,
     },
-    Binding {
-        keys: &[("?", Action::Help)],
-        shown: "?",
-        label: "help",
-        bar: Bar::Off,
-        narrow: Bar::Off,
-    },
-    Binding {
-        keys: &[("q", Action::Quit)],
-        shown: "q",
-        label: "quit",
-        bar: Bar::Off,
-        narrow: Bar::Off,
-    },
+    REVIEW_GLOBALS[0],
+    REVIEW_GLOBALS[1],
+    REVIEW_GLOBALS[2],
+    REVIEW_GLOBALS[3],
+    REVIEW_GLOBALS[4],
+    REVIEW_GLOBALS[5],
+    REVIEW_GLOBALS[6],
 ];
 
 /// One row of the panel beside the review: the key that decides the row
@@ -1557,9 +1650,11 @@ const MOVE_CARD: &[Binding] = &[
         bar: Bar::Off,
         narrow: Bar::Off,
     },
+    // A date is `gd` wherever one is gone to, so the row is the leader,
+    // written as the whole chord.
     Binding {
-        keys: &[("g", Action::GoToDate)],
-        shown: "g",
+        keys: &[("g", Action::Go)],
+        shown: "gd",
         label: "Pick a date…",
         bar: Bar::Off,
         narrow: Bar::Off,
@@ -1583,6 +1678,8 @@ const MOVE_CARD: &[Binding] = &[
         bar: Bar::Left,
         narrow: Bar::Left,
     },
+    LAST_ROW,
+    HALF_PAGE,
     Binding {
         keys: &[("enter", Action::Confirm)],
         shown: "⏎",
@@ -1835,6 +1932,9 @@ const REPEAT_CARD: &[Binding] = &[
         bar: Bar::Off,
         narrow: Bar::Off,
     },
+    QUIET_GO,
+    LAST_ROW,
+    HALF_PAGE,
 ];
 
 /// The one deliberate question (DESIGN.md section 8). Both answers are a
@@ -1905,6 +2005,7 @@ macro_rules! filter_box {
                 narrow: Bar::Left,
             },
             $($own,)*
+            HALF_PAGE,
             Binding {
                 keys: &[("esc", Action::Cancel)],
                 shown: "esc",
@@ -1982,6 +2083,9 @@ const SPELLING_CARD: &[Binding] = &[
         bar: Bar::Left,
         narrow: Bar::Left,
     },
+    QUIET_GO,
+    LAST_ROW,
+    HALF_PAGE,
 ];
 
 /// The personal dictionary: the words the checker is told to know, as a
@@ -2033,6 +2137,9 @@ const DICTIONARY_LIST: &[Binding] = &[
         bar: Bar::Off,
         narrow: Bar::Off,
     },
+    QUIET_GO,
+    LAST_ROW,
+    HALF_PAGE,
 ];
 
 /// A word being typed into the dictionary. Every letter types there, so
@@ -2082,6 +2189,9 @@ const HELP_OVERLAY: &[Binding] = &[
         bar: Bar::Left,
         narrow: Bar::Left,
     },
+    QUIET_GO,
+    LAST_ROW,
+    HALF_PAGE,
 ];
 
 /// The settings page. Its rows are settings rather than tasks, so a key
@@ -2108,11 +2218,10 @@ const SETTINGS_LIST: &[Binding] = &[
         bar: Bar::Left,
         narrow: Bar::Short(Side::Left, "change"),
     },
-    // `,` is the key that opened the page, so it is also the key that
-    // closes it; `esc` backs out of it the way it backs out of anything.
+    // Escape backs out of the page the way it backs out of anything.
     Binding {
-        keys: &[("esc", Action::Cancel), (",", Action::SettingsPage)],
-        shown: "esc ,",
+        keys: &[("esc", Action::Cancel)],
+        shown: "esc",
         label: "back",
         bar: Bar::Left,
         narrow: Bar::Left,
@@ -2129,27 +2238,16 @@ const SETTINGS_LIST: &[Binding] = &[
         bar: Bar::Off,
         narrow: Bar::Off,
     },
+    GO,
+    LAST_ROW,
+    HALF_PAGE,
+    SEARCH,
+    COMMANDS,
     Binding {
-        keys: &[(":", Action::Commands)],
-        shown: ":",
-        label: "commands",
-        bar: Bar::Off,
-        narrow: Bar::Off,
-    },
-    Binding {
-        keys: &[("?", Action::Help)],
-        shown: "?",
-        label: "help",
         bar: Bar::Right,
-        narrow: Bar::Short(Side::Right, "more"),
+        ..HELP
     },
-    Binding {
-        keys: &[("q", Action::Quit)],
-        shown: "q",
-        label: "quit",
-        bar: Bar::Off,
-        narrow: Bar::Off,
-    },
+    QUIT,
 ];
 
 /// A number or a window size being typed on a settings row. Every letter
@@ -2285,6 +2383,11 @@ pub fn bindings(context: KeyContext) -> &'static [Binding] {
         } => DICTIONARY_LIST,
         KeyContext::Settings { field: true } => SETTINGS_FIELD,
         KeyContext::Settings { field: false } => SETTINGS_LIST,
+        KeyContext::Leader { over: None } => AFTER_G,
+        KeyContext::Leader {
+            over: Some(PopupKind::Move),
+        } => AFTER_G_ON_THE_MOVE_CARD,
+        KeyContext::Leader { over: Some(_) } => AFTER_G_IN_A_LIST,
     }
 }
 
@@ -2382,6 +2485,7 @@ pub fn name(context: KeyContext) -> &'static str {
             ..
         } => "DICTIONARY",
         KeyContext::Settings { .. } => "SETTINGS",
+        KeyContext::Leader { .. } => "GO",
     }
 }
 
@@ -2390,6 +2494,15 @@ pub fn name(context: KeyContext) -> &'static str {
 /// The keys a text field leaves alone (DESIGN.md section 4). Everything
 /// else printable types.
 const KEEPS_ITS_NAME: &[&str] = &["enter", "esc", "tab", "up", "down"];
+
+/// How the key tables write a key press, for a press that means nothing
+/// where it was made; anything that is not a key press has no name.
+pub fn pressed(event: &Event) -> Option<String> {
+    match event {
+        Event::Key(key) if key.kind == KeyEventKind::Press => key_name(key),
+        _ => None,
+    }
+}
 
 /// The action a terminal event means in a context, if it means one.
 pub fn action_for(event: &Event, context: KeyContext) -> Option<Action> {
@@ -2441,7 +2554,10 @@ fn key_action(key: &KeyEvent, context: KeyContext) -> Option<Action> {
         return Some(action);
     }
     let name = key_name(key)?;
-    if KEEPS_ITS_NAME.contains(&name.as_str()) || name.starts_with("alt-") {
+    if KEEPS_ITS_NAME.contains(&name.as_str())
+        || name.starts_with("alt-")
+        || name.starts_with("ctrl-")
+    {
         return bound(context, &name);
     }
     typed(key).map(Action::Insert)
@@ -2458,6 +2574,15 @@ fn bound(context: KeyContext, name: &str) -> Option<Action> {
 
 /// A key press as the table writes it: `a`, `J`, `space`, `alt-t`.
 fn key_name(key: &KeyEvent) -> Option<String> {
+    // The two page motions are the only control keys a table names; the
+    // rest belong to the text fields or to nobody.
+    if key.modifiers == KeyModifiers::CONTROL {
+        return match key.code {
+            KeyCode::Char('d') => Some("ctrl-d".to_owned()),
+            KeyCode::Char('u') => Some("ctrl-u".to_owned()),
+            _ => None,
+        };
+    }
     if key.modifiers.contains(KeyModifiers::CONTROL) {
         return None;
     }

@@ -1319,6 +1319,7 @@ fn help_sections(context: KeyContext, all: bool) -> Vec<(&'static str, KeyContex
             ),
             ("SETTINGS", KeyContext::Settings { field: false }),
             ("SETTING INPUT", KeyContext::Settings { field: true }),
+            ("GO (AFTER g)", KeyContext::Leader { over: None }),
         ];
         for kind in [
             PopupKind::Search,
