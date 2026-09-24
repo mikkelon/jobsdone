@@ -282,12 +282,19 @@ fn cells(glyph: &str) -> u16 {
 
 // ---- dates, rules and places, as words -------------------------------
 
-/// A date beside today: the word where there is one, the date otherwise.
+/// A date beside today: the word where there is one, the weekday for the
+/// rest of the coming week, the date otherwise. The weekday stops short
+/// of a week on, where `Fri` would be read as today.
 fn when(date: Date, today: Date, dates: DateOrder) -> String {
-    if date == today {
-        "today".to_owned()
-    } else {
-        short_label(date, dates)
+    let days = today
+        .until(date)
+        .map_or(i64::MAX, |span| i64::from(span.get_days()));
+    match days {
+        -1 => "yesterday".to_owned(),
+        0 => "today".to_owned(),
+        1 => "tomorrow".to_owned(),
+        2..=6 => weekday_name(Weekday::of(date)).to_owned(),
+        _ => short_label(date, dates),
     }
 }
 

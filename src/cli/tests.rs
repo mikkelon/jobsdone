@@ -950,6 +950,39 @@ fn a_reading_of_an_answer_is_a_list_rather_than_the_envelope() {
 }
 
 #[test]
+fn a_date_either_side_of_today_says_which_side() {
+    let envelope = json!({
+        "schema_version": 1,
+        "ok": true,
+        "data": {
+            "tasks": [
+                {
+                    "id": 12,
+                    "title": "Write the report",
+                    "place": {"kind": "day", "day": "2026-09-07"},
+                    "position": 1,
+                    "open": true,
+                    "focus": false,
+                    "waiting": false,
+                    "closed_at": null,
+                    "due_on": "2026-09-08",
+                    "remind_on": "2026-09-06",
+                    "schedule": null,
+                },
+            ],
+            "total": 1,
+        },
+        "context": {"today": "2026-09-07", "recurrence_pending": false},
+    });
+    let operation = operation(&["task", "list"]);
+    let written = present(&operation, &envelope, Format::Text, DateOrder::DayFirst).unwrap();
+    assert!(
+        written.contains("due Tue 8 Sep (tomorrow) · remind Sun 6 Sep (yesterday)"),
+        "{written:?}"
+    );
+}
+
+#[test]
 fn a_mutation_says_what_it_did_and_how_to_take_it_back() {
     let envelope = json!({
         "schema_version": 1,

@@ -4168,3 +4168,47 @@ fn the_notes_list_shows_both_its_tabs_and_picks_out_the_one_it_is_on() {
         "Shift+Tab moves the highlight"
     );
 }
+
+#[test]
+fn a_date_near_today_is_named_by_its_word_or_its_weekday() {
+    // Friday 5 September 2025.
+    let today = on("2025-09-05");
+    let said = |date: &str| when(on(date), today, DateOrder::DayFirst);
+
+    assert_eq!(said("2025-09-03"), "3 Sep", "two days back is a date");
+    assert_eq!(said("2025-09-04"), "yesterday");
+    assert_eq!(said("2025-09-05"), "today");
+    assert_eq!(said("2025-09-06"), "tomorrow");
+    assert_eq!(said("2025-09-07"), "Sun", "the coming Sunday");
+    assert_eq!(said("2025-09-11"), "Thu", "the coming Thursday");
+    assert_eq!(
+        said("2025-09-12"),
+        "12 Sep",
+        "a week on is a date, not today's weekday"
+    );
+}
+
+#[test]
+fn a_backlog_task_due_tomorrow_says_tomorrow() {
+    let now = at(NOW);
+    let mut model = Model::empty();
+    model.tasks.insert(
+        1,
+        Task {
+            due_on: Some(on("2025-09-06")),
+            remind_on: Some(on("2025-09-08")),
+            ..task(1, "Renew the passport", None, 0)
+        },
+    );
+    let app = app_when(MemStore::holding(model), &now);
+
+    let row = look(&app, 120, 36)
+        .into_iter()
+        .find(|row| row.contains("Renew the passport"))
+        .expect("the backlog row");
+
+    assert!(
+        row.contains("[due tomorrow]  [◷ Mon]"),
+        "the chips say the day: {row:?}"
+    );
+}

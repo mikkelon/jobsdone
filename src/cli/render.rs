@@ -144,10 +144,15 @@ impl Reading<'_> {
         match iso.parse::<Date>() {
             Ok(date) => {
                 let label = day_label(date, self.dates);
-                if Some(iso) == self.today {
-                    format!("{label} (today)")
-                } else {
-                    label
+                let today = self.today.and_then(|today| today.parse::<Date>().ok());
+                let days = today
+                    .and_then(|today| today.until(date).ok())
+                    .map(|span| span.get_days());
+                match days {
+                    Some(-1) => format!("{label} (yesterday)"),
+                    Some(0) => format!("{label} (today)"),
+                    Some(1) => format!("{label} (tomorrow)"),
+                    _ => label,
                 }
             }
             Err(_) => iso.to_owned(),

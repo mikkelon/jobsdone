@@ -124,6 +124,11 @@ Rules:
 - Colour is always paired with text. A due date is `[due 12 Sep]`; the
   yellow is reinforcement. The grey wireframes are the test: everything
   must read without colour.
+- A date on a chip (due, remind, closed) is a word when it is near
+  today: `yesterday`, `today`, `tomorrow`, then the weekday up to six
+  days on (`[due Mon]`). Anything further either way is the date. The
+  command line keeps the full date and adds `(yesterday)`, `(today)` or
+  `(tomorrow)` after it.
 - Blue stands in for Omarchy's `accent` token, which nearly every theme
   defines as its blue. Reminders therefore use cyan, not blue.
 - Accent marks "where the keyboard is" and "the one thing to press". It
