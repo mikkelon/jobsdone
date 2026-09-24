@@ -3,7 +3,7 @@
 
  Fri 5 Sep                                                   ● 2 gr   /   :   ?
 ────────────────────────────────────────────────────────────────────────────────
-  TODAY 6   BACKLOG 12   NOTES 4
+  TODAY 6   BACKLOG 12
 ────────────────────────────────────────────────────────────────────────────────
  FOCUS ────────────────────────────────────────────────────────────────────────
  [ ] Ship invoice export                                                    [↻]
@@ -45,18 +45,18 @@
  TODAY  space done  f focus  a add  b backlog  x del                     ? more
 
 
-== 80×44 · the Archive, the fourth stop of tab
+== 80×44 · the notes page, on the Archive tab
 
 
                                                   esc back to tasks   /   :   ?
 ────────────────────────────────────────────────────────────────────────────────
-  TODAY 6   BACKLOG 12   ARCHIVE 3
+  STACK 4   ARCHIVE 3
 ────────────────────────────────────────────────────────────────────────────────
   ▪ Retro format ideas: start/stop/continue                               today
   ▪ Reply to tender Q2, sent 11 Aug                                      3 days
   ▪ Old VPN steps, before the switch                                 last month
 
- NOTE MON 22 SEP 09:12 · ARCHIVED TODAY ───────────────────────────────────────
+ Scratchpad Mon 22 Sep 09:12 · archived today ─────────────────────────────────
   Retro format ideas:
   - start / stop / continue
   - sailboat (wind, anchors, rocks)

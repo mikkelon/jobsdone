@@ -34,5 +34,5 @@
                                                            │
                                                            │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- BACKLOG  t to today  m move…  d due by  r remind on  w waiting  R repeat  a add  e edit  x delete      h/l pane  g go…
+ BACKLOG  t to today  m move…  d due by  r remind on  w waiting  R repeat  a add  e edit  x delete  tab h/l pane  g go…
 

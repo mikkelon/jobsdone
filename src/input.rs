@@ -40,11 +40,12 @@ pub enum NotesPane {
     Filter,
 }
 
-/// Which list the left pane of the notes page shows. `tab` switches
-/// between them (DESIGN.md section 9).
+/// Which tab the list pane of the notes page is on: the Stack of live
+/// notes or the Archive. Shift+Tab switches between them (DESIGN.md
+/// section 9).
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum NotesList {
-    Notes,
+    Stack,
     Archive,
 }
 
@@ -484,7 +485,7 @@ macro_rules! home_tables {
         $(#[$doc])*
         const $narrow: &[Binding] = home_table![
             steps: $steps, $steps_narrow;
-            panes: TABS;
+            panes: PANES_NARROW;
             $($own),*
         ];
     };
@@ -660,23 +661,26 @@ const GO_NOWHERE: Binding = Binding {
     narrow: Bar::Right,
 };
 
-/// Two panes side by side.
+/// The other pane of the page: `tab` goes round the panes, and `h` and `l`
+/// go to the one on that side, at any width, since a narrow window has
+/// the same panes and only shows the focused one (DESIGN.md section 4).
 const PANES: Binding = Binding {
-    keys: &[("h", Action::PaneLeft), ("l", Action::PaneRight)],
-    shown: "h/l",
+    keys: &[
+        ("tab", Action::NextPane),
+        ("h", Action::PaneLeft),
+        ("l", Action::PaneRight),
+    ],
+    shown: "tab h/l",
     label: "pane",
     bar: Bar::Right,
     narrow: Bar::Off,
 };
 
-/// The tabs a narrow window collapses to, which go round: Today,
-/// Backlog, Notes, Archive and Today again.
-const TABS: Binding = Binding {
-    keys: &[("tab", Action::NextTab)],
-    shown: "tab",
-    label: "next tab",
+/// The same keys in a narrow window, whose bar has no room to name them;
+/// the pane row at the top of the window shows which pane is on.
+const PANES_NARROW: Binding = Binding {
     bar: Bar::Off,
-    narrow: Bar::Off,
+    ..PANES
 };
 
 home_tables![
@@ -1000,14 +1004,11 @@ macro_rules! notes_table {
                 bar: Bar::Left,
                 narrow: Bar::Short(Side::Left, "back"),
             },
+            // The tab strip in the header shows the other tab, so the key
+            // that switches to it is the one the bar keeps when it is
+            // short of room.
+            PANES,
             $tab,
-            Binding {
-                keys: &[("h", Action::PaneLeft), ("l", Action::PaneRight)],
-                shown: "h/l",
-                label: "pane",
-                bar: Bar::Right,
-                narrow: Bar::Off,
-            },
             Binding {
                 keys: &[
                     ("j", Action::Down),
@@ -1062,36 +1063,24 @@ const UNARCHIVE_NOTE: Binding = Binding {
     narrow: Bar::Off,
 };
 
-/// `tab` from Notes, at either width, is the Archive.
+/// Shift+Tab switches the tab of the list pane: from the Stack, the
+/// Archive, and back. Switching a tab is rarer than switching a pane, so
+/// it is the chord and `tab` the key (DESIGN.md section 4).
 const TO_THE_ARCHIVE: Binding = Binding {
-    keys: &[("tab", Action::NextTab)],
-    shown: "tab",
-    label: "archive",
-    bar: Bar::Right,
+    keys: &[("shift-tab", Action::NextTab)],
+    shown: "shift-tab",
+    label: "switch tab",
+    bar: Bar::Short(Side::Right, "archive"),
     narrow: Bar::Off,
 };
 
-/// `tab` from the Archive is Notes when the list is a pane of its own,
-/// and the next tab, Today, when the window has collapsed to tabs.
-const BACK_TO_THE_NOTES: Binding = Binding {
-    keys: &[("tab", Action::NextTab)],
-    shown: "tab",
-    label: "notes",
-    bar: Bar::Right,
-    narrow: Bar::Off,
-};
-
-const ON_TO_TODAY: Binding = Binding {
-    keys: &[("tab", Action::NextTab)],
-    shown: "tab",
-    label: "next tab",
-    bar: Bar::Off,
-    narrow: Bar::Off,
+const TO_THE_STACK: Binding = Binding {
+    bar: Bar::Short(Side::Right, "stack"),
+    ..TO_THE_ARCHIVE
 };
 
 const NOTES_LIST: &[Binding] = notes_table!(ARCHIVE_NOTE, TO_THE_ARCHIVE);
-const ARCHIVE_LIST: &[Binding] = notes_table!(UNARCHIVE_NOTE, BACK_TO_THE_NOTES);
-const ARCHIVE_LIST_NARROW: &[Binding] = notes_table!(UNARCHIVE_NOTE, ON_TO_TODAY);
+const ARCHIVE_LIST: &[Binding] = notes_table!(UNARCHIVE_NOTE, TO_THE_STACK);
 
 /// The filter at the top of the notes list while it has the keyboard.
 /// Every letter types into it; the list under it still moves and opens,
@@ -1136,8 +1125,9 @@ const NOTES_FILTER: &[Binding] = &[
 ];
 
 const NOTES_NOTE: &[Binding] = &[
+    // `tab` is the other pane, the list, as it is from the list to here.
     Binding {
-        keys: &[("esc", Action::Cancel)],
+        keys: &[("esc", Action::Cancel), ("tab", Action::NextPane)],
         shown: "esc",
         label: "back to the list",
         bar: Bar::Left,
@@ -2182,8 +2172,8 @@ const HELP_OVERLAY: &[Binding] = &[
         narrow: Bar::Left,
     },
     Binding {
-        keys: &[("tab", Action::NextPane)],
-        shown: "tab",
+        keys: &[("shift-tab", Action::NextTab)],
+        shown: "shift-tab",
         label: "current/all keys",
         bar: Bar::Left,
         narrow: Bar::Left,
@@ -2294,12 +2284,10 @@ pub fn bindings(context: KeyContext) -> &'static [Binding] {
         KeyContext::Notes {
             pane: NotesPane::List,
             list,
-            narrow,
             ..
-        } => match (list, narrow) {
-            (NotesList::Notes, _) => NOTES_LIST,
-            (NotesList::Archive, false) => ARCHIVE_LIST,
-            (NotesList::Archive, true) => ARCHIVE_LIST_NARROW,
+        } => match list {
+            NotesList::Stack => NOTES_LIST,
+            NotesList::Archive => ARCHIVE_LIST,
         },
         KeyContext::Notes {
             pane: NotesPane::Note,
@@ -2419,9 +2407,9 @@ pub fn name(context: KeyContext) -> &'static str {
         } => "DAYS",
         KeyContext::Notes {
             pane: NotesPane::List,
-            list: NotesList::Notes,
+            list: NotesList::Stack,
             ..
-        } => "NOTES",
+        } => "STACK",
         KeyContext::Notes {
             pane: NotesPane::List,
             list: NotesList::Archive,
@@ -2430,7 +2418,7 @@ pub fn name(context: KeyContext) -> &'static str {
         KeyContext::Notes {
             pane: NotesPane::Note,
             ..
-        } => "NOTE",
+        } => "SCRATCHPAD",
         KeyContext::Notes {
             pane: NotesPane::Filter,
             ..
@@ -2492,7 +2480,7 @@ pub fn name(context: KeyContext) -> &'static str {
 
 /// The keys a text field leaves alone (DESIGN.md section 4). Everything
 /// else printable types.
-const KEEPS_ITS_NAME: &[&str] = &["enter", "esc", "tab", "up", "down"];
+const KEEPS_ITS_NAME: &[&str] = &["enter", "esc", "tab", "shift-tab", "up", "down"];
 
 /// The pages, for saying where a key that does nothing here does
 /// something: every context a key is pressed on when no field or card
@@ -2524,7 +2512,7 @@ const PAGES: &[KeyContext] = &[
     },
     KeyContext::Notes {
         pane: NotesPane::List,
-        list: NotesList::Notes,
+        list: NotesList::Stack,
         text_field: false,
         narrow: false,
     },
@@ -2684,7 +2672,11 @@ fn key_name(key: &KeyEvent) -> Option<String> {
         KeyCode::Char(typed) => typed.to_string(),
         KeyCode::Enter => "enter".to_owned(),
         KeyCode::Esc => "esc".to_owned(),
-        KeyCode::Tab | KeyCode::BackTab => "tab".to_owned(),
+        // A terminal sends Shift+Tab as a key of its own, and one that
+        // reports modifiers may send it as Tab with Shift held.
+        KeyCode::Tab if key.modifiers.contains(KeyModifiers::SHIFT) => "shift-tab".to_owned(),
+        KeyCode::Tab => "tab".to_owned(),
+        KeyCode::BackTab => "shift-tab".to_owned(),
         KeyCode::Up => "up".to_owned(),
         KeyCode::Down => "down".to_owned(),
         KeyCode::Left => "left".to_owned(),

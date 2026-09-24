@@ -1111,7 +1111,7 @@ impl App {
             came_from: Page::Home,
             pane: Pane::Day,
             notes_pane: NotesPane::List,
-            notes_list: NotesList::Notes,
+            notes_list: NotesList::Stack,
             filter: None,
             popup: None,
             editor: None,
@@ -1373,7 +1373,7 @@ impl App {
             Action::HalfPageDown => self.jump(self.half_page()),
             Action::HalfPageUp => self.jump(-self.half_page()),
             Action::BacklogPane => self.go_home(Pane::Backlog),
-            Action::NotesPage => self.go_to_the_notes(NotesList::Notes),
+            Action::NotesPage => self.go_to_the_notes(NotesList::Stack),
             Action::ArchivePage => self.go_to_the_notes(NotesList::Archive),
             Action::SettingsPage => self.turn_to_the_settings(),
             Action::OpenReview => self.reopen_the_review(),
@@ -2828,23 +2828,31 @@ impl App {
         {
             return;
         }
-        if let Some(popup) = &mut self.popup
-            && let Card::Help { all, .. } = &mut popup.card
-        {
-            *all = !*all;
-            popup.selected = 0;
+        if let Some(popup) = &mut self.popup {
+            if let Card::Date(draft) = &mut popup.card {
+                draft.in_calendar = !draft.in_calendar;
+            }
             return;
         }
-        if let Some(popup) = &mut self.popup
-            && let Card::Date(draft) = &mut popup.card
-        {
-            draft.in_calendar = !draft.in_calendar;
+        // A half-typed title keeps the keyboard until it is answered.
+        if self.editor.is_some() {
             return;
         }
-        // The filter hands the keyboard to the list it is narrowing,
-        // where single keys work again.
-        if self.popup.is_none() && self.notes_pane == NotesPane::Filter {
-            self.notes_pane = NotesPane::List;
+        match (self.page, self.notes_pane) {
+            (Page::Home, _) => {
+                self.pane = match self.pane {
+                    Pane::Day => Pane::Backlog,
+                    Pane::Backlog => Pane::Day,
+                }
+            }
+            // The filter hands the keyboard to the list it is narrowing,
+            // where single keys work again.
+            (Page::Notes, NotesPane::Filter) => self.notes_pane = NotesPane::List,
+            (Page::Notes, NotesPane::List) => self.open_the_note(),
+            (Page::Notes, NotesPane::Note) => {
+                self.leave_the_note();
+            }
+            (Page::Settings, _) => {}
         }
     }
 
@@ -3316,7 +3324,7 @@ impl App {
     /// the whole body, though a row shows its first line.
     pub fn shown_notes(&self) -> Vec<&NoteRow> {
         let view = match self.notes_list {
-            NotesList::Notes => &self.views.notes,
+            NotesList::Stack => &self.views.notes,
             NotesList::Archive => &self.views.archive,
         };
         let Some(filter) = self
@@ -3363,7 +3371,7 @@ impl App {
         };
         let next = self.neighbour_of(List::Notes, RowId::Note(note));
         let command = match self.notes_list {
-            NotesList::Notes => Command::ArchiveNote { note },
+            NotesList::Stack => Command::ArchiveNote { note },
             NotesList::Archive => Command::UnarchiveNote { note },
         };
         if self.run(command).is_some()
@@ -3392,7 +3400,7 @@ impl App {
         }
         // A new note is in Notes, and nothing typed yet to match a
         // filter, so the list it is at the top of is the whole of Notes.
-        self.notes_list = NotesList::Notes;
+        self.notes_list = NotesList::Stack;
         self.filter = None;
         self.notes_pane = NotesPane::List;
         if let Some(change) = self.run(Command::CreateNote)
@@ -3591,7 +3599,7 @@ impl App {
         }
         // The recovery note is a new note, so it is in Notes whichever
         // list the one it came from was in.
-        self.notes_list = NotesList::Notes;
+        self.notes_list = NotesList::Stack;
         self.filter = None;
         self.set_cursor(List::Notes, RowId::Note(recovery));
         self.say(
@@ -4348,7 +4356,7 @@ impl App {
             List::Backlog => self.cursors.backlog,
             List::Days => self.cursors.days,
             List::Notes => match self.notes_list {
-                NotesList::Notes => self.cursors.notes,
+                NotesList::Stack => self.cursors.notes,
                 NotesList::Archive => self.cursors.archive,
             },
             List::Review => self.cursors.review,
@@ -4450,7 +4458,7 @@ impl App {
             List::Backlog => &mut self.cursors.backlog,
             List::Days => &mut self.cursors.days,
             List::Notes => match self.notes_list {
-                NotesList::Notes => &mut self.cursors.notes,
+                NotesList::Stack => &mut self.cursors.notes,
                 NotesList::Archive => &mut self.cursors.archive,
             },
             List::Review => &mut self.cursors.review,
@@ -4624,6 +4632,13 @@ impl App {
             );
             return;
         }
+        // The two keys that move between panes and tabs say which there
+        // is none of, rather than where else they work.
+        match key {
+            "tab" => return self.say("This page has one pane.", false),
+            "shift-tab" => return self.say("This pane has no tabs.", false),
+            _ => {}
+        }
         if let Some(said) = input::elsewhere(key) {
             self.say(said, false);
         }
@@ -4652,26 +4667,24 @@ impl App {
         }
     }
 
-    /// `tab`: the next tab of a window collapsed to tabs, which goes
-    /// round Today, Backlog, Notes and Archive; on the notes page of a
-    /// wide window, the other list.
+    /// Shift+Tab: the next tab of the pane the keyboard is in, which is
+    /// the notes list's Stack and Archive, or the help overlay's current
+    /// and all keys (DESIGN.md section 4).
     fn next_tab(&mut self) {
-        if self.popup.is_some() || self.editor.is_some() || self.draft.is_some() {
+        if let Some(popup) = &mut self.popup {
+            if let Card::Help { all, .. } = &mut popup.card {
+                *all = !*all;
+                popup.selected = 0;
+            }
             return;
         }
-        let narrow = self.layout.narrow;
-        match (self.page, self.pane, self.notes_list) {
-            (Page::Home, Pane::Day, _) if narrow => self.pane = Pane::Backlog,
-            (Page::Home, Pane::Backlog, _) if narrow => self.enter_the_notes(),
-            (Page::Notes, _, NotesList::Notes) => self.show_the_list(NotesList::Archive),
-            (Page::Notes, _, NotesList::Archive) if narrow => {
-                self.leave_the_notes();
-                self.page = Page::Home;
-                self.pane = Pane::Day;
-            }
-            (Page::Notes, _, NotesList::Archive) => self.show_the_list(NotesList::Notes),
-            _ => {}
+        if self.editor.is_some() || self.draft.is_some() || self.page != Page::Notes {
+            return;
         }
+        self.show_the_list(match self.notes_list {
+            NotesList::Stack => NotesList::Archive,
+            NotesList::Archive => NotesList::Stack,
+        });
     }
 
     /// One of the notes page's two lists in the left pane. The filter,
@@ -4691,7 +4704,7 @@ impl App {
     fn enter_the_notes(&mut self) {
         self.page = Page::Notes;
         self.notes_pane = NotesPane::List;
-        self.notes_list = NotesList::Notes;
+        self.notes_list = NotesList::Stack;
         self.filter = None;
     }
 

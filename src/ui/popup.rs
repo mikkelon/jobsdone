@@ -1282,10 +1282,10 @@ fn help_sections(context: KeyContext, all: bool) -> Vec<(&'static str, KeyContex
                 },
             ),
             (
-                "NOTES LIST",
+                "STACK",
                 KeyContext::Notes {
                     pane: NotesPane::List,
-                    list: NotesList::Notes,
+                    list: NotesList::Stack,
                     text_field: false,
                     narrow,
                 },
@@ -1303,16 +1303,16 @@ fn help_sections(context: KeyContext, all: bool) -> Vec<(&'static str, KeyContex
                 "NOTES FILTER",
                 KeyContext::Notes {
                     pane: NotesPane::Filter,
-                    list: NotesList::Notes,
+                    list: NotesList::Stack,
                     text_field: true,
                     narrow,
                 },
             ),
             (
-                "NOTE EDITING",
+                "SCRATCHPAD",
                 KeyContext::Notes {
                     pane: NotesPane::Note,
-                    list: NotesList::Notes,
+                    list: NotesList::Stack,
                     text_field: true,
                     narrow,
                 },

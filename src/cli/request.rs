@@ -550,7 +550,7 @@ count (integer 1..=50).",
         options: &[("--bodies", false), ("--archived", false)],
         view: View::Notes,
         then: Then::Nothing,
-        summary: "the scratchpad notes, newest first",
+        summary: "the notes, newest first",
         usage: "jobsdone note list [--bodies] [--archived]",
         detail: "\
 First lines only unless --bodies. --archived lists the archived notes

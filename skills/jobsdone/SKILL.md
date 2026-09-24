@@ -1,6 +1,6 @@
 ---
 name: jobsdone
-description: Read and manage tasks, daily plans, recurring schedules, scratchpad notes, and settings in the local jobsdone task manager through its CLI. Use when the user wants to work with jobsdone data.
+description: Read and manage tasks, daily plans, recurring schedules, notes, and settings in the local jobsdone task manager through its CLI. Use when the user wants to work with jobsdone data.
 ---
 
 # Jobsdone

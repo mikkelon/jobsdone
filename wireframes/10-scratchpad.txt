@@ -1,9 +1,9 @@
 == 120×36 · floating window, notes page
 
 
- 4 notes                                                                                  esc back to today   /   :   ?
+ editing · autosave                                                                         esc back to list alt-h help
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- Notes                            A archive   Note Thu 4 Sep 16:40                                             esc back
+  STACK 4   ARCHIVE 0                         Scratchpad Thu 4 Sep 16:40                                       esc back
 ────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────
   ▪ Mention to Anna: CI runner b  yesterday │  Mention to Anna:
   ▪ Draft reply to tender Q3: "W     2 days │  - CI runner budget
@@ -34,15 +34,15 @@
                                             │
                                             │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- NOTE  type to edit  esc back to the list                     in the list:   ⏎ open  a add  x delete  esc back to today
+ SCRATCHPAD  type to edit  esc back to the list               in the list:   ⏎ open  a add  x delete  esc back to today
 
 
-== 120×36 · tab: the archive in the same pane
+== 120×36 · shift-tab: the Archive tab of the same pane
 
 
- 4 notes                                                                                  esc back to tasks   /   :   ?
+                                                                                          esc back to tasks   /   :   ?
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- Archive 12                     A unarchive   Note Mon 22 Sep 09:12 · archived today
+  STACK 4   ARCHIVE 12                        Scratchpad Mon 22 Sep 09:12 · archived today
 ────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────
   ▪ Retro format ideas: start/st      today │  Retro format ideas:
   ▪ Reply to tender Q2, sent 11      3 days │  - start / stop / continue
@@ -73,15 +73,15 @@
                                             │
                                             │
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- ARCHIVE  y/alt-y copy note  ⏎ open  a add  A unarchive  x delete  esc back to tasks         tab notes  h/l pane  g go…
+ ARCHIVE  y/alt-y copy note  ⏎ open  a add  A unarchive  x delete  esc back to tasks             shift-tab stack  g go…
 
 
 == 120×36 · / filters the list shown
 
 
- 4 notes                                                                                  esc back to tasks   /   :   ?
+                                                                                          esc back to tasks   /   :   ?
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
- Notes                         A archive 12   Note Thu 4 Sep 16:40
+  STACK 4   ARCHIVE 12                        Scratchpad Thu 4 Sep 16:40
 ────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────
   / anna█                                   │  Mention to Anna:
   ▪ Mention to Anna: CI runner b  yesterday │  - CI runner budget

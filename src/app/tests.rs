@@ -2504,26 +2504,48 @@ fn a_field_holds_the_keyboard_until_it_is_answered() {
 /// A window collapsed to tabs goes round four of them with `tab`:
 /// Today, Backlog, Notes, Archive, and Today again.
 #[test]
-fn tab_goes_round_the_four_tabs_of_a_narrow_window() {
+fn tab_goes_between_the_panes_and_shift_tab_between_the_tabs_at_any_width() {
+    for narrow in [false, true] {
+        let mut app = started();
+        app.set_layout(Layout {
+            narrow,
+            ..Layout::default()
+        });
+
+        app.update(Action::NextPane);
+        assert_eq!(app.pane(), Pane::Backlog);
+        app.update(Action::NextPane);
+        assert_eq!(app.pane(), Pane::Day, "round, and never off the page");
+        app.update(Action::NextTab);
+        assert_eq!(app.page(), Page::Home, "the home page's panes have no tabs");
+
+        app.update(Action::NotesPage);
+        app.update(Action::NextTab);
+        assert_eq!(app.notes_list(), NotesList::Archive);
+        app.update(Action::NextTab);
+        assert_eq!(app.notes_list(), NotesList::Stack);
+
+        // The notes page is always turned to on the Stack.
+        app.update(Action::NextTab);
+        app.update(Action::Today);
+        app.update(Action::NotesPage);
+        assert_eq!(app.notes_list(), NotesList::Stack);
+    }
+}
+
+#[test]
+fn tab_opens_the_cursor_note_and_tab_in_it_goes_back_to_the_list() {
     let mut app = started();
-    app.set_layout(Layout {
-        narrow: true,
-        ..Layout::default()
-    });
-    let stop = |app: &App| (app.page(), app.pane(), app.notes_list());
+    notes_saying(&mut app, &["Milk"]);
+    assert_eq!(app.notes_pane(), NotesPane::List);
 
-    app.update(Action::NextTab);
-    assert_eq!(stop(&app), (Page::Home, Pane::Backlog, NotesList::Notes));
-    app.update(Action::NextTab);
-    assert_eq!(stop(&app), (Page::Notes, Pane::Backlog, NotesList::Notes));
-    app.update(Action::NextTab);
-    assert_eq!(stop(&app), (Page::Notes, Pane::Backlog, NotesList::Archive));
-    app.update(Action::NextTab);
-    assert_eq!(stop(&app), (Page::Home, Pane::Day, NotesList::Archive));
+    app.update(Action::NextPane);
+    assert_eq!(app.notes_pane(), NotesPane::Note);
+    assert!(app.draft().is_some());
 
-    // The notes page is always turned to on Notes.
-    app.update(Action::NotesPage);
-    assert_eq!(app.notes_list(), NotesList::Notes);
+    app.update(Action::NextPane);
+    assert_eq!(app.notes_pane(), NotesPane::List);
+    assert!(app.draft().is_none());
 }
 
 #[test]
@@ -2545,7 +2567,7 @@ fn gn_goes_to_the_notes_and_escape_comes_back() {
         app.key_context(),
         KeyContext::Notes {
             pane: NotesPane::List,
-            list: NotesList::Notes,
+            list: NotesList::Stack,
             text_field: false,
             narrow: false,
         }
@@ -2648,7 +2670,7 @@ fn tab_on_the_notes_page_switches_to_the_archive_and_back() {
         }
     );
     app.update(Action::NextTab);
-    assert_eq!(app.notes_list(), NotesList::Notes);
+    assert_eq!(app.notes_list(), NotesList::Stack);
     assert_eq!(
         app.page(),
         Page::Notes,
@@ -2660,7 +2682,7 @@ fn tab_on_the_notes_page_switches_to_the_archive_and_back() {
     app.update(Action::NotesPage);
     assert_eq!(
         app.notes_list(),
-        NotesList::Notes,
+        NotesList::Stack,
         "the page is always entered on notes"
     );
 }
@@ -2770,7 +2792,7 @@ fn the_filter_narrows_the_list_as_it_is_typed_best_match_first() {
         app.key_context(),
         KeyContext::Notes {
             pane: NotesPane::Filter,
-            list: NotesList::Notes,
+            list: NotesList::Stack,
             text_field: true,
             narrow: false,
         },
@@ -2890,7 +2912,7 @@ fn a_new_note_opens_for_typing_straight_away() {
         app.key_context(),
         KeyContext::Notes {
             pane: NotesPane::Note,
-            list: NotesList::Notes,
+            list: NotesList::Stack,
             text_field: true,
             narrow: false,
         },
@@ -5844,7 +5866,7 @@ fn escape_leaves_the_word_as_it_was_and_gives_the_note_back() {
         app.key_context(),
         KeyContext::Notes {
             pane: NotesPane::Note,
-            list: NotesList::Notes,
+            list: NotesList::Stack,
             text_field: true,
             narrow: false,
         },
@@ -6325,7 +6347,7 @@ fn every_place_is_reached_from_every_page() {
     app.update(Action::NotesPage);
     assert!(app.review().is_none());
     assert_eq!(app.page(), Page::Notes);
-    assert_eq!(app.notes_list(), NotesList::Notes);
+    assert_eq!(app.notes_list(), NotesList::Stack);
 
     // From the notes: the settings, and from there the archive.
     app.update(Action::SettingsPage);

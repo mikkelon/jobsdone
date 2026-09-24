@@ -28,8 +28,9 @@ through every wireframe and names the view it is drawn from.
 | schedule        | A repeat rule with a title. It creates copies.                           |
 | copy            | A task created by a schedule for one date. Ordinary from then on.        |
 | review          | The two-step morning pass over the pile and the surfaced tasks.          |
-| note            | A plain-text scratchpad entry.                                           |
-| archived        | A live note put out of the notes list without being deleted.             |
+| note            | A plain-text entry of the notes, short-lived and untitled.               |
+| stack           | The live notes that are not archived, newest first.                      |
+| archived        | A live note put out of the stack without being deleted.                  |
 | command         | One change to the model. Every command has an inverse.                   |
 | settings        | The fourteen values that change what the rules do. Section 19.           |
 
@@ -576,11 +577,11 @@ rewrite that day's record.
 | deleted_at | instant or none |
 | archived_at | instant or none |
 
-A live note is in one of two lists: the notes, where `archived_at` is
+A live note is in one of two lists: the stack, where `archived_at` is
 none, or the archive. Archived notes never expire and are not in the note
 count the home page shows.
 
-The notes list is ordered by `created_at`, newest first, and editing does
+The stack is ordered by `created_at`, newest first, and editing does
 not move a note. The list row shows the first line of the body and
 `created_at`, which the screen renders as an age. It is the age of the
 note rather than of its last edit, because that is the order the list is
@@ -761,7 +762,7 @@ is drawn from.
 | 07 Repeat               | rule shapes and `next_dates` (10); CreateSchedule, SetRule, StopSchedule; the schedule list (7) |
 | 08 History              | day view for a past day (6) including Moved; day list with counts (6)                            |
 | 09 Search               | matches (14); place day; `↻` from `schedule_id`                                                 |
-| 10 Scratchpad           | notes and the archive (15); CreateNote, EditNote, DeleteNote, ArchiveNote, UnarchiveNote; the filter |
+| 10 Notes page           | the stack and the archive (15); CreateNote, EditNote, DeleteNote, ArchiveNote, UnarchiveNote; the filter |
 | 11 Palette and help     | the command list (12) and the key map in DESIGN.md; no model state                              |
 | 12 Empty states         | every view above when its contents are empty, the archive included; the empty search's AddTask   |
 | 13 Settings             | the settings (19); `change_settings` and the sentence it refuses an empty week with             |

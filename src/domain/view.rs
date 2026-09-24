@@ -174,9 +174,9 @@ pub struct DayListRow {
     pub open: usize,
 }
 
-/// One of the scratchpad's two lists, the notes or the archive, with
+/// One of the notes page's two lists, the stack or the archive, with
 /// the count of each. `count` is the notes in the list, which is what
-/// the home page shows beside `n`; archived notes are not in it.
+/// the home page shows beside `gn`; archived notes are not in it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
 pub struct NotesView {
     pub rows: Vec<NoteRow>,

@@ -36,12 +36,9 @@ mod settings;
 #[cfg(test)]
 mod tests;
 
-/// Under this many columns the two panes collapse to tabs (DESIGN.md
-/// section 1).
+/// Under this many columns only the focused pane is shown, and a row of
+/// tabs names the panes (DESIGN.md section 1).
 const NARROW: u16 = 100;
-
-/// The tabs a narrow window has, in the order `h` and `l` walk them.
-const TABS: [&str; 3] = ["TODAY", "BACKLOG", "NOTES"];
 
 /// The notes page gives the open note the width; the list is a fixed
 /// column beside it rather than half the window.
@@ -600,15 +597,14 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
                 ],
             ),
         ),
+        // The notes page's counts are on the list's tabs, so the status
+        // line does not say them again (DESIGN.md section 2).
         (Page::Notes, _) if app.draft().is_some() => (
-            with(
-                (!narrow).then(|| quiet(&counted(app.notes().count, "note", "notes"))),
-                vec![quiet(if canvas.width() >= 80 {
-                    "editing · autosave"
-                } else {
-                    "editing"
-                })],
-            ),
+            vec![quiet(if canvas.width() >= 80 {
+                "editing · autosave"
+            } else {
+                "editing"
+            })],
             vec![keys(&[
                 (
                     "esc",
@@ -622,11 +618,7 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
             ])],
         ),
         (Page::Notes, _) => (
-            if narrow {
-                vec![]
-            } else {
-                vec![quiet(&counted(app.notes().count, "note", "notes"))]
-            },
+            vec![],
             vec![
                 key("esc", "back to tasks"),
                 key("/", ""),
@@ -736,50 +728,72 @@ fn hint_bar(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
     }
 }
 
-/// The three tabs that stand in for the panes when the window is narrow.
-fn tab_row(canvas: &mut Canvas, app: &App, y: u16) {
-    let here = match (app.page(), app.pane()) {
-        (Page::Notes, _) => 2,
-        (Page::Home, Pane::Day) => 0,
-        (Page::Home, Pane::Backlog) => 1,
-        // The settings are not one of the tabs: the page takes the
-        // window at any width and `,` is the only way on and off it.
-        (Page::Settings, _) => return,
-    };
-    // Stepped to another day, the first two tabs are that day and the
-    // list of days, because that is what the two panes hold.
-    let browsing = app.shown() != Shown::Today;
-    // The third tab is two stops of `tab`, Notes and then the Archive,
-    // and is named for whichever of them it is on.
-    let archive = app.page() == Page::Notes && app.notes_list() == NotesList::Archive;
-    let (third, notes) = if archive {
-        ("ARCHIVE", app.notes().archived)
-    } else {
-        (TABS[2], app.notes().count)
-    };
-    let tabs: [String; 3] = if browsing {
-        [
-            day_label(app.showing(), app.dates()).to_uppercase(),
-            "DAYS".to_owned(),
-            third.to_owned(),
-        ]
-    } else {
-        [TABS[0].to_owned(), TABS[1].to_owned(), third.to_owned()]
-    };
-    let counts = if browsing {
-        [app.day().counts.planned, app.days().days().count(), notes]
-    } else {
-        [app.day().counts.open, app.backlog().open, notes]
-    };
-    let mut x = 1;
-    for (at, (name, count)) in tabs.iter().zip(counts).enumerate() {
-        let style = if at == here {
-            accent().add_modifier(Modifier::REVERSED)
+/// A row of tabs, each named with its count, the one that is on picked
+/// out in reverse video: in the accent colour where the keyboard is, as
+/// a pane title is, and plain where it is not. The narrow window's pane
+/// row and the notes list's header are both drawn with it, so they
+/// cannot come to look different.
+fn tab_strip(canvas: &mut Canvas, x: u16, y: u16, tabs: &[(String, usize, bool)], focused: bool) {
+    let mut x = x;
+    let on = if focused { accent() } else { bold() };
+    for (name, count, here) in tabs {
+        let style = if *here {
+            on.add_modifier(Modifier::REVERSED)
         } else {
             dim()
         };
         x = canvas.put(x, y, &format!(" {name} {count} "), style) + 1;
     }
+}
+
+/// The notes list's two tabs, the Stack of live notes and the Archive.
+fn notes_tabs(app: &App) -> [(String, usize, bool); 2] {
+    let on = app.notes_list();
+    [
+        (
+            "STACK".to_owned(),
+            app.notes().count,
+            on == NotesList::Stack,
+        ),
+        (
+            "ARCHIVE".to_owned(),
+            app.notes().archived,
+            on == NotesList::Archive,
+        ),
+    ]
+}
+
+/// The top row of a narrow window, where the pane headers would be. On
+/// the home page it is the two panes, of which the window shows the
+/// focused one; on the notes page, where the list and the note are
+/// stacked and both on screen, it is the list's tabs. The settings page
+/// keeps its own header.
+fn tab_row(canvas: &mut Canvas, app: &App, y: u16) {
+    let tabs: Vec<(String, usize, bool)> = match app.page() {
+        Page::Home => {
+            let on_day = app.pane() == Pane::Day;
+            // Stepped to another day, the two panes are that day and the
+            // list of days.
+            if app.shown() != Shown::Today {
+                vec![
+                    (
+                        day_label(app.showing(), app.dates()).to_uppercase(),
+                        app.day().counts.planned,
+                        on_day,
+                    ),
+                    ("DAYS".to_owned(), app.days().days().count(), !on_day),
+                ]
+            } else {
+                vec![
+                    ("TODAY".to_owned(), app.day().counts.open, on_day),
+                    ("BACKLOG".to_owned(), app.backlog().open, !on_day),
+                ]
+            }
+        }
+        Page::Notes => notes_tabs(app).to_vec(),
+        Page::Settings => return,
+    };
+    tab_strip(canvas, 1, y, &tabs, true);
 }
 
 // ---- the panes -------------------------------------------------------
@@ -1176,7 +1190,6 @@ fn backlog_pane<'a>(app: &'a App, adding: bool) -> PaneView<'a> {
 /// archive. Notes and new-note row are two groups rather than one so
 /// that a blank row separates them, which is what keeps the list a list.
 fn notes_pane(app: &App) -> PaneView<'_> {
-    let view = app.notes();
     let rows = app.shown_notes();
     let filtered = app
         .filter()
@@ -1184,20 +1197,12 @@ fn notes_pane(app: &App) -> PaneView<'_> {
     // A filter that matches nothing says so, and how to be rid of it.
     let empty = [quiet("Nothing matches."), key("esc", "clears the filter")];
     match app.notes_list() {
-        NotesList::Notes => PaneView {
-            title: "Notes".to_owned(),
+        // The header is the list's tabs, drawn by `tab_strip`, so the
+        // title is the tab's name and the counts are on the tabs.
+        NotesList::Stack => PaneView {
+            title: "Stack".to_owned(),
             sub: String::new(),
-            // The count of notes is in the status line; the header names
-            // the key that puts one away and how many are (DESIGN.md
-            // section 9).
-            right: if view.archived > 0 {
-                vec![
-                    Part::Key("A".to_owned()),
-                    words(&format!("archive {}", view.archived), dim()),
-                ]
-            } else {
-                key("A", "archive")
-            },
+            right: Vec::new(),
             // The new-note row is the whole empty state (DESIGN.md
             // section 10).
             sections: if filtered && rows.is_empty() {
@@ -1223,8 +1228,8 @@ fn notes_pane(app: &App) -> PaneView<'_> {
         },
         NotesList::Archive => PaneView {
             title: "Archive".to_owned(),
-            sub: view.archived.to_string(),
-            right: key("A", "unarchive"),
+            sub: String::new(),
+            right: Vec::new(),
             sections: if rows.is_empty() {
                 Vec::new()
             } else {
@@ -1348,7 +1353,11 @@ fn pane(
     // A narrow window puts the tab row where the pane headers would be.
     // The settings page is not one of the tabs, so it keeps its header
     // at every width.
-    if !layout.narrow || list == List::Settings {
+    if list == List::Notes && !layout.narrow {
+        // The list pane has tabs, and its header is all of them, the one
+        // it is on picked out, so switching is seen to happen.
+        tab_strip(canvas, x + 1, rows.headers, &notes_tabs(app), focused);
+    } else if !layout.narrow || list == List::Settings {
         header(canvas, x, width, rows.headers, &view, focused);
     }
     // The filter is the first line of the list it narrows, and the rows
@@ -2085,7 +2094,7 @@ fn open_note(
         });
 
     let view = PaneView {
-        title: "Note".to_owned(),
+        title: "Scratchpad".to_owned(),
         sub: made.clone().unwrap_or_default(),
         // The way out, on the pane the way out is from.
         right: if focused && made.is_some() {
@@ -2097,7 +2106,7 @@ fn open_note(
         foot: None,
         // The archive says for itself that it is empty.
         empty: match app.notes_list() {
-            NotesList::Notes => [quiet("No notes yet."), key("a", "writes one")],
+            NotesList::Stack => [quiet("No notes yet."), key("a", "writes one")],
             NotesList::Archive => [Vec::new(), Vec::new()],
         },
     };

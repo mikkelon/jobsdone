@@ -119,7 +119,7 @@ impl Schedule {
     }
 }
 
-/// A plain-text scratchpad entry.
+/// A plain-text entry of the notes: short-lived, untitled, on its own.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Note {
     pub id: Id,

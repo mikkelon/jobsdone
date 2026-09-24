@@ -214,7 +214,7 @@ pub(super) fn note(note: &Note) -> Value {
     })
 }
 
-/// The notes list or the archive, in the order the scratchpad draws it,
+/// The stack or the archive, in the order the notes page draws it,
 /// and how many notes that list holds.
 pub(super) fn notes(model: &Model, view: &NotesView, include_body: bool) -> Value {
     let rows: Vec<Value> = view

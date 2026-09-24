@@ -97,10 +97,11 @@ as moved and pointing at where it is now, so the record of what was planned
 is never rewritten. Completed tasks can be searched by title across all
 history.
 
-## Scratchpad
+## Notes
 
-The scratchpad is a small stack of short-lived text notes, the equivalent
-of a post-it block on the desk. A note is for things like "remember to
+Notes are a small stack of short-lived texts, the equivalent of a post-it
+block on the desk. The live ones are the Stack; a note is written in the
+scratchpad, the pane beside the list. A note is for things like "remember to
 mention X" or drafting a message before sending it.
 
 - A note is plain text. No formatting, no title, no attachments.
@@ -119,9 +120,10 @@ mention X" or drafting a message before sending it.
   deleted or archived; there is no automatic expiry or cleanup.
 - Archiving puts a note out of the way without throwing it away; archived
   notes are kept, can be opened and edited, and come back with the same key.
-  The scratchpad is still not a place to organise notes: there are no
+  The notes page is still not a place to organise notes: there are no
   folders, tags, or titles.
-- Either list can be filtered by typing a few letters of what a note says.
+- The Stack and the Archive can each be filtered by typing a few letters
+  of what a note says.
 - Notes are not long-term storage and the product does not try to organise
   them.
 

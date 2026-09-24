@@ -15,15 +15,17 @@ strictly.
 | Word        | Meaning |
 |-------------|---------|
 | page        | What fills the window between the status line and the hint bar: home (a day beside the backlog), notes, or settings. One page at a time. |
-| pane        | A part of the page that is visible right now. Panes sit side by side, and exactly one of them has the keyboard, the focused pane. A pane may never take the keyboard at all, like the settings page's description column or the review's panel. `h` and `l` move between panes. |
-| tab         | One of a short, fixed set of things a single pane can show, named in its header or tab row and chosen with `tab`. The notes list pane has two tabs, Notes and Archive. A narrow window has one pane, and its tabs are Today, Backlog and Notes. |
+| pane        | A part of the page. Exactly one pane has the keyboard, the focused pane. A wide window shows the page's panes side by side; a narrow one shows the focused pane and names the others in a row at the top, or stacks both where they fit, as the notes page does. A pane may never take the keyboard at all, like the settings page's description column or the review's panel. `tab` goes round the panes, and `h` and `l` go to the one on that side. |
+| tab         | One of a short, fixed set of things a single pane can show, named in its header with the one it is on picked out, and switched with Shift+Tab. The notes list pane has two tabs, the Stack and the Archive; the help overlay has two, the current mode's keys and all keys. |
+| stack       | The notes that are not archived: the first tab of the notes list pane. |
+| scratchpad  | The pane a note is open in, beside the list, where it is written. |
 | popup, card | A box drawn over the panes. It takes the keyboard while it is open, and is not a pane. A card is a popup that asks for an answer: date, repeat, move, and the two questions. |
 | field       | A place where text is being typed. While one has the keyboard, letters type rather than act. |
 | mode        | What the keyboard is in right now, named at the left of the hint bar: a pane, a field, a popup, or the review. |
 
 What a pane changes to by itself is not a tab. The backlog pane shows
-the list of days while another day is shown, and the note pane shows
-whichever note the cursor is on, but neither is chosen with `tab`.
+the list of days while another day is shown, and the scratchpad shows
+whichever note the cursor is on, but neither is chosen with Shift+Tab.
 Neither are the days the day pane steps through with `[` and `]`: there
 is no fixed set of them to name.
 
@@ -47,8 +49,9 @@ half width. Both must feel right, and the floating case comes first.
   the pile, in red with `gr` beside it, until it is dealt with, and says
   nothing at all once the pile is empty.
 - The layout targets 120×36. A full-width tile shows the same layout with
-  more rows. Under 100 columns only one pane fits, and the two panes
-  become tabs of it.
+  more rows. Under 100 columns only one pane fits: the window shows the
+  focused one and a row at the top names both, with the focused one
+  picked out.
 - Hyprland does the windowing: a window rule on the app's class floats and
   sizes it. The rule is the app's own to write, from the `floating_window`
   and `window_size` settings. The app never positions or resizes its
@@ -91,7 +94,7 @@ like it belongs to the first two.
   tabs. The status line holds navigation, alerts, and counts, without
   repeating those headings. Narrow Today keeps its date in the status
   line because its tab only names Today; browsed dates live in the tab.
-  Notes counts appear in the wide status line or narrow tab, once. Settings
+  The notes page's counts are on the list's tabs, once. Settings
   keeps its return/help controls in the status line with no repeated title.
 - No window chrome of its own: the top line is a status line, the bottom
   line a hint bar.
@@ -144,10 +147,15 @@ still does everything.
 
 Conventions, so the map is guessable:
 
-- `j` `k` move; `h` `l` move between panes; `tab` switches the focused
-  pane's tab: Today, Backlog and Notes in a narrow window, and Notes and
-  Archive on the notes list. A pane with no tabs ignores `tab`, and a
-  window with one pane ignores `h` and `l`. `J` `K` reorder.
+- `j` `k` move; `J` `K` reorder.
+- `tab` moves the keyboard to the next pane of the page, going round, and
+  `h` `l` to the pane on that side, at any width: a narrow window has the
+  same panes as a wide one and only shows fewer of them, so resizing
+  never changes what a key does. Shift+Tab switches the focused pane's
+  tab: the notes list's Stack and Archive, and help's current and all
+  keys. Switching panes is the common move and gets the easy key;
+  switching tabs is rare and gets the chord. A page with one pane says so
+  on `tab`, and a pane with no tabs says so on Shift+Tab.
 - Lowercase acts on the cursor row: `space` done, `f` focus, `a` add,
   `e` edit, `x` delete, `t` to today, `b` to backlog, `m` move to a day,
   `d` due by, `r` remind on, `w` waiting, `y` copy. `R` opens the repeat
@@ -220,13 +228,13 @@ Conventions, so the map is guessable:
   section 9 says why.
 - Where a text field has focus (search, the palette, the date card, an
   open note, a title being edited, a number typed on a settings row),
-  every letter and digit types. Only `Enter`, `Escape`, `↑`/`↓` and `Tab`
-  keep their meaning there. The few
+  every letter and digit types. Only `Enter`, `Escape`, `↑`/`↓`, `Tab`
+  and Shift+Tab keep their meaning there. The few
   extra actions a text field needs are on Alt plus a key (`alt-t` re-add
   from search, `alt-1` to `alt-5` quick dates). `Tab` moves focus to the
   next control, where single keys work again: from the date field to its
-  calendar, and from the notes filter to the list it narrows. An open
-  note is left with `Escape`; `Tab` there does nothing.
+  calendar, from the notes filter to the list it narrows, and from an
+  open note back to the list, as `Escape` does.
 - `j` and `k`, or the arrow keys, navigate every review step just as they
   navigate other lists. In the surfaced step, `s` means "leave in backlog":
   acknowledge the row in this review without changing or snoozing it.
@@ -237,8 +245,8 @@ Conventions, so the map is guessable:
   you filter and press Enter; the key shown is for next time, outside the
   palette, so it teaches the map and then stops being needed. Search and
   palette lists scroll with selection and show position when they overflow.
-  Help opens on the current mode; `↑/↓` or `j/k` scroll and Tab switches
-  between current-mode and all-mode keys. Descriptions wrap, including
+  Help opens on the current mode; `↑/↓` or `j/k` scroll and Shift+Tab
+  switches between current-mode and all-mode keys. Descriptions wrap, including
   note editing, surfaced review and card controls. `Alt+h` opens help while
   editing a note, where `?` remains text.
 
@@ -419,50 +427,53 @@ The one question asked whether or not it was asked for: editing the title
 of a recurring copy asks whether the change is for this copy or this and
 future copies, because PRODUCT.md gives both answers meaning.
 
-## 9. Scratchpad is text, and only text
+## 9. Notes are text, and only text
 
-Notes get a page of their own: the list on the left, the open note taking
-the rest of the width. Opening one gives a plain multi-line text area with
+Notes get a page of their own: the list on the left, and the scratchpad,
+where the open note is written, taking the rest of the width. Opening one gives a plain multi-line text area with
 nothing else on it. There is no drawing, no formatting, no pop-out window:
 the app itself is usually a floating window opened for a moment, so a note
 is already on top whenever it is needed.
 
 A note has no title, so the list row is the first line of the body and how
-long ago the note was made, which is the order the list is in. The number
-of notes is already in the status line, so the list header names `A`, the
-key that archives one, with the number already archived beside it.
+long ago the note was made, which is the order the list is in.
 
-The left pane shows one of two lists, Notes or the Archive, and `tab`
-switches between them; the page is always opened on Notes. `A` on Notes
+The list pane has two tabs, the Stack of live notes and the Archive, and
+its header is both of them, each with its count and the one it is on
+picked out, so Shift+Tab is seen to switch them. The page is always
+opened on the Stack. `A` on the Stack
 archives the cursor note and on the Archive brings it back, and the
 cursor lands on the row that took its place, as after `x`. Both undo with
 `u`, and the hint bar says "Archived …" or "Unarchived …" with the note's
 first line. Archiving is a way to put a note away without deleting it, so
-it asks nothing, even with confirm-before-delete on. The Archive header is
-`Archive` and its count. Its rows are dated by when they were archived,
+it asks nothing, even with confirm-before-delete on. The Archive's rows
+are dated by when they were archived,
 most recent first, and an archived note's header says both instants:
 `Mon 22 Sep 09:12 · archived today`. An archived note opens and takes
 typing like any other; if another window archives the note being typed
-in, the editor keeps saving into it and the note is simply not in Notes
-when the editor is left. An empty archive says "Nothing archived." and
+in, the editor keeps saving into it and the note is simply not on the
+Stack when the editor is left. An empty archive says "Nothing archived." and
 that `A` on a note puts it there.
 
 `/` on the notes page opens a filter on the first line of the list showing,
 in place of task search. Letters type into it and the list narrows as they
 do: every word typed has to be in the note's body with its letters in
 order, and the best fits come first. The rows still show first lines and
-the note pane shows the cursor note. `↑`/`↓` move the cursor while typing,
-`Enter` opens the cursor note and `Escape` clears the filter. `Tab` hands
-the keyboard to the list with the filter still applied, where `A`, `x`
-and the other single keys work and `tab` switches lists, taking the filter
-with it; `/` goes back into the filter. The filter stays while a note is
+the scratchpad shows the cursor note. `↑`/`↓` move the cursor while
+typing, `Enter` opens the cursor note and `Escape` clears the filter.
+`Tab` hands the keyboard to the list with the filter still applied, where
+`A`, `x` and the other single keys work and Shift+Tab switches tabs,
+taking the filter with it; `/` goes back into the filter. The filter stays while a note is
 opened from it and after the note is left, until `Escape` on the list
 clears it. Leaving the page drops it. A filter that matches nothing says
 so, and that `Escape` clears it.
 
-In a narrow window Notes and the Archive are two stops of the one notes
-tab, which `tab` reaches after Backlog and leaves for Today; the tab reads
-ARCHIVE and counts the archived notes on its second stop.
+`Tab` on the list opens the cursor note in the scratchpad, and `Tab` in
+the scratchpad goes back to the list, as `Escape` does; `l` opens the
+note too, and `h` is a letter once the note has the keyboard.
+
+In a narrow window the list and the scratchpad are stacked, both on
+screen, so the row at the top of the window is the list's two tabs.
 
 A note wider than the pane is wrapped at a space where there is one, and
 the rows it is wrapped into are the rows the caret moves through: `↑` and
@@ -564,7 +575,7 @@ the accent colour, because it is the one value a key would change.
 Beside the list, in a column of 40, what the cursor row does and what it
 holds when nobody has changed it. Under 100 columns that column goes and
 the list has the window, the way the review's panel does. The page is
-never one of the narrow window's tabs: `gs` is the way on and Escape the
+never in the narrow window's top row: `gs` is the way on and Escape the
 way off.
 
 `h` and `l` step a value: `l` turns a toggle on and `h` off, a row of two
@@ -602,13 +613,13 @@ other.
 | Morning review: the pile    | `wireframes/01-review.html`       | 120×36  |
 | Morning review: surfaced    | `wireframes/02-surfaced.html`     | 120×36  |
 | Today + backlog             | `wireframes/03-today.html`        | 120×36 and 160×48 |
-| Half-width tile (tabs)      | `wireframes/04-narrow.html`       | 80×44   |
+| Half-width tile             | `wireframes/04-narrow.html`       | 80×44   |
 | Task states                 | `wireframes/05-task-states.html`  | panels  |
 | Due, remind, waiting        | `wireframes/06-dates.html`        | 120×36  |
 | Repeat schedule             | `wireframes/07-repeat.html`       | 120×36  |
 | History (past days)         | `wireframes/08-history.html`      | 120×36  |
 | Search                      | `wireframes/09-search.html`       | 120×36  |
-| Scratchpad (notes page)     | `wireframes/10-scratchpad.html`   | 120×36  |
+| Notes page                  | `wireframes/10-scratchpad.html`   | 120×36  |
 | Command palette and help    | `wireframes/11-palette-help.html` | panels  |
 | Empty states                | `wireframes/12-empty.html`        | panels  |
 | Settings                    | `wireframes/13-settings.html`     | 120×36  |

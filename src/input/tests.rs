@@ -45,7 +45,7 @@ fn writing(field: Field) -> KeyContext {
 fn notes(pane: NotesPane) -> KeyContext {
     KeyContext::Notes {
         pane,
-        list: NotesList::Notes,
+        list: NotesList::Stack,
         text_field: pane != NotesPane::List,
         narrow: false,
     }
@@ -306,6 +306,9 @@ fn every_row_the_hint_bar_shows_has_a_name_to_show() {
 
 /// A key press written the way the table writes it.
 fn event_for(name: &str) -> Event {
+    if name == "shift-tab" {
+        return press_with(KeyCode::BackTab, KeyModifiers::SHIFT);
+    }
     let (name, alt) = match name.strip_prefix("alt-") {
         Some(rest) => (rest, KeyModifiers::ALT),
         None => (name, KeyModifiers::NONE),
@@ -1018,33 +1021,36 @@ fn shift_enter_only_keeps_adding_in_the_add_field() {
 }
 
 #[test]
-fn h_and_l_switch_panes_side_by_side_and_tab_steps_through_tabs() {
+fn tab_h_and_l_switch_panes_at_every_width() {
     let tab_key = press(KeyCode::Tab);
     for pane in [Pane::Day, Pane::Backlog] {
-        assert_eq!(action_for(&typing('h'), home(pane)), Some(Action::PaneLeft));
-        assert_eq!(
-            action_for(&typing('l'), home(pane)),
-            Some(Action::PaneRight)
-        );
-        assert_eq!(action_for(&tab_key, home(pane)), None, "wide, tab is free");
-
-        assert_eq!(action_for(&tab_key, tab(pane)), Some(Action::NextTab));
-        assert_eq!(
-            action_for(&typing('h'), tab(pane)),
-            None,
-            "narrow, h is free"
-        );
-        assert_eq!(action_for(&typing('l'), tab(pane)), None);
+        // A narrow window has the same panes and shows the focused one,
+        // so a key means the same at both widths.
+        for context in [home(pane), tab(pane)] {
+            assert_eq!(action_for(&typing('h'), context), Some(Action::PaneLeft));
+            assert_eq!(action_for(&typing('l'), context), Some(Action::PaneRight));
+            assert_eq!(action_for(&tab_key, context), Some(Action::NextPane));
+            assert_eq!(
+                action_for(&press_with(KeyCode::BackTab, KeyModifiers::SHIFT), context),
+                None,
+                "the home page's panes have no tabs"
+            );
+        }
     }
 }
 
 #[test]
-fn the_notes_list_archives_with_a_and_switches_list_with_tab() {
+fn the_notes_list_archives_with_a_and_switches_tab_with_shift_tab() {
     for context in [notes(NotesPane::List), archive(false), archive(true)] {
         assert_eq!(action_for(&typing('A'), context), Some(Action::Archive));
         assert_eq!(
-            action_for(&press(KeyCode::Tab), context),
+            action_for(&press_with(KeyCode::BackTab, KeyModifiers::SHIFT), context),
             Some(Action::NextTab)
+        );
+        assert_eq!(
+            action_for(&press(KeyCode::Tab), context),
+            Some(Action::NextPane),
+            "tab is the other pane, the scratchpad"
         );
         assert_eq!(action_for(&typing('l'), context), Some(Action::PaneRight));
         assert_eq!(action_for(&typing('h'), context), Some(Action::PaneLeft));
@@ -1057,12 +1063,13 @@ fn the_notes_list_archives_with_a_and_switches_list_with_tab() {
     };
     assert_eq!(label(notes(NotesPane::List)), Some("archive note"));
     assert_eq!(label(archive(false)), Some("unarchive note"));
-    assert_eq!(name(notes(NotesPane::List)), "NOTES");
+    assert_eq!(name(notes(NotesPane::List)), "STACK");
     assert_eq!(name(archive(false)), "ARCHIVE");
+    assert_eq!(name(notes(NotesPane::Note)), "SCRATCHPAD");
     assert_eq!(
         action_for(&press(KeyCode::Tab), notes(NotesPane::Note)),
-        None,
-        "an open note is left with esc"
+        Some(Action::NextPane),
+        "an open note is left with tab, back to the list, as well as esc"
     );
 }
 

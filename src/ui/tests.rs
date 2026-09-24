@@ -1124,7 +1124,7 @@ fn help_starts_in_context_and_all_modes_remain_reachable() {
     let (drawn, layout) = screen(&app, 80, 24);
     assert!(drawn.join("\n").contains("current mode"));
     app.set_layout(layout);
-    app.update(Action::NextPane);
+    app.update(Action::NextTab);
     let mut seen = String::new();
     for _ in 0..700 {
         let (drawn, layout) = screen(&app, 80, 24);
@@ -1135,7 +1135,7 @@ fn help_starts_in_context_and_all_modes_remain_reachable() {
     for label in [
         "BACKLOG",
         "DUE & REMINDERS",
-        "NOTE EDITING",
+        "SCRATCHPAD",
         "ctrl-z",
         "alt-s",
         "ctrl-c",
@@ -1578,7 +1578,7 @@ fn the_notes_list_is_newest_first_with_the_age_of_each_note() {
     let drawn = look(&app, 120, 36);
     let wanted = wireframe("10-scratchpad", 0, 36);
 
-    assert!(drawn[0].contains("4 notes"));
+    assert!(!drawn[0].contains("4 notes"), "the tabs have the counts");
     assert!(drawn[0].contains("esc back to tasks"));
     let divider = drawn[3].chars().position(|glyph| glyph == '┬');
     assert_eq!(
@@ -1616,7 +1616,7 @@ fn the_open_note_is_a_text_area_beside_the_list() {
     // Copying and spelling were added after the original scratchpad wireframe.
     assert_eq!(
         drawn[35],
-        " NOTE  esc back to the list  ctrl-z undo edit  ctrl-y redo edit  alt-y copy note  type to edit"
+        " SCRATCHPAD  esc back to the list  ctrl-z undo edit  ctrl-y redo edit  alt-y copy note  type to edit"
     );
 }
 
@@ -1632,14 +1632,14 @@ fn one_tab_stacks_the_list_and_the_note() {
     assert!(drawn[4].starts_with("  ▪ Mention to Anna:"));
     assert!(drawn[9].starts_with("  +  new note"));
     assert!(
-        drawn[10].starts_with(" Note Thu 4 Sep 16:40 ─────"),
+        drawn[10].starts_with(" Scratchpad Thu 4 Sep 16:40 ─────"),
         "{:?}",
         drawn[10]
     );
     assert_eq!(drawn[11], "  Mention to Anna:");
     assert_eq!(
         drawn[43],
-        " NOTE  esc back  ctrl-z undo edit  alt-y copy note  type to edit"
+        " SCRATCHPAD  esc back  ctrl-z undo edit  alt-y copy note  type to edit"
     );
 }
 
@@ -1662,13 +1662,13 @@ fn a_page_with_no_notes_on_it_names_the_key_that_makes_one() {
     app.update(Action::NotesPage);
     let drawn = look(&app, 120, 36);
 
-    assert!(drawn[0].starts_with(" 0 notes"));
+    assert!(left(&drawn[2]).starts_with("  STACK 0"));
     assert!(drawn[5].starts_with("  +  new note"), "{:?}", drawn[5]);
     assert!(drawn.join("\n").contains("No notes yet."));
 
-    // And one note in is one note, not "1 notes".
+    // And one note in is counted on its tab.
     app.update(Action::Add);
-    assert!(look(&app, 120, 36)[0].starts_with(" 1 note "));
+    assert!(left(&look(&app, 120, 36)[2]).starts_with("  STACK 1"));
 }
 
 /// Everything to the right of the divider, which is the open note.
@@ -1970,25 +1970,28 @@ fn the_narrow_hint_bar_names_five_keys_and_defers_to_help() {
 }
 
 #[test]
-fn the_narrow_tab_row_marks_the_tab_the_keyboard_is_on() {
+fn the_narrow_top_row_is_the_panes_of_home_and_the_tabs_of_the_notes_list() {
     let mut app = app();
     let (_, layout) = screen(&app, 80, 44);
     app.set_layout(layout);
-    assert_eq!(look(&app, 80, 44)[2], "  TODAY 6   BACKLOG 12   NOTES 4");
+    assert_eq!(look(&app, 80, 44)[2], "  TODAY 6   BACKLOG 12");
 
-    // After the backlog, tab goes to the notes tab, not a pane of its
-    // own, and then to the archive in the same place.
-    app.update(Action::NextTab);
-    app.update(Action::NextTab);
+    // tab goes to the other pane of the page and never off it.
+    app.update(Action::NextPane);
+    assert_eq!(app.pane(), Pane::Backlog);
+    assert_eq!(app.page(), Page::Home);
+
+    // The notes page stacks its two panes, so its top row is the list's
+    // tabs, and Shift+Tab goes from one to the other.
+    app.update(Action::NotesPage);
     let notes = look(&app, 80, 44);
-    assert_eq!(app.page(), Page::Notes);
     assert!(!notes[0].contains("notes"));
-    assert!(notes[2].contains("NOTES 4"));
+    assert_eq!(notes[2], "  STACK 4   ARCHIVE 0");
     assert!(notes[4].contains("▪ Mention to Anna:"));
 
     app.update(Action::NextTab);
     let archive = look(&app, 80, 44);
-    assert_eq!(archive[2], "  TODAY 6   BACKLOG 12   ARCHIVE 0");
+    assert_eq!(archive[2], "  STACK 4   ARCHIVE 0");
     assert!(archive[6].contains("Nothing archived."), "{archive:#?}");
 }
 
@@ -3924,12 +3927,9 @@ fn page_headers_do_not_repeat_names_dates_or_note_counts() {
             }
             let drawn = look(&app, width, 36);
             assert!(!drawn[0].contains("Notes"), "{drawn:?}");
-            assert!(drawn[2].to_lowercase().contains("notes"));
-            if width < NARROW {
-                assert!(!drawn[0].contains("note"), "count belongs to tab");
-            } else {
-                assert!(drawn[0].contains(if editing { "1 note" } else { "0 notes" }));
-            }
+            assert!(drawn[2].contains("STACK"));
+            assert!(!drawn[0].contains("note"), "the count belongs to the tab");
+            assert!(drawn[2].contains(if editing { "STACK 1" } else { "STACK 0" }));
             if editing {
                 assert!(drawn[0].contains("editing · autosave"));
                 assert!(drawn[0].contains("esc back to list"));
@@ -4017,25 +4017,21 @@ fn the_archive_takes_the_place_of_the_notes_and_dates_its_rows_by_archiving() {
     let mut app = app();
     app.update(Action::NotesPage);
     let drawn = look(&app, 120, 36);
-    assert!(left(&drawn[2]).starts_with(" Notes"));
-    assert!(left(&drawn[2]).ends_with("A archive"), "{:?}", drawn[2]);
+    // The header is the list's two tabs, each with its count.
+    assert_eq!(left(&drawn[2]).trim_end(), "  STACK 4   ARCHIVE 0");
     assert_eq!(
         drawn[35],
-        " NOTES  y/alt-y copy note  ⏎ open  a add  A archive  x delete  esc back to tasks           tab archive  h/l pane  g go…"
+        " STACK  y/alt-y copy note  ⏎ open  a add  A archive  x delete  esc back to tasks               shift-tab archive  g go…"
     );
 
     app.update(Action::Archive);
     let drawn = look(&app, 120, 36);
-    assert!(left(&drawn[2]).ends_with("A archive 1"), "{:?}", drawn[2]);
-    assert!(
-        drawn[0].contains("3 notes"),
-        "an archived note is not counted"
-    );
+    assert_eq!(left(&drawn[2]).trim_end(), "  STACK 3   ARCHIVE 1");
+    assert!(!drawn[0].contains("notes"), "the tabs have the counts");
 
     app.update(Action::NextTab);
     let drawn = look(&app, 120, 36);
-    assert!(left(&drawn[2]).starts_with(" Archive 1"), "{:?}", drawn[2]);
-    assert!(left(&drawn[2]).ends_with("A unarchive"), "{:?}", drawn[2]);
+    assert_eq!(left(&drawn[2]).trim_end(), "  STACK 3   ARCHIVE 1");
     assert_eq!(
         left(&drawn[4]),
         "  ▪ Mention to Anna:                  today",
@@ -4044,14 +4040,14 @@ fn the_archive_takes_the_place_of_the_notes_and_dates_its_rows_by_archiving() {
     assert!(
         right(&drawn[2])
             .trim_start()
-            .starts_with("Note Thu 4 Sep 16:40 · archived today"),
+            .starts_with("Scratchpad Thu 4 Sep 16:40 · archived today"),
         "{:?}",
         drawn[2]
     );
     assert_eq!(right(&drawn[4]), "│  Mention to Anna:");
     assert_eq!(
         drawn[35],
-        " ARCHIVE  y/alt-y copy note  ⏎ open  a add  A unarchive  x delete  esc back to tasks         tab notes  h/l pane  g go…"
+        " ARCHIVE  y/alt-y copy note  ⏎ open  a add  A unarchive  x delete  esc back to tasks             shift-tab stack  g go…"
     );
 }
 
@@ -4062,7 +4058,11 @@ fn an_empty_archive_names_the_key_that_fills_it() {
     app.update(Action::NextTab);
     let drawn = look(&app, 120, 36);
 
-    assert!(left(&drawn[2]).starts_with(" Archive 0"), "{:?}", drawn[2]);
+    assert!(
+        left(&drawn[2]).starts_with("  STACK 4   ARCHIVE 0"),
+        "{:?}",
+        drawn[2]
+    );
     assert!(
         drawn
             .iter()
@@ -4113,7 +4113,7 @@ fn the_filter_is_the_first_line_of_the_list_it_narrows() {
     app.update(Action::NextPane);
     let drawn = look(&app, 120, 36);
     assert_eq!(left(&drawn[4]).trim_end(), "  / rsync");
-    assert!(drawn[35].starts_with(" NOTES "));
+    assert!(drawn[35].starts_with(" STACK "));
 }
 
 #[test]
@@ -4135,5 +4135,35 @@ fn a_filter_that_matches_nothing_says_how_to_be_rid_of_it() {
         drawn
             .iter()
             .any(|row| left(row).contains("esc clears the filter"))
+    );
+}
+
+#[test]
+fn the_notes_list_shows_both_its_tabs_and_picks_out_the_one_it_is_on() {
+    let mut app = app();
+    app.update(Action::NotesPage);
+    let reversed_at = |app: &App, name: &str| -> bool {
+        let mut terminal = Terminal::new(TestBackend::new(120, 36)).expect("a test terminal");
+        terminal
+            .draw(|frame| {
+                draw(app, frame);
+            })
+            .expect("a frame");
+        let row = look(app, 120, 36)[2].clone();
+        let at = row.find(name).expect("the tab") as u16;
+        let x = row[..at as usize].chars().count() as u16;
+        terminal.backend().buffer()[(x, 2)]
+            .modifier
+            .contains(Modifier::REVERSED)
+    };
+
+    assert!(reversed_at(&app, "STACK"));
+    assert!(!reversed_at(&app, "ARCHIVE"));
+
+    app.update(Action::NextTab);
+    assert!(!reversed_at(&app, "STACK"));
+    assert!(
+        reversed_at(&app, "ARCHIVE"),
+        "Shift+Tab moves the highlight"
     );
 }
