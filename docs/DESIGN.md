@@ -153,6 +153,9 @@ still does everything.
 Conventions, so the map is guessable:
 
 - `j` `k` move; `J` `K` reorder.
+- The arrow keys do what `h` `j` `k` `l` do wherever those are keys, and
+  only there: in a text field the letters type and the arrows move the
+  caret.
 - `tab` moves the keyboard to the next pane of the page, going round, and
   `h` `l` to the pane on that side, at any width: a narrow window has the
   same panes as a wide one and only shows fewer of them, so resizing
@@ -496,8 +499,8 @@ clears it. Leaving the page drops it. A filter that matches nothing says
 so, and that `Escape` clears it.
 
 `Tab` on the list opens the cursor note in the scratchpad, and `Tab` in
-the scratchpad goes back to the list, as `Escape` does; `l` opens the
-note too, and `h` is a letter once the note has the keyboard.
+the scratchpad goes back to the list, as `Escape` does; `l` or `→` opens
+the note too, and `h` is a letter once the note has the keyboard.
 
 In a narrow window the list and the scratchpad are stacked, both on
 screen, so the row at the top of the window is the list's two tabs.

@@ -411,6 +411,37 @@ fn the_arrow_keys_stand_in_for_j_and_k() {
 }
 
 #[test]
+fn the_arrow_keys_do_what_h_j_k_and_l_do_wherever_those_are_keys() {
+    let pairs = [("h", "left"), ("j", "down"), ("k", "up"), ("l", "right")];
+    for context in every_context() {
+        if context.text_field() {
+            continue;
+        }
+        for (letter, arrow) in pairs {
+            assert_eq!(
+                bound(context, letter),
+                bound(context, arrow),
+                "{context:?} does not give {letter:?} and {arrow:?} the same meaning"
+            );
+        }
+    }
+}
+
+#[test]
+fn the_arrow_keys_switch_pane_as_h_and_l_do() {
+    for context in [home(Pane::Day), tab(Pane::Backlog), notes(NotesPane::List)] {
+        assert_eq!(
+            action_for(&press(KeyCode::Left), context),
+            Some(Action::PaneLeft)
+        );
+        assert_eq!(
+            action_for(&press(KeyCode::Right), context),
+            Some(Action::PaneRight)
+        );
+    }
+}
+
+#[test]
 fn a_text_field_types_every_letter_and_digit() {
     let context = field(PopupKind::Palette);
     for typed in ['a', 'q', 'J', '7', ' ', '/', ':'] {

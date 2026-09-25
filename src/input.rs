@@ -823,11 +823,14 @@ const GO_NOWHERE: Binding = Binding {
 /// The other pane of the page: `tab` goes round the panes, and `h` and `l`
 /// go to the one on that side, at any width, since a narrow window has
 /// the same panes and only shows the focused one (DESIGN.md section 4).
+/// The arrows stand in for `h` and `l` as they do for `j` and `k`.
 const PANES: Binding = Binding {
     keys: &[
         ("tab", Action::NextPane),
         ("h", Action::PaneLeft),
         ("l", Action::PaneRight),
+        ("left", Action::PaneLeft),
+        ("right", Action::PaneRight),
     ],
     shown: "tab h/l",
     label: "pane",
