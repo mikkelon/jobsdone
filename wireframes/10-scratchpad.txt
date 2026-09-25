@@ -114,3 +114,42 @@
 ────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
  FILTER  type to filter  ↑/↓ move  ⏎ open  tab to the list  esc clear
 
+
+== 120×36 · a note taken out of spell checking
+
+
+ editing · autosave                                                                         esc back to list alt-h help
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+  STACK 4   ARCHIVE 0                         Scratchpad Thu 4 Sep 16:40 · no spell check                      esc back
+────────────────────────────────────────────┬───────────────────────────────────────────────────────────────────────────
+  ▪ Test fixtures: xqzt vrrbl kj      today │  Test fixtures:
+  ▪ Mention to Anna: CI runner b  yesterday │  xqzt vrrbl kjhdf
+  ▪ Draft reply to tender Q3: "W     2 days │  ZmFrZSB0b2tlbg aGVsbG8gd29ybGQ
+  ▪ nordic ltd PO 4471, due 30 d     2 days │  plonk wibbet frazzle snood█
+                                            │
+  +  new note                             a │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+                                            │
+────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────
+ SCRATCHPAD  esc back to the list  ctrl-z undo edit  ctrl-y redo edit  alt-y copy note  type to edit
+

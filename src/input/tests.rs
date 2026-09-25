@@ -877,6 +877,25 @@ fn the_open_note_offers_alt_s_where_plain_s_types() {
 }
 
 #[test]
+fn a_note_is_taken_out_of_spell_checking_with_s_on_the_list_and_alt_shift_s_in_it() {
+    for list in [notes(NotesPane::List), archive(false), archive(true)] {
+        assert_eq!(action_for(&typing('S'), list), Some(Action::SpellCheck));
+    }
+    let editor = notes(NotesPane::Note);
+    for modifiers in [KeyModifiers::ALT, KeyModifiers::ALT | KeyModifiers::SHIFT] {
+        assert_eq!(
+            action_for(&press_with(KeyCode::Char('S'), modifiers), editor),
+            Some(Action::SpellCheck)
+        );
+    }
+    assert_eq!(
+        action_for(&typing('S'), editor),
+        Some(Action::Insert('S')),
+        "the capital still types in the note"
+    );
+}
+
+#[test]
 fn the_open_note_names_alt_s_in_its_hint_bar_at_both_widths() {
     let editor = notes(NotesPane::Note);
     let row = bindings(editor)

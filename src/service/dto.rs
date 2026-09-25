@@ -211,6 +211,7 @@ pub(super) fn note(note: &Note) -> Value {
         "created_at": note.created_at.to_string(),
         "updated_at": note.updated_at.to_string(),
         "archived_at": note.archived_at.as_ref().map(ToString::to_string),
+        "spell_check": note.spell_check,
     })
 }
 

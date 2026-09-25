@@ -92,6 +92,11 @@ dictionary edits, recurrence refresh and review gate changes are not undoable.
 `note unarchive ID` brings it back; `note list --archived` lists the archive.
 An archived note can still be read, updated, checked and deleted by ID.
 
+`note spell-check ID off` stops the TUI from spell-checking that note while
+`spell_check_notes` is on, and `on` turns checking back on. Notes carry the
+flag as `spell_check`; the change is undoable. `note check ID` still checks
+the note when asked.
+
 Deletion respects `confirm_delete`: when enabled, explicitly pass `--yes`.
 The CLI never waits for an interactive confirmation.
 

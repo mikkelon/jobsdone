@@ -563,6 +563,17 @@ Checking is local, disabled by default, and controlled by "Spell-check notes
 in US English" in settings. It offers no grammar advice or automatic
 corrections. URLs, email addresses and obvious code-like tokens are skipped.
 
+A note written as gibberish on purpose can be taken out of checking on its
+own: `S` on the notes list, or `Alt+Shift+s` while editing it, switches
+checking off for that note and back on. The switch undoes with `u`, and the
+hint bar names the note: "Spell check off for …". Every other note is still
+checked. An opted-out note has no underlines and no `Alt+s` in its hint bar.
+Its scratchpad header ends in `· no spell check`, after the dates:
+`Thu 4 Sep 16:40 · no spell check`. A checked note shows nothing extra, and
+neither do the rows of the list. With the setting off no note is checked, so
+no header shows the marker. Neither key is in the hint bar; the palette and
+help list them as "spell check on/off".
+
 While editing a note, `Alt+s` opens spelling suggestions for the word at the
 caret (including its end). The picker uses arrow keys to select, `Enter` to
 replace that word, and `Escape` to cancel. Suggestions are computed only on

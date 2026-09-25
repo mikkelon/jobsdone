@@ -32,6 +32,7 @@ const MIGRATIONS: &[(u32, &str)] = &[
     ),
     (4, include_str!("../migrations/0004_undo_identity.sql")),
     (5, include_str!("../migrations/0005_note_archive.sql")),
+    (6, include_str!("../migrations/0006_note_spell_check.sql")),
 ];
 
 /// `placements.from_place` is `new`, `backlog`, or the date the task came
@@ -232,8 +233,9 @@ fn read_model(conn: &Connection) -> Result<Model, StoreError> {
         model.schedules.insert(schedule.id, schedule);
     }
 
-    let mut notes = conn
-        .prepare("SELECT id, body, created_at, updated_at, deleted_at, archived_at FROM notes")?;
+    let mut notes = conn.prepare(
+        "SELECT id, body, created_at, updated_at, deleted_at, archived_at, spell_check FROM notes",
+    )?;
     for row in notes.query_map([], read_note)? {
         let note = row?;
         model.notes.insert(note.id, note);
@@ -344,12 +346,13 @@ fn write_row(tx: &Transaction<'_>, write: &Write) -> Result<(), StoreError> {
         }
         Write::PutNote(note) => {
             tx.execute(
-                "INSERT INTO notes (id, body, created_at, updated_at, deleted_at, archived_at)
-                 VALUES (?1, ?2, ?3, ?4, ?5, ?6)
+                "INSERT INTO notes (id, body, created_at, updated_at, deleted_at, archived_at,
+                                    spell_check)
+                 VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)
                  ON CONFLICT (id) DO UPDATE SET
                      body = excluded.body, created_at = excluded.created_at,
                      updated_at = excluded.updated_at, deleted_at = excluded.deleted_at,
-                     archived_at = excluded.archived_at",
+                     archived_at = excluded.archived_at, spell_check = excluded.spell_check",
                 params![
                     note.id,
                     note.body,
@@ -357,6 +360,7 @@ fn write_row(tx: &Transaction<'_>, write: &Write) -> Result<(), StoreError> {
                     instant_text(&note.updated_at),
                     note.deleted_at.as_ref().map(instant_text),
                     note.archived_at.as_ref().map(instant_text),
+                    note.spell_check,
                 ],
             )?;
         }
@@ -476,6 +480,7 @@ fn read_note(row: &Row<'_>) -> rusqlite::Result<Note> {
         updated_at: instant_at(row, 3)?,
         deleted_at: instant_of(row, 4)?,
         archived_at: instant_of(row, 5)?,
+        spell_check: row.get(6)?,
     })
 }
 

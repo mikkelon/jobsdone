@@ -692,8 +692,14 @@ fn hint_bar(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
 
     let mut left = Vec::new();
     let mut right = Vec::new();
+    // Nothing to fix in a note nobody checks.
+    let checked = app.settings().spell_check_notes()
+        && app
+            .draft()
+            .and_then(|draft| app.model().note(draft.note))
+            .is_none_or(|note| note.spell_check);
     for binding in input::bindings(context) {
-        if !app.settings().spell_check_notes()
+        if !checked
             && binding
                 .keys
                 .iter()
@@ -2093,22 +2099,22 @@ fn open_note(
 ) {
     let Column { x, width, .. } = column;
     let open = app.cursor(List::Notes).and_then(RowId::note);
-    // The day it was made, and for an archived note when it was put away:
-    // `Mon 22 Sep 09:12 · archived today`.
-    let made = app
-        .model()
-        .note(open.unwrap_or_default())
-        .map(|note| match &note.archived_at {
-            Some(archived) => {
-                let on = app.settings().working_day(archived);
-                format!(
-                    "{} · archived {}",
-                    stamp_label(&note.created_at, app.dates()),
-                    archived_ago(on, app.today(), app.dates())
-                )
-            }
-            None => stamp_label(&note.created_at, app.dates()),
-        });
+    // The day it was made, for an archived note when it was put away, and
+    // for a note taken out of spell checking that it is:
+    // `Mon 22 Sep 09:12 · archived today · no spell check`. With the
+    // setting off no note is checked, so saying it of one says nothing.
+    let made = app.model().note(open.unwrap_or_default()).map(|note| {
+        let mut made = stamp_label(&note.created_at, app.dates());
+        if let Some(archived) = &note.archived_at {
+            let on = app.settings().working_day(archived);
+            made.push_str(" · archived ");
+            made.push_str(&archived_ago(on, app.today(), app.dates()));
+        }
+        if !note.spell_check && app.settings().spell_check_notes() {
+            made.push_str(" · no spell check");
+        }
+        made
+    });
 
     let view = PaneView {
         title: "Scratchpad".to_owned(),

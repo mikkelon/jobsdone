@@ -5379,6 +5379,63 @@ fn note_body(app: &App) -> String {
 }
 
 #[test]
+fn a_note_taken_out_of_spell_checking_is_not_marked_and_offers_nothing() {
+    let mut app = spell_started();
+    app.update(Action::NotesPage);
+    let note = note_saying(&mut app, "remember teh meeting ");
+    assert_eq!(misspelt(&app), ["teh"]);
+
+    app.update(Action::SpellCheck);
+    assert!(!app.model().note(note).expect("the note").spell_check);
+    assert!(app.misspellings().is_empty());
+    assert_eq!(hint(&app), "Spell check off for \"remember teh meeting\"");
+    assert_eq!(
+        app.model().note(note).expect("the note").body,
+        "remember teh meeting ",
+        "what was typed was saved before the switch"
+    );
+
+    app.update(Action::Left);
+    app.update(Action::FixSpelling);
+    assert!(
+        matches!(
+            app.key_context(),
+            KeyContext::Notes {
+                pane: NotesPane::Note,
+                ..
+            }
+        ),
+        "no card opened"
+    );
+    assert_eq!(
+        hint(&app),
+        "This note is not spell-checked. alt-S checks it."
+    );
+
+    // Back on the list, `S` puts it back and `u` takes it out again.
+    app.update(Action::Cancel);
+    app.update(Action::SpellCheck);
+    assert!(app.model().note(note).expect("the note").spell_check);
+    assert_eq!(misspelt(&app), ["teh"]);
+    app.update(Action::Undo);
+    assert!(!app.model().note(note).expect("the note").spell_check);
+    assert!(app.misspellings().is_empty());
+}
+
+#[test]
+fn only_the_note_taken_out_of_spell_checking_goes_unmarked() {
+    let mut app = spell_started();
+    app.update(Action::NotesPage);
+    let gibberish = note_saying(&mut app, "xqzt vrrbl ");
+    app.update(Action::Cancel);
+    app.update(Action::SpellCheck);
+    let other = note_saying(&mut app, "remember teh meeting ");
+    assert_eq!(misspelt(&app), ["teh"]);
+    assert!(app.model().note(other).expect("the note").spell_check);
+    assert!(!app.model().note(gibberish).expect("the note").spell_check);
+}
+
+#[test]
 fn alt_s_offers_the_dictionary_words_for_the_one_at_the_caret() {
     let mut app = note_with_the_caret_in_teh();
     app.update(Action::FixSpelling);

@@ -131,6 +131,10 @@ pub struct Note {
     /// live: it is kept, can be opened and edited, and comes back with
     /// `UnarchiveNote` (DOMAIN.md section 15).
     pub archived_at: Option<Zoned>,
+    /// Whether the note is spell-checked while the setting is on. A
+    /// note written as gibberish on purpose is left out of checking
+    /// without turning it off for every other note (DOMAIN.md section 15).
+    pub spell_check: bool,
 }
 
 impl Note {

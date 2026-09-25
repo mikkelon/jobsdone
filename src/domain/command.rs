@@ -115,6 +115,12 @@ pub enum Command {
     UnarchiveNote {
         note: Id,
     },
+    /// Takes one note out of spell checking, or puts it back. It is its
+    /// own inverse, with the value it had.
+    SetNoteSpellCheck {
+        note: Id,
+        check: bool,
+    },
 
     // The inverses, which say more than a user ever does.
     /// The inverse of Move, of Close, and of the move inside SetWaiting:
@@ -373,6 +379,7 @@ fn task_of(command: &Command) -> Option<Id> {
         | Command::DeleteNote { .. }
         | Command::ArchiveNote { .. }
         | Command::UnarchiveNote { .. }
+        | Command::SetNoteSpellCheck { .. }
         | Command::ResumeSchedule { .. }
         | Command::RestoreNote { .. }
         | Command::RestoreNoteBody { .. }
@@ -775,6 +782,7 @@ fn run(
                     updated_at: now.clone(),
                     deleted_at: None,
                     archived_at: None,
+                    spell_check: true,
                 },
             );
             Ok(Entry::new(
@@ -850,6 +858,27 @@ fn run(
                 Command::RearchiveNote {
                     note: *note,
                     archived_at: was,
+                },
+            ))
+        }
+
+        Command::SetNoteSpellCheck { note, check } => {
+            let current = live_note(model, *note)?;
+            let state = if *check { "on" } else { "off" };
+            if current.spell_check == *check {
+                return Err(Rejected(format!(
+                    "Spell check is already {state} for that note."
+                )));
+            }
+            let first = first_line(&current.body);
+            if let Some(note) = model.notes.get_mut(note) {
+                note.spell_check = *check;
+            }
+            Ok(Entry::new(
+                format!("Spell check {state} for {}", named_note(&first)),
+                Command::SetNoteSpellCheck {
+                    note: *note,
+                    check: !*check,
                 },
             ))
         }

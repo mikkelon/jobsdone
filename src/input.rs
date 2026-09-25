@@ -221,6 +221,9 @@ pub enum Action {
     /// dictionary offers in place of it. It acts on a word rather than
     /// on a row, which is why it is the note's key and no list's.
     FixSpelling,
+    /// `S` on the notes list and `alt-S` in the open note: the note out
+    /// of spell checking, or back into it.
+    SpellCheck,
     ToToday,
     ToBacklog,
     MoveToDay,
@@ -407,6 +410,7 @@ impl Binding {
                     | Action::Edit
                     | Action::Delete
                     | Action::Archive
+                    | Action::SpellCheck
                     | Action::CopyTask
                     | Action::ToToday
                     | Action::ToBacklog
@@ -1153,6 +1157,7 @@ macro_rules! notes_table {
                 narrow: Bar::Left,
             },
             $archive,
+            SPELL_CHECK_NOTE,
             Binding {
                 keys: &[("x", Action::Delete)],
                 shown: "x",
@@ -1210,6 +1215,16 @@ macro_rules! notes_table {
         ]
     };
 }
+
+/// One note out of spell checking, or back into it. The bar has no room
+/// for it; the palette and help teach it.
+const SPELL_CHECK_NOTE: Binding = Binding {
+    keys: &[("S", Action::SpellCheck)],
+    shown: "S",
+    label: "spell check on/off",
+    bar: Bar::Off,
+    narrow: Bar::Off,
+};
 
 const ARCHIVE_NOTE: Binding = Binding {
     keys: &[("A", Action::Archive)],
@@ -1334,6 +1349,13 @@ const NOTES_NOTE: &[Binding] = &[
         label: "fix spelling…",
         bar: Bar::Left,
         narrow: Bar::Short(Side::Left, "spelling"),
+    },
+    Binding {
+        keys: &[("alt-S", Action::SpellCheck)],
+        shown: "alt-S",
+        label: "spell check on/off",
+        bar: Bar::Off,
+        narrow: Bar::Off,
     },
     Binding {
         keys: &[],

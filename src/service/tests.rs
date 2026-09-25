@@ -979,6 +979,39 @@ fn an_archived_note_is_read_changed_checked_and_deleted_like_any_other() {
 }
 
 #[test]
+fn a_note_is_taken_out_of_spell_checking_and_still_checked_when_asked() {
+    let mut world = World::new();
+    let id = world.ok(json!({"op": "note.create", "body": "Xqzt"}))["note"]["id"].clone();
+    assert_eq!(
+        world.ok(json!({"op": "note.get", "id": id}))["note"]["spell_check"],
+        true
+    );
+
+    let data = world.ok(json!({"op": "note.spell_check", "id": id, "check": false}));
+    assert_eq!(data["note"]["spell_check"], false);
+    assert_eq!(data["undo"]["label"], "Spell check off for \"Xqzt\"");
+
+    let refused = world.err(json!({"op": "note.spell_check", "id": id, "check": false}));
+    assert_eq!(refused.code, "rejected");
+    assert_eq!(refused.message, "Spell check is already off for that note.");
+
+    let data = world.ok(json!({"op": "note.check", "note": id}));
+    assert_eq!(data["misspellings"][0]["word"], "Xqzt");
+
+    world.ok(json!({"op": "undo.apply"}));
+    assert_eq!(
+        world.ok(json!({"op": "note.get", "id": id}))["note"]["spell_check"],
+        true
+    );
+    assert_eq!(
+        world
+            .err(json!({"op": "note.spell_check", "id": 99, "check": false}))
+            .code,
+        "not_found"
+    );
+}
+
+#[test]
 fn a_note_is_archived_from_the_list_and_unarchived_from_the_archive() {
     let mut world = World::new();
     let id = world.ok(json!({"op": "note.create", "body": "Milk"}))["note"]["id"].clone();

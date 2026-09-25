@@ -138,6 +138,25 @@ pub(super) fn unarchive(session: &mut Session, fields: Value) -> Result<Value, E
 
 #[derive(Debug, Deserialize)]
 #[serde(deny_unknown_fields)]
+struct SpellCheck {
+    id: Id,
+    check: bool,
+}
+
+/// One note out of spell checking, or back into it: the domain says
+/// whether it already is.
+pub(super) fn spell_check(session: &mut Session, fields: Value) -> Result<Value, Error> {
+    let request: SpellCheck = spec::fields("note.spell_check", fields)?;
+    live(session, request.id)?;
+    let undo = session.commit(vec![Command::SetNoteSpellCheck {
+        note: request.id,
+        check: request.check,
+    }])?;
+    Ok(json!({"note": dto::note(live(session, request.id)?), "undo": undo}))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields)]
 struct Check {
     note: Option<Id>,
     text: Option<String>,
@@ -150,8 +169,9 @@ struct Check {
 /// The ranges are in grapheme clusters, end exclusive, which is the unit
 /// a note's caret counts in, so a caller can point at a word the same
 /// way the window does. The check runs whether or not `spell_check_notes`
-/// is on: the setting says whether a note is underlined while it is
-/// being typed, not whether this question may be asked.
+/// is on, and on a note taken out of checking: the setting and the note's
+/// own switch say whether a note is underlined while it is being typed,
+/// not whether this question may be asked.
 pub(super) fn check(session: &Session, fields: Value) -> Result<Value, Error> {
     let request: Check = spec::fields("note.check", fields)?;
     let text = match (&request.note, &request.text) {

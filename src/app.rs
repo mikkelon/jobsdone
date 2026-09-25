@@ -1440,6 +1440,7 @@ impl App {
             Action::CutSelection => return self.copy_selection(true),
             Action::Paste => return Flow::ReadClipboard,
             Action::FixSpelling => self.offer_a_spelling(),
+            Action::SpellCheck => self.switch_the_spell_check(),
             Action::MoveDown => self.reorder(true),
             Action::MoveUp => self.reorder(false),
             Action::ToToday => self.pull_onto_today(),
@@ -3441,6 +3442,33 @@ impl App {
         }
     }
 
+    /// `S` on the notes list and `alt-S` in the open note: the note out
+    /// of spell checking, or back into it. From the open note, what has
+    /// been typed is saved first, so the switch is written over the body
+    /// the note has rather than one it is about to lose.
+    fn switch_the_spell_check(&mut self) {
+        if self.page != Page::Notes {
+            return;
+        }
+        let note = match self.notes_pane {
+            NotesPane::List => self.note_at_cursor(),
+            NotesPane::Note => {
+                if !self.save_the_note() {
+                    return;
+                }
+                self.draft.as_ref().map(|draft| draft.note)
+            }
+            NotesPane::Filter => None,
+        };
+        let Some(note) = note else {
+            return;
+        };
+        let Some(check) = self.model.note(note).map(|note| !note.spell_check) else {
+            return;
+        };
+        self.run(Command::SetNoteSpellCheck { note, check });
+    }
+
     /// Which list the notes page is showing.
     pub fn notes_list(&self) -> NotesList {
         self.notes_list
@@ -3718,6 +3746,10 @@ impl App {
             self.spelling.forget();
             return;
         };
+        if self.model.note(note).is_some_and(|note| !note.spell_check) {
+            self.spelling.forget();
+            return;
+        }
         let draft = self.draft.as_ref().filter(|draft| draft.note == note);
         let caret = draft.map(|draft| draft.caret);
         let body = match draft {
@@ -3756,6 +3788,10 @@ impl App {
                 "Notes are not spell-checked while that setting is off.",
                 false,
             );
+            return;
+        }
+        if self.model.note(note).is_some_and(|note| !note.spell_check) {
+            self.say("This note is not spell-checked. alt-S checks it.", false);
             return;
         }
 

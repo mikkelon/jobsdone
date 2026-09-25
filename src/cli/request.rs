@@ -634,6 +634,20 @@ JSON fields: id (integer).",
         detail: "JSON fields: id (integer).",
     },
     Spec {
+        name: "note spell-check",
+        op: "note.spell_check",
+        options: NO_OPTIONS,
+        view: View::Note,
+        then: Then::Nothing,
+        summary: "take a note out of spell checking, or put it back",
+        usage: "jobsdone note spell-check ID on|off",
+        detail: "\
+Off leaves the note unmarked in the window while spell_check_notes is on;
+every other note is still checked. note check still checks it when asked.
+
+JSON fields: id (integer), check (bool).",
+    },
+    Spec {
         name: "note check",
         op: "note.check",
         options: NOTE_CHECK,
@@ -1237,6 +1251,31 @@ pub fn fields(
                 None if extras.body.is_none() && !input => {
                     return Err(want("the new body, or --stdin, or --file"));
                 }
+                None => {}
+            }
+        }
+        "note spell-check" => {
+            let (first, state) = match positionals {
+                [] => (None, None),
+                [only] => (Some(only.clone()), None),
+                [first, second] => (Some(first.clone()), Some(second.clone())),
+                [_, _, _, ..] => {
+                    return Err(Failure::usage(
+                        "note spell-check wants a note id and on or off".to_owned(),
+                    ));
+                }
+            };
+            if let Some(only) = needed(first, input, || want("a note id"))? {
+                out.insert("id".to_owned(), id(&only)?);
+            }
+            match state {
+                Some(state) => {
+                    out.insert(
+                        "check".to_owned(),
+                        setting_value("spell-check", &state, Shape::Flag)?,
+                    );
+                }
+                None if !input => return Err(want("on or off")),
                 None => {}
             }
         }

@@ -831,9 +831,28 @@ def p10():
         f.put(rx + 2, y + i, l)
     hints(f, f.h - 1, 'Filter', [('type', 'to filter'), ('↑/↓', 'move'), ('⏎', 'open'), ('tab', 'to the list'), ('esc', 'clear')])
 
+    n = Grid(120, 36)
+    strip(n, [[('editing · autosave', 'd')]], [key('esc', 'back to list') + key('alt-h', 'help')])
+    lx, lw, rx, rw, y0, y1 = frame2(n, ('', '', ''), ('Scratchpad', 'Thu 4 Sep 16:40 · no spell check', key('esc', 'back')), 'right', div=44)
+    tabs(n, lx + 1, 2, [('STACK', 4, True), ('ARCHIVE', 0, False)], focus=False)
+    n.callout(rx + 45, 2, 8)
+    y = y0
+    for t, age, cur in [('Test fixtures: xqzt vrrbl kjhdf', 'today', True)] + notes[:3]:
+        n.put(lx + 1, y, ' ▪ ', 'd'); n.put(lx + 4, y, t[:lw - 16]); n.rput(lx + lw - 1, y, age, 'd')
+        if cur: n.add_attr(lx, y, lw, 'c')
+        y += 1
+    y += 1
+    add_row(n, lx, lw, y, 'new note')
+    gibberish = ['Test fixtures:', 'xqzt vrrbl kjhdf', 'ZmFrZSB0b2tlbg aGVsbG8gd29ybGQ', 'plonk wibbet frazzle snood']
+    for i, l in enumerate(gibberish):
+        n.put(rx + 2, y0 + i, l)
+    n.put(rx + 2 + len(gibberish[-1]), y0 + len(gibberish) - 1, '█', 'b')
+    hints(n, n.h - 1, 'Scratchpad', [('esc', 'back to the list'), ('ctrl-z', 'undo edit'), ('ctrl-y', 'redo edit'), ('alt-y', 'copy note'), ('type', 'to edit')])
+
     page('10-scratchpad', 'Scratchpad', [('120×36 · floating window, notes page', g),
                                           ('120×36 · shift-tab: the Archive tab of the same pane', a),
-                                          ('120×36 · / filters the list shown', f)], '''
+                                          ('120×36 · / filters the list shown', f),
+                                          ('120×36 · a note taken out of spell checking', n)], '''
 <h2>Scratchpad</h2>
 <p>A post-it block, on its own page. <kbd>gn</kbd> switches the whole window to Notes and <kbd>esc</kbd> back, so a note gets real width; the day and backlog are one key away, not squeezed beside it. Text only.</p>
 <ol>
@@ -847,6 +866,9 @@ def p10():
 <li><kbd>shift-tab</kbd> switches the list pane to its Archive tab, and back. <kbd>A</kbd> on a note archives it, and on the Archive brings it back; the cursor lands on the row that took its place. Archived notes are dated by when they were archived, most recent first, and open and take typing like any other.</li>
 <li>An archived note's header says when it was made and when it was archived.</li>
 <li><kbd>/</kbd> opens a filter at the top of whichever list is showing. Letters type into it and the list narrows as they do, best match first: the letters of every word in order, anywhere in the body. <kbd>↑</kbd>/<kbd>↓</kbd> move, <kbd>⏎</kbd> opens, <kbd>tab</kbd> hands the keyboard to the list with the filter still applied, and <kbd>esc</kbd> clears it. The filter stays while a note is opened from it, and goes with <kbd>shift-tab</kbd> to the other tab.</li>
+</ol>
+<ol start="8">
+<li>A note of gibberish on purpose is taken out of spell checking on its own: <kbd>S</kbd> on the list, <kbd>alt-S</kbd> while editing. Its header ends in "no spell check", it has no underlines and its hint bar drops <kbd>alt-s</kbd>. A checked note shows nothing extra, nor does any list row; with spell checking off in settings no header says it.</li>
 </ol>
 <div class="flow"><b>Narrow layout</b>The list and the open note stack, and the top row is the list's tabs (screen 04).</div>''')
 

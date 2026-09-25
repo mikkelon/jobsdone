@@ -149,9 +149,10 @@ bare task row does not.
 
 ### Note
 
-    {"id": 4, "body": "…", "created_at": "…", "updated_at": "…", "archived_at": null}
+    {"id": 4, "body": "…", "created_at": "…", "updated_at": "…", "archived_at": null, "spell_check": true}
 
 `archived_at` is when the note was archived, or `null` for a note in the list.
+`spell_check` is false for a note taken out of spell checking.
 List rows drop `body` for `first_line` unless `include_body` is asked for.
 
 ### Undo entry
@@ -283,6 +284,7 @@ rewritten by a reorder.
 | `note.delete` | `id`, `confirm?: bool`       | `{"note": Note, "undo": UndoEntry}`      |
 | `note.archive`   | `id`                      | `{"note": Note, "undo": UndoEntry}`      |
 | `note.unarchive` | `id`                      | `{"note": Note, "undo": UndoEntry}`      |
+| `note.spell_check` | `id`, `check: bool`     | `{"note": Note, "undo": UndoEntry}`      |
 
 `body` is full text: newlines and any Unicode, unchanged. `note.create` with a
 body is one change and one undo entry ("Added a note").
@@ -291,6 +293,11 @@ An archived note is out of the default `note.list` but otherwise an ordinary
 note: `note.get`, `note.update`, `note.delete` and `note.check` work on it.
 Archiving an archived note, or unarchiving one that is in the list, is
 `rejected`. Undoing an unarchive puts the note back at the `archived_at` it had.
+
+`note.spell_check` with `check: false` takes a note out of the TUI's spell
+checking and `true` puts it back ("Spell check off for …", undoable). Asking
+for the value a note already has is `rejected`. `note.check` still checks the
+note when asked.
 
 ### Settings and the dictionary
 

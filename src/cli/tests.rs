@@ -239,6 +239,7 @@ const SAMPLES: &[(&str, &[&str])] = &[
     ("note delete", &["note", "delete", "1", "--yes"]),
     ("note archive", &["note", "archive", "1"]),
     ("note unarchive", &["note", "unarchive", "1"]),
+    ("note spell-check", &["note", "spell-check", "1", "off"]),
     ("note check", &["note", "check", "1"]),
     ("note copy", &["note", "copy", "1"]),
     ("settings get", &["settings", "get"]),
@@ -263,6 +264,17 @@ fn the_archive_is_listed_with_archived() {
     assert_eq!(sent["archived"], true);
     assert_eq!(sent["include_body"], true);
     assert!(request(&["note", "list"]).get("archived").is_none());
+}
+
+#[test]
+fn a_note_is_switched_out_of_spell_checking_with_on_or_off() {
+    let sent = request(&["note", "spell-check", "3", "off"]);
+    assert_eq!(sent["op"], "note.spell_check");
+    assert_eq!(sent["id"], 3);
+    assert_eq!(sent["check"], false);
+    assert_eq!(request(&["note", "spell-check", "3", "on"])["check"], true);
+    assert!(refused(&["note", "spell-check", "3"]).contains("on or off"));
+    assert!(refused(&["note", "spell-check", "3", "maybe"]).contains("on or off"));
 }
 
 #[test]

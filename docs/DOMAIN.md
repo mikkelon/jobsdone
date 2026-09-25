@@ -493,11 +493,12 @@ is one of the task commands above, or nothing at all in the case of
 | DeleteNote(note)      | live         | `deleted_at` = now.          | RestoreNote       |
 | ArchiveNote(note)     | live, not archived | `archived_at` = now.   | UnarchiveNote     |
 | UnarchiveNote(note)   | live, archived | `archived_at` none.        | RearchiveNote(old `archived_at`) |
+| SetNoteSpellCheck(note, check) | live, `spell_check` ≠ check | `spell_check` = check. | SetNoteSpellCheck(note, old value) |
 
 Every command but EditNote works on an archived note as on any other.
 Labels: "Added a note", "Replaced a note", "Deleted a note", and "Archived
-…" and "Unarchived …" naming the note's first line, or "a note" when it
-is blank.
+…", "Unarchived …", "Spell check off for …" and "Spell check on for …"
+naming the note's first line, or "a note" when it is blank.
 
 ### Settings
 
@@ -586,6 +587,7 @@ rewrite that day's record.
 | updated_at | instant         |
 | deleted_at | instant or none |
 | archived_at | instant or none |
+| spell_check | boolean, true until changed |
 
 A live note is in one of two lists: the stack, where `archived_at` is
 none, or the archive. Archived notes never expire and are not in the note
@@ -598,6 +600,11 @@ note rather than of its last edit, because that is the order the list is
 already in. The archive is ordered by `archived_at`, newest first, ties
 by the higher id, and its rows show the age since archiving for the same
 reason.
+
+A note is spell-checked while `spell_check_notes` is on unless its own
+`spell_check` is false. The note field takes one note out of checking
+and leaves every other note checked. Asking for a check from the command
+line checks the note whatever the field says.
 
 A filter narrows whichever list is shown. Its text is split on
 whitespace, and a note matches when every word is in its whole body as a
@@ -681,6 +688,7 @@ CREATE TABLE notes (
     deleted_at  TEXT
 );
 -- archived_at TEXT, added by the fifth migration.
+-- spell_check INTEGER NOT NULL DEFAULT 1, added by the sixth migration.
 
 CREATE TABLE meta (
     key    TEXT PRIMARY KEY,
@@ -728,6 +736,10 @@ The fifth migration adds `notes.archived_at`, a nullable instant. The note
 upsert names its columns, so a client started before the migration that saves
 a body into an archived note leaves `archived_at` as it is; it shows archived
 notes as live until it is restarted.
+
+The sixth migration adds `notes.spell_check`, an integer flag that defaults to
+1, so every note written before it is checked. For the same reason as the
+fifth, a client started before it that saves a body leaves the flag alone.
 
 Opening a database acquires a SQLite immediate transaction before reading its
 schema version. All pending migrations and version updates commit together;

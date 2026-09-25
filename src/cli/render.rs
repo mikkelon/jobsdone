@@ -642,6 +642,9 @@ impl Reading<'_> {
             if let Some(archived) = text_at(note, "archived_at") {
                 let _ = write!(out, " · archived {}", self.stamp(archived));
             }
+            if note.get("spell_check").and_then(Value::as_bool) == Some(false) {
+                out.push_str(" · no spell check");
+            }
             out.push('\n');
             out.push('\n');
             out.push_str(text_at(note, "body").unwrap_or_default());
@@ -650,7 +653,16 @@ impl Reading<'_> {
             }
             return out;
         }
-        let _ = writeln!(out, "{} {id}.", self.said());
+        if self.op == "note.spell_check" {
+            let state = if flag_at(note, "spell_check") {
+                "on"
+            } else {
+                "off"
+            };
+            let _ = writeln!(out, "Spell check {state} for note {id}.");
+        } else {
+            let _ = writeln!(out, "{} {id}.", self.said());
+        }
         self.undo_line(&mut out);
         out
     }

@@ -116,7 +116,7 @@ fn a_fresh_database_is_migrated_to_the_latest_schema() {
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user_version");
 
-    assert_eq!(user_version, 5);
+    assert_eq!(user_version, 6);
     assert_eq!(store.load().expect("load"), Model::empty());
 }
 
@@ -432,7 +432,7 @@ fn a_database_without_the_dictionary_gains_it_and_keeps_what_it_had() {
         .conn
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user_version");
-    assert_eq!(user_version, 5);
+    assert_eq!(user_version, 6);
 
     let model = store.load().expect("load");
     assert_eq!(
@@ -509,6 +509,64 @@ fn an_older_client_saving_a_note_leaves_its_archive_alone() {
 }
 
 #[test]
+fn a_note_written_before_the_spell_check_switch_is_spell_checked() {
+    let dir = tempfile::tempdir().expect("a temporary directory");
+    let path = dir.path().join("jobsdone.db");
+    let conn = Connection::open(&path).expect("a new database");
+    for (number, sql) in MIGRATIONS.iter().filter(|(number, _)| *number < 6) {
+        conn.execute_batch(&format!("BEGIN;\n{sql}\nCOMMIT;"))
+            .unwrap_or_else(|error| panic!("migration {number}: {error}"));
+    }
+    conn.execute(
+        "INSERT INTO notes (id, body, created_at, updated_at, deleted_at, archived_at)
+         VALUES (1, 'Milk', ?1, ?1, NULL, NULL)",
+        params!["2026-09-07T09:00:00+02:00[Europe/Copenhagen]"],
+    )
+    .expect("a note written before the switch existed");
+    drop(conn);
+
+    let store = Sqlite::open(&path).expect("the same database again");
+    assert!(store.load().expect("load").notes[&1].spell_check);
+}
+
+#[test]
+fn a_note_taken_out_of_spell_checking_stays_out_when_reopened() {
+    let mut world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
+    world.run(Command::CreateNote);
+    let note = *world.model.notes.keys().next().expect("the note");
+    world.run(Command::SetNoteSpellCheck { note, check: false });
+
+    assert!(!world.reopened().note(note).expect("the note").spell_check);
+}
+
+/// A client started before the switch existed saves a note with an
+/// upsert that names its columns, so it leaves the switch alone.
+#[test]
+fn an_older_client_saving_a_note_leaves_its_spell_check_alone() {
+    let mut world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
+    world.run(Command::CreateNote);
+    let note = *world.model.notes.keys().next().expect("the note");
+    world.run(Command::SetNoteSpellCheck { note, check: false });
+
+    let conn = Connection::open(&world.path).expect("the database again");
+    conn.execute(
+        "INSERT INTO notes (id, body, created_at, updated_at, deleted_at, archived_at)
+         VALUES (?1, 'Typed by the old client', ?2, ?2, NULL, NULL)
+         ON CONFLICT (id) DO UPDATE SET
+             body = excluded.body, created_at = excluded.created_at,
+             updated_at = excluded.updated_at, deleted_at = excluded.deleted_at,
+             archived_at = excluded.archived_at",
+        params![note, "2026-09-07T10:00:00+02:00[Europe/Copenhagen]"],
+    )
+    .expect("the old upsert");
+    drop(conn);
+
+    let saved = world.reopened().note(note).expect("the note").clone();
+    assert_eq!(saved.body, "Typed by the old client");
+    assert!(!saved.spell_check);
+}
+
+#[test]
 fn a_database_at_the_latest_schema_is_opened_without_migrating_it_again() {
     let mut world = Scratch::new("2026-09-07T09:00:00+02:00[Europe/Copenhagen]");
     let change = domain::add_dictionary_word(&world.model, "Ratatui").expect("the word");
@@ -520,7 +578,7 @@ fn a_database_at_the_latest_schema_is_opened_without_migrating_it_again() {
         .query_row("PRAGMA user_version", [], |row| row.get(0))
         .expect("user_version");
 
-    assert_eq!(user_version, 5);
+    assert_eq!(user_version, 6);
     assert_eq!(
         again.load().expect("load").personal_dictionary,
         world.model.personal_dictionary
@@ -1215,7 +1273,7 @@ fn undo_migration_preserves_existing_rows_and_initializes_from_stack() {
     world
         .store
         .conn
-        .execute_batch("DROP TRIGGER undo_identity_guard; DROP TRIGGER undo_identity_advance; DELETE FROM meta WHERE key = 'undo_high_water'; ALTER TABLE notes DROP COLUMN archived_at; PRAGMA user_version = 3;")
+        .execute_batch("DROP TRIGGER undo_identity_guard; DROP TRIGGER undo_identity_advance; DELETE FROM meta WHERE key = 'undo_high_water'; ALTER TABLE notes DROP COLUMN archived_at; ALTER TABLE notes DROP COLUMN spell_check; PRAGMA user_version = 3;")
         .unwrap();
     let before = world.model.clone();
     let upgraded = Sqlite::open(&world.path).unwrap();

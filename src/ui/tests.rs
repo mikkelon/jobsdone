@@ -253,6 +253,7 @@ fn wireframe_model() -> Model {
                 updated_at: made,
                 deleted_at: None,
                 archived_at: None,
+                spell_check: true,
             },
         );
     }
@@ -401,6 +402,7 @@ fn history_model() -> Model {
                 updated_at: made,
                 deleted_at: None,
                 archived_at: None,
+                spell_check: true,
             },
         );
     }
@@ -2136,6 +2138,7 @@ fn a_note_of_wide_characters_wraps_and_puts_its_caret_by_cells() {
             updated_at: at(NOW),
             deleted_at: None,
             archived_at: None,
+            spell_check: true,
         },
     );
     let mut app = app_on(MemStore::holding(model));
@@ -3443,6 +3446,56 @@ fn the_open_note_only_hints_at_spelling_when_enabled() {
 }
 
 #[test]
+fn only_a_note_taken_out_of_spell_checking_says_so_in_its_header() {
+    let mut app = spelling_app();
+    app.update(Action::NotesPage);
+    app.update(Action::Add);
+    for typed in "xqzt vrrbl".chars() {
+        app.update(Action::Insert(typed));
+    }
+    let said = |app: &App, width: u16, height: u16| {
+        look(app, width, height)
+            .iter()
+            .filter(|row| row.contains("no spell check"))
+            .count()
+    };
+    for (width, height) in [(120, 36), (80, 44)] {
+        assert_eq!(said(&app, width, height), 0, "a checked note says nothing");
+    }
+
+    app.update(Action::SpellCheck);
+    for (width, height) in [(120, 36), (80, 44)] {
+        let drawn = look(&app, width, height);
+        let header = drawn
+            .iter()
+            .find(|row| row.contains("Scratchpad"))
+            .expect("the scratchpad header");
+        assert!(
+            header.contains("· no spell check"),
+            "the header at {width}x{height}: {header:?}"
+        );
+        assert_eq!(
+            said(&app, width, height),
+            1,
+            "the header and no list row at {width}x{height}: {drawn:?}"
+        );
+        let bar = drawn[height as usize - 1].clone();
+        assert!(
+            !bar.contains("alt-s"),
+            "nothing to fix in a note nobody checks: {bar:?}"
+        );
+    }
+
+    // With the setting off no note is checked, so none is singled out.
+    let mut settings = app.settings().clone();
+    settings.set_spell_check_notes(false);
+    app.change_settings(settings);
+    for (width, height) in [(120, 36), (80, 44)] {
+        assert_eq!(said(&app, width, height), 0);
+    }
+}
+
+#[test]
 fn the_caret_fills_a_blank_cell_at_the_end_of_fields_and_notes() {
     let mut app = empty();
     app.update(Action::Add);
@@ -3478,6 +3531,7 @@ fn note_open(body: &str, width: u16, height: u16) -> App {
             updated_at: at(NOW),
             deleted_at: None,
             archived_at: None,
+            spell_check: true,
         },
     );
     let mut app = app_on(MemStore::holding(model));

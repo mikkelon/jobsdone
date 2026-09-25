@@ -399,6 +399,34 @@ fn one_task_is_reordered_against_another_without_naming_the_rest() {
 }
 
 #[test]
+fn a_note_is_taken_out_of_spell_checking_from_the_command_line() {
+    let dir = scratch();
+    let data = dir.path();
+    ok(data, &["note", "create", "Xqzt vrrbl"]);
+
+    let first = |out: &str| out.lines().next().unwrap_or_default().to_owned();
+    let read = ok(data, &["note", "get", "1"]);
+    assert!(!first(&read.out).contains("no spell check"), "{}", read.out);
+
+    let switched = ok(data, &["note", "spell-check", "1", "off"]);
+    assert!(
+        switched.out.contains("Spell check off for note 1."),
+        "{}",
+        switched.out
+    );
+    let read = ok(data, &["note", "get", "1"]);
+    assert!(
+        first(&read.out).ends_with("· no spell check"),
+        "{}",
+        read.out
+    );
+
+    let again = run(data, &["--json", "note", "spell-check", "1", "off"], None);
+    assert_eq!(again.code, 4, "{} {}", again.out, again.err);
+    assert_eq!(again.failure()["error"]["code"], "rejected");
+}
+
+#[test]
 fn a_note_is_archived_and_brought_back_from_the_command_line() {
     let dir = scratch();
     let data = dir.path();

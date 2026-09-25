@@ -3010,6 +3010,86 @@ fn the_archive_inverses_are_written_under_stable_names() {
     );
 }
 
+#[test]
+fn a_note_is_spell_checked_until_it_is_taken_out() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let note = new_note(&mut world, "Xqzt vrrb");
+    assert!(world.model.note(note).expect("the note").spell_check);
+
+    world.must(Command::SetNoteSpellCheck { note, check: false });
+    assert!(!world.model.note(note).expect("the note").spell_check);
+    assert_eq!(
+        world.model.undo.last().map(|entry| entry.label.as_str()),
+        Some("Spell check off for \"Xqzt vrrb\"")
+    );
+
+    world.must(Command::SetNoteSpellCheck { note, check: true });
+    assert!(world.model.note(note).expect("the note").spell_check);
+    assert_eq!(
+        world.model.undo.last().map(|entry| entry.label.as_str()),
+        Some("Spell check on for \"Xqzt vrrb\"")
+    );
+}
+
+#[test]
+fn taking_a_note_out_of_spell_checking_is_taken_back_with_undo() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let note = new_note(&mut world, "Xqzt");
+    world.must(Command::SetNoteSpellCheck { note, check: false });
+
+    let undone = world.undo();
+    assert_eq!(undone.dropped, None);
+    assert!(world.model.note(note).expect("the note").spell_check);
+}
+
+#[test]
+fn a_note_is_switched_only_to_the_spell_check_it_does_not_have() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let note = new_note(&mut world, "Milk");
+    assert_eq!(
+        world.refuse(Command::SetNoteSpellCheck { note, check: true }),
+        "Spell check is already on for that note."
+    );
+    world.must(Command::SetNoteSpellCheck { note, check: false });
+    assert_eq!(
+        world.refuse(Command::SetNoteSpellCheck { note, check: false }),
+        "Spell check is already off for that note."
+    );
+    world.must(Command::DeleteNote { note });
+    assert_eq!(
+        world.refuse(Command::SetNoteSpellCheck { note, check: true }),
+        "That note is gone."
+    );
+}
+
+#[test]
+fn an_archived_note_keeps_its_spell_check_and_can_change_it() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let note = new_note(&mut world, "Milk");
+    world.must(Command::SetNoteSpellCheck { note, check: false });
+    world.must(Command::ArchiveNote { note });
+    assert!(!world.model.note(note).expect("the note").spell_check);
+    world.must(Command::SetNoteSpellCheck { note, check: true });
+    world.must(Command::UnarchiveNote { note });
+    assert!(world.model.note(note).expect("the note").spell_check);
+}
+
+/// An undo entry is kept as JSON in the database, so the name the switch
+/// is written under is part of the schema.
+#[test]
+fn the_spell_check_switch_is_written_under_a_stable_name() {
+    let switch = Command::SetNoteSpellCheck {
+        note: 3,
+        check: false,
+    };
+    let json = serde_json::to_string(&switch).expect("json");
+    assert_eq!(json, r#"{"SetNoteSpellCheck":{"note":3,"check":false}}"#);
+    assert_eq!(
+        serde_json::from_str::<Command>(&json).expect("a command"),
+        switch
+    );
+}
+
 // ---- several instances -----------------------------------------------
 
 #[test]
