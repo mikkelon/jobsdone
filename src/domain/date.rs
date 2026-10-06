@@ -170,7 +170,7 @@ pub fn parse_date(text: &str, today: Date, looking: Looking) -> Option<Date> {
         }
         [one, other, year] => {
             let (day, month) = day_and_month(one, other)?;
-            Date::new(year.parse().ok()?, month as i8, day as i8).ok()
+            Date::new(full_year(year)?, month as i8, day as i8).ok()
         }
         _ => None,
     }
@@ -234,6 +234,16 @@ fn in_the_nearest_year(day: u8, month: u8, today: Date, looking: Looking) -> Opt
             Looking::Ahead => *date >= today,
             Looking::Back => *date <= today,
         })
+}
+
+/// A year written out in four digits. A shorter one is not guessed at:
+/// read as it stands, "26" is the year 26, and no label on the card
+/// shows the year to give that away.
+fn full_year(text: &str) -> Option<i16> {
+    if text.len() != 4 || !text.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    text.parse().ok()
 }
 
 fn number(text: &str) -> Option<u8> {

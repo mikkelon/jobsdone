@@ -1843,6 +1843,16 @@ fn a_typed_date_is_read_the_few_ways_a_date_is_written() {
 }
 
 #[test]
+fn a_year_is_written_out_in_full_or_not_at_all() {
+    // A short year would be the year 26, two thousand years ago, and the
+    // card's label has no year in it to give that away.
+    for text in ["1/10/26", "30 sep 27", "1.10.026", "1/10/0", "1/10/12345"] {
+        assert_eq!(typed(text), None, "{text}");
+    }
+    assert_eq!(typed("1/10/2026").as_deref(), Some("2026-10-01"));
+}
+
+#[test]
 fn a_typed_date_with_no_year_is_the_next_one_that_has_not_passed() {
     // 1 September has gone; 30 September has not.
     assert_eq!(typed("1 sep").as_deref(), Some("2026-09-01"));

@@ -79,7 +79,7 @@ task is given and `Back` for a day gone to:
 |--------------------------------|----------------------------------------------|
 | `2026-09-30`                   | That date.                                   |
 | `30 sep`, `sep 30`, `30/9`     | Day and month, in either order, any of ` / - . ,` between them. |
-| `30 sep 2027`, `1/10/2027`     | The same with a year.                        |
+| `30 sep 2027`, `1/10/2027`     | The same with a year, written out in four digits: `1/10/27` is not a date. |
 | `30`                           | The next month that has a 30th; looking back, the last one that has had it. |
 | `mon`, `monday`                | The next such weekday, never today; looking back, the last one. |
 | `today`, `tomorrow`, `yesterday` | Those days.                                |
