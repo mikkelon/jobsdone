@@ -1915,6 +1915,37 @@ fn what_cannot_be_read_as_a_date_is_nothing() {
     }
 }
 
+#[test]
+fn the_29th_of_february_with_no_year_is_the_nearest_leap_day() {
+    let leap_day = |today: &str, looking| {
+        parse_date("29 feb", on(today), looking).map(|date| date.to_string())
+    };
+    // Neither this year nor the next has one, so it is 2028's.
+    assert_eq!(
+        leap_day("2025-09-05", Looking::Ahead).as_deref(),
+        Some("2028-02-29")
+    );
+    // On a leap year's own day it is that day either way.
+    assert_eq!(
+        leap_day("2028-02-29", Looking::Ahead).as_deref(),
+        Some("2028-02-29")
+    );
+    // Once it has gone, the next is four years on.
+    assert_eq!(
+        leap_day("2028-03-01", Looking::Ahead).as_deref(),
+        Some("2032-02-29")
+    );
+    // Looking back, it is the last one there was.
+    assert_eq!(
+        leap_day("2025-09-05", Looking::Back).as_deref(),
+        Some("2024-02-29")
+    );
+    assert_eq!(
+        leap_day("2028-02-28", Looking::Back).as_deref(),
+        Some("2024-02-29")
+    );
+}
+
 // ---- the review ------------------------------------------------------
 
 #[test]

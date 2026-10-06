@@ -88,7 +88,8 @@ task is given and `Back` for a day gone to:
 A month or a weekday is written out or cut to three letters. A date with
 no year is the next one that has not passed, so `1 sep` typed in
 December is next September; looking back it is the last one that has,
-so `30 sep` typed in August is last September. Nothing else is guessed: text that is not
+so `30 sep` typed in August is last September. `29 feb` is the nearest
+leap year's, ahead or back. Nothing else is guessed: text that is not
 one of these shapes is not a date, and the card says so rather than
 choosing a day.
 

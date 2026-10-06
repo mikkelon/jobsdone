@@ -212,17 +212,28 @@ fn day_of_a_month(day: u8, today: Date, looking: Looking) -> Option<Date> {
     None
 }
 
+/// How many years a day and month with no year named is looked for.
+/// Leap years can be eight apart, around a century not divisible by 400,
+/// and that is the longest a 29 February can be missing.
+const YEARS: i16 = 8;
+
 /// Such a day and month in the nearest year the way it is looked for:
-/// the first that has not passed ahead, which is this year or the next,
-/// and the last that has back, which is this year or the one before.
+/// the first that has not passed ahead and the last that has back. That
+/// is this year or the one next to it, except for 29 February, which is
+/// the nearest leap year's.
 fn in_the_nearest_year(day: u8, month: u8, today: Date, looking: Looking) -> Option<Date> {
     let (day, month) = (day as i8, month as i8);
-    match (Date::new(today.year(), month, day), looking) {
-        (Ok(date), Looking::Ahead) if date >= today => Some(date),
-        (Ok(date), Looking::Back) if date <= today => Some(date),
-        (_, Looking::Ahead) => Date::new(today.year() + 1, month, day).ok(),
-        (_, Looking::Back) => Date::new(today.year() - 1, month, day).ok(),
-    }
+    let step = match looking {
+        Looking::Ahead => 1,
+        Looking::Back => -1,
+    };
+    (0..=YEARS)
+        .filter_map(|years| today.year().checked_add(years * step))
+        .filter_map(|year| Date::new(year, month, day).ok())
+        .find(|date| match looking {
+            Looking::Ahead => *date >= today,
+            Looking::Back => *date <= today,
+        })
 }
 
 fn number(text: &str) -> Option<u8> {
