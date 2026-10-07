@@ -249,8 +249,13 @@ impl Settings {
     /// The working day of an instant: the date it falls on once the
     /// hours before the day began are taken off it, so 01:30 on Saturday
     /// belongs to Friday while the day starts at 5 (DOMAIN.md section 2).
+    ///
+    /// The hours come off the wall clock, not off elapsed time: on the
+    /// days the clocks change, 23 or 25 hours long, the day still begins
+    /// when the clock reads the hour.
     pub fn working_day(&self, instant: &Zoned) -> Date {
         instant
+            .datetime()
             .saturating_sub(Span::new().hours(i64::from(self.day_starts_at)))
             .date()
     }

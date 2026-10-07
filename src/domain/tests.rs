@@ -290,6 +290,23 @@ fn a_day_begins_at_the_hour_the_settings_say() {
 }
 
 #[test]
+fn a_day_begins_at_the_hour_on_the_clock_when_the_clocks_change() {
+    let settings = Settings::default();
+
+    // 28 March 2027 is 23 hours long: the clocks go from 02:00 to 03:00.
+    let before = at("2027-03-28T04:59:00+02:00[Europe/Copenhagen]");
+    assert_eq!(settings.working_day(&before).to_string(), "2027-03-27");
+    let spring = at("2027-03-28T05:00:00+02:00[Europe/Copenhagen]");
+    assert_eq!(settings.working_day(&spring).to_string(), "2027-03-28");
+
+    // 25 October 2026 is 25 hours long: the clocks go from 03:00 to 02:00.
+    let early = at("2026-10-25T04:30:00+01:00[Europe/Copenhagen]");
+    assert_eq!(settings.working_day(&early).to_string(), "2026-10-24");
+    let autumn = at("2026-10-25T05:00:00+01:00[Europe/Copenhagen]");
+    assert_eq!(settings.working_day(&autumn).to_string(), "2026-10-25");
+}
+
+#[test]
 fn a_later_day_start_keeps_the_small_hours_on_the_day_before() {
     let mut settings = Settings::default();
     settings.set_day_starts_at(8);

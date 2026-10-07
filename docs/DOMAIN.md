@@ -42,9 +42,11 @@ The domain never reads a clock. The application passes an instant (a
 zoned timestamp) into every command that needs one, and the domain
 derives the date from it:
 
-    working_day(instant) = civil date of (instant - day_starts_at hours), local time
+    working_day(instant) = civil date of (local clock time of instant - day_starts_at hours)
 
-So 01:30 on Saturday belongs to Friday. The hour is
+So 01:30 on Saturday belongs to Friday. The hours come off the clock
+rather than off elapsed time, so on the days the clocks change the day
+still begins when the clock reads the hour. The hour is
 `settings.day_starts_at`, which is 5 unless it has been changed (section
 19), so the working day is `model.settings.working_day(instant)` and no
 caller may work it out for itself. Every rule below that says "today"
