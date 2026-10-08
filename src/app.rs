@@ -1116,6 +1116,36 @@ impl App {
         locale: Locale,
         now: &Zoned,
     ) -> Result<App, StoreError> {
+        let mut app = App::loaded(store, desktop, locale, now)?;
+        if app.model.settings.review_opens_itself() {
+            app.open_the_review(true);
+        }
+        Ok(app)
+    }
+
+    /// The launch `jobsdone --notes` makes: the same sequence on the
+    /// notes page, without the review. A note is jotted down in passing,
+    /// so the gate is left as it was and the next ordinary launch of the
+    /// day opens the review as if this one had never happened.
+    pub fn new_on_the_notes(
+        store: Box<dyn Store>,
+        desktop: Box<dyn Desktop>,
+        locale: Locale,
+        now: &Zoned,
+    ) -> Result<App, StoreError> {
+        let mut app = App::loaded(store, desktop, locale, now)?;
+        app.focus_on(List::Notes);
+        Ok(app)
+    }
+
+    /// The launch sequence up to the review: the model, and the
+    /// recurring copies owed since the last launch.
+    fn loaded(
+        store: Box<dyn Store>,
+        desktop: Box<dyn Desktop>,
+        locale: Locale,
+        now: &Zoned,
+    ) -> Result<App, StoreError> {
         // The version first. `data_version` moving is how another
         // connection's write is noticed, so a version read after the
         // model would be a version that has already seen a write the
@@ -1163,9 +1193,6 @@ impl App {
         app.generate(now);
         app.refresh();
         app.rest_the_cursors();
-        if app.model.settings.review_opens_itself() {
-            app.open_the_review(true);
-        }
         Ok(app)
     }
 
@@ -2186,9 +2213,9 @@ impl App {
             .map(|(_, group)| group)
     }
 
-    /// Whether the keyboard is on the notes page itself. A review opened
-    /// at launch can lie over the notes page, and while it is up the
-    /// keys are the review's, which are about tasks.
+    /// Whether the keyboard is on the notes page itself. While a review
+    /// is up the keys are the review's, which are about tasks, whatever
+    /// page lies under it.
     fn on_the_notes(&self) -> bool {
         self.page == Page::Notes && self.review.is_none()
     }
@@ -5034,12 +5061,6 @@ impl App {
         };
         self.set_cursor(list, RowId::Task(task));
         self.reorder_to(task, position);
-    }
-
-    /// Turns a freshly launched app to the notes page. The launch sequence
-    /// has already run, so a review it opened lies over the page.
-    pub fn open_on_the_notes(&mut self) {
-        self.focus_on(List::Notes);
     }
 
     fn focus_on(&mut self, list: List) {
