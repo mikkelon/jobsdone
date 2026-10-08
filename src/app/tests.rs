@@ -607,6 +607,43 @@ fn a_date_unearthed_on_the_pile_makes_the_second_step() {
 }
 
 #[test]
+fn a_review_over_the_notes_page_takes_the_task_keys() {
+    let mut app = app_at(
+        left_behind(&[
+            ("Send the invoice", "2025-09-04"),
+            ("Prepare slides", "2025-09-04"),
+        ]),
+        NOW,
+    );
+    app.open_on_the_notes();
+    assert_eq!(step(&app), Some(ReviewStep::Pile));
+
+    app.update(Action::ToToday);
+    let review = app.review().expect("the review");
+    assert_eq!(
+        review.decision(1),
+        Some(Decided::Moved(Place::Day(on(NOW_DAY))))
+    );
+    assert!(
+        app.message()
+            .is_none_or(|message| !message.text.contains("notes"))
+    );
+
+    // `x` is about the task under the cursor, not a note on the page
+    // beneath the review.
+    app.update(Action::Delete);
+    assert_eq!(
+        app.review().expect("the review").decision(2),
+        Some(Decided::Deleted)
+    );
+
+    // Once the review is over, the page it lay over is the one asked for.
+    app.update(Action::Confirm);
+    assert!(app.review().is_none());
+    assert_eq!(app.page(), Page::Notes);
+}
+
+#[test]
 fn escape_leaves_the_review_with_the_pile_intact() {
     let mut app = app_at(
         left_behind(&[
