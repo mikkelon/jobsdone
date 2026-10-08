@@ -70,6 +70,62 @@ pub trait Desktop {
     fn preview(&self, size: WindowSize) -> Result<bool, String>;
 }
 
+/// The release updater a release install puts beside the binary, as the
+/// window speaks to it. Everything it does happens in the background and
+/// is heard about on a later tick, so a slow network is never a slow key.
+pub trait Updater {
+    /// Starts a look at what the channel holds. The network is asked
+    /// only when `asked`, or when no window has asked it for fifteen
+    /// minutes; otherwise the last answer any window heard is read.
+    fn look(&mut self, asked: bool);
+
+    /// Starts installing the latest release.
+    fn install(&mut self);
+
+    /// What finished since the last call, without waiting.
+    fn heard(&mut self) -> Option<Heard>;
+}
+
+/// What the updater has to say once a look or an install is over.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Heard {
+    /// What the channel holds, or why it could not be asked.
+    Looked(Result<Release, String>),
+    /// A look with nothing to say: the last answer is recent and is not
+    /// about the version running here, or the request it came from
+    /// failed.
+    Nothing,
+    /// The install is over; the error is the updater's last line.
+    Installed(Result<(), String>),
+}
+
+/// The latest release on the installed channel, against the installed
+/// program.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Release {
+    pub standing: Standing,
+    /// The installed version, or `-` when nothing is installed.
+    pub installed: String,
+    pub available: String,
+}
+
+/// How the available release stands against the installed one. The
+/// updater decides it, so the window and `jobsdone update` cannot come to
+/// disagree about it.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Standing {
+    Newer,
+    Same,
+    Older,
+}
+
+/// What a launch made from a finished install starts on.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Restart {
+    /// Whether it opens on the notes page, as `--notes` does.
+    pub notes: bool,
+}
+
 /// What the environment says about the person at the keyboard. The
 /// domain reads no environment, so `main.rs` resolves this once and the
 /// application settles it against the `date_style` setting.

@@ -9,6 +9,7 @@ pub mod service;
 pub mod storage;
 pub mod terminal;
 pub mod ui;
+pub mod updater;
 
 /// The mechanical half of ARCHITECTURE.md: `boundaries` reads the table in
 /// section 2 and checks it against what the source actually names,

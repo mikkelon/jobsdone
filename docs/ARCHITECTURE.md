@@ -55,7 +55,8 @@ means none. Names are separated by commas.
 | `desktop`  | app                   | xdg                            |
 | `service`  | domain, app           | jiff, serde, serde_json, unicode_segmentation |
 | `cli`      | domain                | jiff, serde_json |
-| `main.rs`  | storage, app, terminal, desktop, cli, service | jiff, serde_json, tracing, tracing_subscriber, xdg |
+| `updater`  | app                   | tracing                        |
+| `main.rs`  | storage, app, terminal, desktop, cli, service, updater | jiff, serde_json, tracing, tracing_subscriber, xdg |
 
 What the table says, read as a picture, arrows pointing at what is
 depended on:
