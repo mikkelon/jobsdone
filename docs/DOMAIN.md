@@ -147,6 +147,11 @@ Focus is a flag. There is no cap on how many tasks on a day carry it.
 Closing keeps the flag; a closed focus task shows "was focus". Reopening
 keeps it too, so the task returns to the Focus group.
 
+Focus belongs to a day. It goes with a task moved from one day to
+another, and is cleared when the task goes to the backlog, by a move or
+by `w`; undoing that move puts it back. A task arriving on a day from the
+backlog is never focus, and a backlog row is never drawn as focus.
+
 ## 4. Places and order
 
 Every place, each day and the backlog, is one manually ordered list. The
@@ -183,6 +188,13 @@ One row per task and day. The row is written when the task arrives on the
 day and is never updated. If the task comes back to a day it has already
 been on, the existing row stands; `from_place` keeps the first arrival.
 
+A change of mind is not history. A task that leaves a day for the place
+its row says it came from, on the same working day the row was written
+(backlog to today and back to the backlog in one afternoon), takes the
+row with it: the day was never planned with the task, so it shows no
+Moved row and counts nothing. Undoing that move writes the row back as
+it was. Leaving for anywhere else, or on a later day, keeps the row.
+
 The backlog has no placements. Putting a task in the backlog writes
 nothing; the day it left keeps its row.
 
@@ -196,9 +208,9 @@ Placements are the whole history mechanism:
 - The "←backlog" annotation on a plan row is `from_place = backlog` with
   `placed_at` on the working day being shown.
 
-The one command that deletes a placement row is the undo of the move
-that created it. Undo restores the state before the command, and the
-row did not exist then.
+Two things delete a placement row: the undo of the move that created
+it, because undo restores the state before the command and the row did
+not exist then, and the same-day change of mind above.
 
 ## 6. Views of a day
 
@@ -295,8 +307,8 @@ Waiting is a state of a backlog task. The invariant is `waiting` implies
 `day` is none, and three commands keep it:
 
 - `w` on a day task moves the task to the end of the backlog (leaving a
-  placement pointer on the day, as any move does) and sets waiting. One
-  command, one undo entry.
+  placement pointer on the day, as any move does, and putting focus
+  down) and sets waiting. One command, one undo entry.
 - `t` or `m` on a waiting task clears waiting as part of the move.
 - `w` on a backlog task toggles waiting.
 
@@ -452,7 +464,7 @@ application passes in.
 | Close(task)              | live, open                       | `closed_at` = now. If in the backlog: first Move to today, then close. Position and focus unchanged.  | Reopen restoring position, place and `closed_at` none |
 | Reopen(task)             | live, closed                     | `closed_at` none, position = end of its place. Focus unchanged.                                        | Close restoring old `closed_at` and position |
 | SetFocus(task, bool)     | live, on a day                   | Sets focus.                                                                                            | SetFocus(old)                               |
-| Move(task, place)        | live, open, place ≠ current      | Renumber old place; position = end of new; `waiting` = false; placement written if new place is a day and no row exists for that day. | Move back, restoring position and `waiting`, deleting the placement row if this command created it |
+| Move(task, place)        | live, open, place ≠ current      | Renumber old place; position = end of new; `waiting` = false; focus = false unless day to day; placement written if new place is a day and no row exists for that day; the old day's row deleted if the task goes back where it came from on the day it arrived (section 5). | Move back, restoring position, `waiting` and focus, deleting the placement row if this command created it and writing back the one it deleted |
 | Reorder(task, position)  | live                             | Moves the task within its place. A position past the end is clamped to it, because undo needs that (section 11) and one code path serves both. | Reorder(old position)                       |
 | SetWaiting(task, bool)   | live, open                       | If on a day and bool is true: Move to backlog, then set. Otherwise sets the flag.                      | The reverse Move if one happened, and the old flag |
 | SetDue(task, date/none)  | live                             |                                                                                                        | SetDue(old)                                 |
@@ -755,8 +767,8 @@ Notes on the schema:
 - `tasks.day` NULL is the backlog. Position density is the domain's
   invariant, not the schema's (section 4).
 - `tasks_copy` is what makes generation idempotent across instances.
-- `placements` rows are inserted and, only by undo, deleted. Never
-  updated.
+- `placements` rows are inserted and deleted only by undo or a same-day
+  change of mind (section 5). Never updated.
 - `undo_log.inverse` is the JSON of a command from section 12. Rows are
   popped by deleting them; the cap is enforced by deleting the lowest
   ids.

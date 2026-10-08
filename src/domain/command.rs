@@ -135,6 +135,15 @@ pub enum Command {
         waiting: bool,
         drop_placement: Option<Date>,
     },
+    /// Part of the inverse of a move that took a task back where it came
+    /// from on the day it arrived: the day's placement, as it was, which
+    /// the move dropped because the day was never really planned with it.
+    RestorePlacement {
+        task: Id,
+        day: Date,
+        placed_at: Zoned,
+        from_place: FromPlace,
+    },
     /// The inverse of Reopen.
     CloseAt {
         task: Id,
@@ -194,6 +203,7 @@ impl Command {
         matches!(
             self,
             Command::MoveBack { .. }
+                | Command::RestorePlacement { .. }
                 | Command::CloseAt { .. }
                 | Command::RestoreTask { .. }
                 | Command::UncreateSchedule { .. }
@@ -366,6 +376,7 @@ fn task_of(command: &Command) -> Option<Id> {
         | Command::DeleteTask { task }
         | Command::CreateSchedule { task, .. }
         | Command::MoveBack { task, .. }
+        | Command::RestorePlacement { task, .. }
         | Command::CloseAt { task, .. }
         | Command::RestoreTask { task, .. }
         | Command::UncreateSchedule { task, .. } => Some(*task),
@@ -561,7 +572,7 @@ fn run(
             if current.place() == *place {
                 return Err(Rejected("The task is already there.".to_owned()));
             }
-            let (id, title) = (current.id, current.title.clone());
+            let (id, title, focus) = (current.id, current.title.clone(), current.focus);
             let (from, position, waiting) = (current.place(), current.position, current.waiting);
 
             let end = end_of(model, *place);
@@ -570,8 +581,17 @@ fn run(
                 drop_placement =
                     place_on_day(model, id, *day, now, FromPlace::of(from)).then_some(*day);
             }
+            let forgotten = forget_the_arrival(model, id, from, *place, today);
             put_in_place(model, id, *place, end);
-            set_task(model, id, |task| task.waiting = false);
+            // Focus belongs to a day: it goes with a task from one day to
+            // another and is put down in the backlog. A task picked up
+            // from the backlog arrives unfocused, whatever an older
+            // version left on it.
+            let unfocused = focus && *place == Place::Backlog;
+            set_task(model, id, |task| {
+                task.waiting = false;
+                task.focus &= from.day().is_some() && place.day().is_some();
+            });
 
             Ok(Entry::new(
                 format!(
@@ -579,13 +599,17 @@ fn run(
                     named(&title),
                     place_name(*place, today, dates)
                 ),
-                Command::MoveBack {
-                    task: id,
-                    place: from,
-                    position,
-                    waiting,
-                    drop_placement,
-                },
+                leaving_undone(
+                    Command::MoveBack {
+                        task: id,
+                        place: from,
+                        position,
+                        waiting,
+                        drop_placement,
+                    },
+                    forgotten,
+                    unfocused,
+                ),
             ))
         }
 
@@ -615,18 +639,27 @@ fn run(
             // Waiting is a backlog state, so flagging a task on a day
             // sends it to the backlog. One command, one undo entry.
             if *waiting && from != Place::Backlog {
+                let unfocused = current.focus;
                 let end = end_of(model, Place::Backlog);
+                let forgotten = forget_the_arrival(model, id, from, Place::Backlog, today);
                 put_in_place(model, id, Place::Backlog, end);
-                set_task(model, id, |task| task.waiting = true);
+                set_task(model, id, |task| {
+                    task.waiting = true;
+                    task.focus = false;
+                });
                 return Ok(Entry::new(
                     format!("Waiting on {}", named(&title)),
-                    Command::MoveBack {
-                        task: id,
-                        place: from,
-                        position,
-                        waiting: false,
-                        drop_placement: None,
-                    },
+                    leaving_undone(
+                        Command::MoveBack {
+                            task: id,
+                            place: from,
+                            position,
+                            waiting: false,
+                            drop_placement: None,
+                        },
+                        forgotten,
+                        unfocused,
+                    ),
                 ));
             }
             set_task(model, id, |task| task.waiting = *waiting);
@@ -902,6 +935,22 @@ fn run(
             Ok(None)
         }
 
+        Command::RestorePlacement {
+            task,
+            day,
+            placed_at,
+            from_place,
+        } => {
+            let id = live(model, *task)?.id;
+            model.placements.entry((id, *day)).or_insert(Placement {
+                task_id: id,
+                day: *day,
+                placed_at: placed_at.clone(),
+                from_place: *from_place,
+            });
+            Ok(None)
+        }
+
         Command::CloseAt {
             task,
             closed_at,
@@ -1129,6 +1178,54 @@ pub(super) fn place_on_day(
         },
     );
     true
+}
+
+/// A task leaving a day for the place it came from, on the same working
+/// day it arrived, takes the day's placement with it: it was a change of
+/// mind, and the day was never planned with the task (DOMAIN.md section
+/// 5). Returns the placement dropped, for the undo to put back.
+fn forget_the_arrival(
+    model: &mut Model,
+    task: Id,
+    from: Place,
+    to: Place,
+    today: Date,
+) -> Option<Placement> {
+    let Place::Day(left) = from else {
+        return None;
+    };
+    let placement = model.placement(task, left)?;
+    let came_from_there = placement.from_place == FromPlace::of(to);
+    let arrived_today = model.settings.working_day(&placement.placed_at) == today;
+    if !(came_from_there && arrived_today) {
+        return None;
+    }
+    model.placements.remove(&(task, left))
+}
+
+/// The inverse of a task leaving a day: the move back, then whatever
+/// the leaving took with it, the day's placement and the focus flag.
+fn leaving_undone(move_back: Command, forgotten: Option<Placement>, unfocused: bool) -> Command {
+    let Command::MoveBack { task, .. } = move_back else {
+        return move_back;
+    };
+    let mut inverse = vec![move_back];
+    if let Some(placement) = forgotten {
+        inverse.push(Command::RestorePlacement {
+            task,
+            day: placement.day,
+            placed_at: placement.placed_at,
+            from_place: placement.from_place,
+        });
+    }
+    if unfocused {
+        inverse.push(Command::SetFocus { task, focus: true });
+    }
+    if inverse.len() == 1 {
+        inverse.remove(0)
+    } else {
+        Command::Sequence(inverse)
+    }
 }
 
 fn set_task(model: &mut Model, id: Id, edit: impl FnOnce(&mut Task)) {

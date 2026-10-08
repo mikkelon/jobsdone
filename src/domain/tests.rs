@@ -815,6 +815,7 @@ fn the_backlog_has_no_placements() {
         task: id,
         place: day("2026-09-07"),
     });
+    world.clock("2026-09-08T09:00:00");
     world.must(Command::Move {
         task: id,
         place: Place::Backlog,
@@ -825,6 +826,67 @@ fn the_backlog_has_no_placements() {
     assert_eq!(
         titles(&world.day("2026-09-07").moved),
         ["Clean out the garage"]
+    );
+}
+
+#[test]
+fn a_task_sent_back_where_it_came_from_the_same_day_leaves_no_pointer() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let id = world.add("Clean out the garage", Place::Backlog);
+    world.must(Command::Move {
+        task: id,
+        place: day("2026-09-07"),
+    });
+
+    world.clock("2026-09-07T15:00:00");
+    world.must(Command::Move {
+        task: id,
+        place: Place::Backlog,
+    });
+
+    // A change of mind within the day: the day was never planned with it.
+    let monday = world.day("2026-09-07");
+    assert!(monday.moved.is_empty());
+    assert_eq!(monday.counts.planned, 0);
+    assert!(world.model.placement(id, on("2026-09-07")).is_none());
+
+    // Undo takes the task back to the day, and the day's row with it.
+    world.undo();
+    assert_eq!(world.task(id).day, Some(on("2026-09-07")));
+    let placement = world
+        .model
+        .placement(id, on("2026-09-07"))
+        .expect("the placement");
+    assert_eq!(placement.from_place, FromPlace::Backlog);
+    assert_eq!(
+        placement.placed_at,
+        at("2026-09-07T09:00:00+02:00[Europe/Copenhagen]")
+    );
+    assert!(world.day("2026-09-07").plan[0].from_backlog);
+}
+
+#[test]
+fn a_task_sent_somewhere_new_the_same_day_still_leaves_its_pointer() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let added = world.add("Book the venue", day("2026-09-07"));
+    let pulled = world.add("Clean out the garage", Place::Backlog);
+    world.must(Command::Move {
+        task: pulled,
+        place: day("2026-09-07"),
+    });
+
+    world.must(Command::Move {
+        task: added,
+        place: Place::Backlog,
+    });
+    world.must(Command::Move {
+        task: pulled,
+        place: day("2026-09-08"),
+    });
+
+    assert_eq!(
+        titles(&world.day("2026-09-07").moved),
+        ["Book the venue", "Clean out the garage"]
     );
 }
 
@@ -978,6 +1040,86 @@ fn flagging_a_task_on_a_day_sends_it_to_the_backlog_as_waiting() {
     assert_eq!(world.task(id).day, Some(on("2026-09-07")));
     assert!(!world.task(id).waiting);
     assert!(world.day("2026-09-07").moved.is_empty());
+}
+
+#[test]
+fn a_task_sent_to_the_backlog_is_no_longer_focus() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let moved = world.add("Ship invoice export", day("2026-09-07"));
+    let waiting = world.add("Feedback on the proposal", day("2026-09-07"));
+    for task in [moved, waiting] {
+        world.must(Command::SetFocus { task, focus: true });
+    }
+
+    world.must(Command::Move {
+        task: moved,
+        place: Place::Backlog,
+    });
+    world.must(Command::SetWaiting {
+        task: waiting,
+        waiting: true,
+    });
+
+    assert!(!world.task(moved).focus);
+    assert!(!world.task(waiting).focus);
+    let backlog = world.backlog();
+    assert!(
+        backlog
+            .ordinary
+            .iter()
+            .chain(&backlog.waiting)
+            .all(|row| !row.focus)
+    );
+
+    // Taking either back puts the task in the Focus group it left.
+    world.undo();
+    world.undo();
+    assert!(world.task(moved).focus);
+    assert!(world.task(waiting).focus);
+    assert_eq!(
+        titles(&world.day("2026-09-07").focus),
+        ["Ship invoice export", "Feedback on the proposal"]
+    );
+}
+
+#[test]
+fn a_backlog_task_left_focused_by_an_older_version_draws_and_arrives_unfocused() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let id = world.add("Ship invoice export", Place::Backlog);
+    let mut task = world.task(id).clone();
+    task.focus = true;
+    world.commit(&Change {
+        writes: vec![Write::PutTask(task)],
+    });
+
+    assert!(!world.backlog().ordinary[0].focus);
+
+    world.must(Command::Move {
+        task: id,
+        place: day("2026-09-07"),
+    });
+    assert!(!world.task(id).focus);
+    assert_eq!(
+        titles(&world.day("2026-09-07").plan),
+        ["Ship invoice export"]
+    );
+}
+
+#[test]
+fn a_focus_task_moved_to_another_day_stays_focus() {
+    let mut world = World::at("2026-09-07T09:00:00");
+    let id = world.add("Ship invoice export", day("2026-09-07"));
+    world.must(Command::SetFocus {
+        task: id,
+        focus: true,
+    });
+
+    world.must(Command::Move {
+        task: id,
+        place: day("2026-09-08"),
+    });
+
+    assert!(world.task(id).focus);
 }
 
 #[test]
