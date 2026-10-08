@@ -734,7 +734,7 @@ fn hint_bar(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
         // would swallow (DESIGN.md section 8).
         let offer = message.undo && !context.text_field();
         let room = edge.saturating_sub(x + if offer { 8 } else { 0 });
-        x = canvas.put(x, y, clip(&message.text, room), plain()) + 2;
+        x = canvas.put(x, y, clip_sentences(&message.text, room), plain()) + 2;
         if offer {
             x = canvas.key(x, y, "u");
             x = canvas.put(x + 2, y, "undo", dim()) + 2;
@@ -2347,6 +2347,21 @@ fn clip(text: &str, width: u16) -> &str {
         }
     }
     text
+}
+
+/// As many whole sentences of `text` as fit in `width` cells, so that a
+/// long message (the updater's reasons run to three) loses its last
+/// sentence rather than stopping mid-word. A first sentence that does not
+/// fit on its own is cut the way `clip` cuts.
+fn clip_sentences(text: &str, width: u16) -> &str {
+    let clipped = clip(text, width);
+    if clipped.len() == text.len() {
+        return text;
+    }
+    clipped
+        .match_indices(". ")
+        .last()
+        .map_or(clipped, |(at, _)| &text[..=at])
 }
 
 /// The byte offset a caret counted in clusters points at, so that a line

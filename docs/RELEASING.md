@@ -98,7 +98,8 @@ downgrade a newer version. `--check` reports versions without writing files.
 Source installations use `make install` to update and share the uninstaller.
 
 Uninstall removes the user-local executable, helpers, desktop launcher, icon,
-terminal profiles and Jobsdone's Hyprland blocks. It leaves the database and log.
+terminal profiles and Jobsdone's Hyprland blocks. It leaves the database, the log
+and the update check's state files.
 Database downgrades are not guaranteed: retain a database backup before explicitly
 installing an older release after running a version with schema changes.
 

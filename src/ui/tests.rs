@@ -4420,3 +4420,15 @@ fn an_install_says_what_it_is_installing_and_turns_a_spinner() {
     app.update(Action::Tick);
     assert_eq!(look(&app, 120, 36)[0], " Updating to Jobsdone 1.5.0 ⠙");
 }
+
+#[test]
+fn a_long_message_loses_whole_sentences_rather_than_stopping_mid_word() {
+    let said = "Download failed. Your installation has not changed. Try again when your connection is working.";
+    assert_eq!(clip_sentences(said, 200), said);
+    assert_eq!(
+        clip_sentences(said, 60),
+        "Download failed. Your installation has not changed."
+    );
+    assert_eq!(clip_sentences(said, 20), "Download failed.");
+    assert_eq!(clip_sentences(said, 10), "Download f");
+}
