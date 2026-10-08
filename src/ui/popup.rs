@@ -59,6 +59,7 @@ pub(super) fn draw(canvas: &mut Canvas, app: &App, rows: &Rows, layout: &mut Lay
         PopupKind::Repeat => repeat_card(canvas, app, popup, rows),
         PopupKind::CopyQuestion => copy_question(canvas, app, popup, rows),
         PopupKind::DeleteQuestion => delete_question(canvas, app, popup, rows),
+        PopupKind::UpdateQuestion => update_question(canvas, app, rows),
         PopupKind::Spelling => spelling_card(canvas, popup, rows),
         PopupKind::Dictionary => dictionary_card(canvas, app, popup, rows),
     }
@@ -1231,6 +1232,41 @@ fn delete_question(canvas: &mut Canvas, app: &App, popup: &Popup, rows: &Rows) {
     }
 }
 
+/// The question `U` asks, in the shape of the delete question: what it
+/// would do, and the two answers.
+fn update_question(canvas: &mut Canvas, app: &App, rows: &Rows) {
+    let answers = input::bindings(KeyContext::Popup {
+        kind: PopupKind::UpdateQuestion,
+        text_field: false,
+    });
+
+    let width = CARD_WIDTH.min(canvas.width().saturating_sub(4));
+    let height = answers.len() as u16 + 7;
+    let (x, y) = place(canvas, rows, width, height);
+    card(canvas, x, y, width, height, "Update", "");
+
+    let version = app.newer_release().unwrap_or_default();
+    let room = width.saturating_sub(4);
+    let asked = format!("Update to Jobsdone {version}?");
+    canvas.put(x + 2, y + 2, super::clip(&asked, room), dim());
+    canvas.put(
+        x + 2,
+        y + 3,
+        super::clip("Jobsdone will restart.", room),
+        dim(),
+    );
+    for (at, answer) in answers.iter().enumerate() {
+        let row = y + 5 + at as u16;
+        canvas.key(x + 2, row, answer.shown);
+        canvas.put(
+            x + 8,
+            row,
+            super::clip(&sentence(answer.label), width.saturating_sub(10)),
+            plain(),
+        );
+    }
+}
+
 // ---- the help overlay ------------------------------------------------
 
 /// Help starts with the originating context; Tab expands it to every mode.
@@ -1344,6 +1380,7 @@ fn help_sections(context: KeyContext, all: bool) -> Vec<(&'static str, KeyContex
             PopupKind::Repeat,
             PopupKind::CopyQuestion,
             PopupKind::DeleteQuestion,
+            PopupKind::UpdateQuestion,
             PopupKind::Spelling,
             PopupKind::Dictionary,
         ] {

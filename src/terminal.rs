@@ -23,15 +23,16 @@ mod spelling_backend;
 use spelling_backend::SpellingBackend;
 use tracing::error;
 
-use crate::app::{App, Flow};
+use crate::app::{App, Flow, Restart};
 use crate::input::{self, Action};
 
 /// Every timeout is a tick (STACK.md section 2).
 const TICK: Duration = Duration::from_millis(250);
 
-/// Enters raw mode, installs the panic hook, loops until `Flow::Quit`,
-/// restores the terminal.
-pub fn run(mut app: App) -> io::Result<()> {
+/// Enters raw mode, installs the panic hook, loops until `Flow::Quit` or
+/// `Flow::Restart`, restores the terminal. A restart is handed back to be
+/// made once the terminal is the shell's again.
+pub fn run(mut app: App) -> io::Result<Option<Restart>> {
     // The `mouse` setting decides whether the program is handed the
     // mouse at all, from the first frame on.
     let mut mouse = app.settings().mouse();
@@ -52,7 +53,7 @@ fn go_round(
     terminal: &mut Terminal<SpellingBackend<Stdout>>,
     app: &mut App,
     mouse: &mut bool,
-) -> io::Result<()> {
+) -> io::Result<Option<Restart>> {
     loop {
         let mut layout = None;
         {
@@ -88,7 +89,8 @@ fn go_round(
 
         if let Some(action) = action {
             match app.update(action) {
-                Flow::Quit => return Ok(()),
+                Flow::Quit => return Ok(None),
+                Flow::Restart(restart) => return Ok(Some(restart)),
                 Flow::CopyTask(text) => app.copied_task(copy_to_clipboard(&text)),
                 Flow::CopyNote(text) => app.copied_note(copy_to_clipboard(&text)),
                 Flow::CopySelection(text) => app.copied_selection(false, copy_to_clipboard(&text)),

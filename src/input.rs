@@ -82,6 +82,9 @@ pub enum PopupKind {
     /// The personal dictionary: the words spell checking is told to
     /// know, opened from the notes group of the settings page.
     Dictionary,
+    /// Whether to install the newer release the status line names, which
+    /// restarts the program.
+    UpdateQuestion,
 }
 
 /// The in-place text field on the home page, which is the only place a
@@ -144,6 +147,8 @@ pub enum KeyContext {
     Leader {
         over: Option<PopupKind>,
     },
+    /// A new release is being installed, and the one key left is quit.
+    Updating,
 }
 
 impl KeyContext {
@@ -155,7 +160,7 @@ impl KeyContext {
             | KeyContext::Review { text_field, .. }
             | KeyContext::Popup { text_field, .. } => text_field,
             KeyContext::Settings { field } => field,
-            KeyContext::Leader { .. } => false,
+            KeyContext::Leader { .. } | KeyContext::Updating => false,
         }
     }
 }
@@ -2188,6 +2193,34 @@ const DELETE_QUESTION: &[Binding] = &[
     },
 ];
 
+/// The question `U` asks about a newer release. Enter is the answer, as
+/// on the delete question: the release is named in the card, and keeping
+/// what is installed is the key that backs out of everything else.
+const UPDATE_QUESTION: &[Binding] = &[
+    Binding {
+        keys: &[("enter", Action::Confirm)],
+        shown: "⏎",
+        label: "update",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+    Binding {
+        keys: &[("esc", Action::Cancel)],
+        shown: "esc",
+        label: "keep",
+        bar: Bar::Left,
+        narrow: Bar::Left,
+    },
+];
+
+/// While a release installs. Quitting leaves it to finish on its own,
+/// and the next launch is the new version.
+const UPDATING: &[Binding] = &[Binding {
+    bar: Bar::Left,
+    narrow: Bar::Left,
+    ..QUIT
+}];
+
 /// The palette and search share a shape: a text field, a filtered list,
 /// and the two keys that leave. Only what Enter does differs, and the
 /// one key search has that the palette does not.
@@ -2561,6 +2594,10 @@ pub fn bindings(context: KeyContext) -> &'static [Binding] {
             ..
         } => DELETE_QUESTION,
         KeyContext::Popup {
+            kind: PopupKind::UpdateQuestion,
+            ..
+        } => UPDATE_QUESTION,
+        KeyContext::Popup {
             kind: PopupKind::Date,
             text_field: true,
         } => DATE_FIELD,
@@ -2591,6 +2628,7 @@ pub fn bindings(context: KeyContext) -> &'static [Binding] {
             over: Some(PopupKind::Move),
         } => AFTER_G_ON_THE_MOVE_CARD,
         KeyContext::Leader { over: Some(_) } => AFTER_G_IN_A_LIST,
+        KeyContext::Updating => UPDATING,
     }
 }
 
@@ -2672,6 +2710,10 @@ pub fn name(context: KeyContext) -> &'static str {
             ..
         } => "DELETE",
         KeyContext::Popup {
+            kind: PopupKind::UpdateQuestion,
+            ..
+        } => "UPDATE",
+        KeyContext::Popup {
             kind: PopupKind::Date,
             ..
         } => "DATE",
@@ -2689,6 +2731,7 @@ pub fn name(context: KeyContext) -> &'static str {
         } => "DICTIONARY",
         KeyContext::Settings { .. } => "SETTINGS",
         KeyContext::Leader { .. } => "GO",
+        KeyContext::Updating => "UPDATING",
     }
 }
 

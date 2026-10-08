@@ -15,7 +15,7 @@ use std::process::{ExitCode, Stdio};
 use jiff::Zoned;
 use tracing_subscriber::EnvFilter;
 
-use jobsdone::app::{self, App, DateOrder, Locale, WindowSize};
+use jobsdone::app::{self, App, DateOrder, Locale, Restart, WindowSize};
 use jobsdone::cli::{self, Failure, Format, Operation, Parsed, Plan, Source, Then};
 use jobsdone::desktop::Hyprland;
 use jobsdone::storage::Sqlite;
@@ -272,11 +272,37 @@ fn start(data_dir: Option<&Path>, notes: bool) -> Result<(), String> {
         &Zoned::now(),
     )
     .map_err(|error| format!("{} could not be read: {error}", database.display()))?;
-    if let Some(beside) = Beside::here(&state) {
+    let installed = Beside::here(&state).map(|beside| {
+        let binary = beside.binary();
         app.watch_releases(Box::new(beside));
-    }
+        binary
+    });
 
-    terminal::run(app).map_err(|error| format!("the terminal could not be driven: {error}"))
+    let restart =
+        terminal::run(app).map_err(|error| format!("the terminal could not be driven: {error}"))?;
+    match (restart, installed) {
+        (Some(restart), Some(binary)) => Err(restart_as(&binary, data_dir, restart)),
+        _ => Ok(()),
+    }
+}
+
+/// Becomes the release just installed, on the page the window was on and
+/// over the same database. Returns only when it could not.
+fn restart_as(binary: &Path, data_dir: Option<&Path>, restart: Restart) -> String {
+    use std::os::unix::process::CommandExt;
+
+    let mut command = std::process::Command::new(binary);
+    if let Some(dir) = data_dir {
+        command.arg("--data-dir").arg(dir);
+    }
+    if restart.notes {
+        command.arg("--notes");
+    }
+    let error = command.exec();
+    format!(
+        "the new version is installed but {} could not be started: {error}",
+        binary.display()
+    )
 }
 
 /// The database, and where it was opened.

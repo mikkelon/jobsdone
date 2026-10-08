@@ -120,6 +120,7 @@ fn every_context() -> Vec<KeyContext> {
         popup(PopupKind::Move),
         popup(PopupKind::CopyQuestion),
         popup(PopupKind::DeleteQuestion),
+        popup(PopupKind::UpdateQuestion),
         field(PopupKind::Date),
         popup(PopupKind::Date),
         popup(PopupKind::Repeat),
@@ -135,6 +136,7 @@ fn every_context() -> Vec<KeyContext> {
         KeyContext::Leader {
             over: Some(PopupKind::Repeat),
         },
+        KeyContext::Updating,
     ]
 }
 
@@ -1217,11 +1219,14 @@ fn one_action_has_one_label_on_every_page() {
 fn g_leads_somewhere_from_every_page_and_every_list() {
     let places = every_context().into_iter().filter(|context| {
         !context.text_field()
-            && !matches!(context, KeyContext::Leader { .. })
+            && !matches!(context, KeyContext::Leader { .. } | KeyContext::Updating)
             && !matches!(
                 context,
                 KeyContext::Popup {
-                    kind: PopupKind::Date | PopupKind::CopyQuestion | PopupKind::DeleteQuestion,
+                    kind: PopupKind::Date
+                        | PopupKind::CopyQuestion
+                        | PopupKind::DeleteQuestion
+                        | PopupKind::UpdateQuestion,
                     ..
                 }
             )
@@ -1351,4 +1356,44 @@ fn shift_u_is_the_update_on_every_page_and_typed_in_a_field() {
             "{context:?}"
         );
     }
+}
+
+#[test]
+fn while_a_release_installs_quit_is_the_one_key_left() {
+    for key in ['j', 'U', 'g', ':', '?', 'a'] {
+        assert_eq!(
+            action_for(&typing(key), KeyContext::Updating),
+            None,
+            "{key}"
+        );
+    }
+    assert_eq!(
+        action_for(&typing('q'), KeyContext::Updating),
+        Some(Action::Quit)
+    );
+    assert_eq!(
+        action_for(
+            &press_with(KeyCode::Char('c'), KeyModifiers::CONTROL),
+            KeyContext::Updating
+        ),
+        Some(Action::Quit)
+    );
+    assert_eq!(name(KeyContext::Updating), "UPDATING");
+}
+
+#[test]
+fn the_update_question_is_answered_with_enter_or_kept_with_escape() {
+    let question = popup(PopupKind::UpdateQuestion);
+    assert_eq!(
+        action_for(&press(KeyCode::Enter), question),
+        Some(Action::Confirm)
+    );
+    assert_eq!(
+        action_for(&press(KeyCode::Esc), question),
+        Some(Action::Cancel)
+    );
+    assert_eq!(action_for(&typing('U'), question), None);
+    let labels: Vec<&str> = bindings(question).iter().map(|row| row.label).collect();
+    assert_eq!(labels, ["update", "keep"]);
+    assert_eq!(name(question), "UPDATE");
 }

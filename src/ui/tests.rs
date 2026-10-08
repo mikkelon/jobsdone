@@ -4395,3 +4395,28 @@ fn the_notice_is_not_offered_where_u_would_be_typed_or_swallowed() {
     app.update(Action::Cancel);
     assert!(look(&app, 120, 36)[0].contains("↑ Jobsdone 1.5.0 U"));
 }
+
+#[test]
+fn the_update_question_names_the_release_and_the_restart() {
+    let mut app = told_of_a_release();
+    app.update(Action::Update);
+    let text = look(&app, 120, 36).join("\n");
+    assert!(text.contains("Update to Jobsdone 1.5.0?"), "{text}");
+    assert!(text.contains("Jobsdone will restart."), "{text}");
+    assert!(text.contains("⏎     Update"), "{text}");
+    assert!(text.contains("esc   Keep"), "{text}");
+}
+
+#[test]
+fn an_install_says_what_it_is_installing_and_turns_a_spinner() {
+    let mut app = told_of_a_release();
+    app.update(Action::Update);
+    app.update(Action::Confirm);
+    let screen = look(&app, 120, 36);
+    assert_eq!(screen[0], " Updating to Jobsdone 1.5.0 ⠋");
+    let bar = screen.last().expect("the hint bar");
+    assert_eq!(bar.trim(), "UPDATING  q quit");
+
+    app.update(Action::Tick);
+    assert_eq!(look(&app, 120, 36)[0], " Updating to Jobsdone 1.5.0 ⠙");
+}

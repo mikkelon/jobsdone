@@ -835,18 +835,18 @@ fn update_runs_the_updater_beside_it_with_the_rest_of_the_line() {
     .unwrap();
     std::fs::set_permissions(&updater, std::fs::Permissions::from_mode(0o755)).unwrap();
 
-    let output = Command::new(&binary)
-        .args([
-            "update",
-            "--check",
-            "--version",
-            "v1.0.0",
-            "--keybind",
-            "SUPER + J",
-        ])
-        .env("HOME", scratch.path())
-        .output()
-        .unwrap();
+    let output = output_of_fresh(
+        Command::new(&binary)
+            .args([
+                "update",
+                "--check",
+                "--version",
+                "v1.0.0",
+                "--keybind",
+                "SUPER + J",
+            ])
+            .env("HOME", scratch.path()),
+    );
     assert_eq!(output.status.code(), Some(7));
     assert_eq!(
         String::from_utf8(output.stdout).unwrap(),
@@ -867,4 +867,262 @@ fn update_without_an_updater_says_how_this_copy_is_updated() {
     let err = String::from_utf8(output.stderr).unwrap();
     assert!(err.contains("jobsdone-update was not found"), "{err}");
     assert!(output.stdout.is_empty());
+}
+
+// ---- updating from the window ------------------------------------------
+
+/// The window, run in a terminal `script` makes for it, with keys written
+/// to it as they would be typed and everything it drew kept.
+struct Window {
+    child: std::process::Child,
+    keys: std::process::ChildStdin,
+    drawn: std::sync::Arc<std::sync::Mutex<Vec<u8>>>,
+}
+
+impl Window {
+    fn open(binary: &Path, arguments: &str, home: &Path) -> Window {
+        let mut child = Command::new("script")
+            .args([
+                "-qec",
+                &format!(
+                    "stty cols 100 rows 30; exec '{}' {arguments}",
+                    binary.display()
+                ),
+                "/dev/null",
+            ])
+            .env("HOME", home)
+            .env("XDG_STATE_HOME", home.join("state"))
+            .env("TERM", "xterm-256color")
+            .env_remove("JOBSDONE_DATA_DIR")
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null())
+            .spawn()
+            .expect("script, from util-linux");
+        let keys = child.stdin.take().unwrap();
+        let mut out = child.stdout.take().unwrap();
+        let drawn = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let into = std::sync::Arc::clone(&drawn);
+        std::thread::spawn(move || {
+            let mut chunk = [0u8; 4096];
+            while let Ok(read) = std::io::Read::read(&mut out, &mut chunk) {
+                if read == 0 {
+                    break;
+                }
+                into.lock().unwrap().extend_from_slice(&chunk[..read]);
+            }
+        });
+        Window { child, keys, drawn }
+    }
+
+    fn drawn(&self) -> String {
+        String::from_utf8_lossy(&self.drawn.lock().unwrap()).into_owned()
+    }
+
+    fn type_(&mut self, keys: &str) {
+        self.keys.write_all(keys.as_bytes()).unwrap();
+        self.keys.flush().unwrap();
+    }
+
+    /// What the terminal shows now: the bytes played onto a screen, so
+    /// that text drawn around cells that did not change still reads as
+    /// one line.
+    fn screen(&self) -> Vec<String> {
+        let mut rows = vec![vec![' '; 100]; 30];
+        let (mut row, mut column) = (0usize, 0usize);
+        let drawn = self.drawn();
+        let mut chars = drawn.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '\u{1b}' {
+                if chars.next_if_eq(&'[').is_none() {
+                    chars.next();
+                    continue;
+                }
+                let mut parameters = String::new();
+                let mut last = ' ';
+                for c in chars.by_ref() {
+                    if ('\u{40}'..='\u{7e}').contains(&c) {
+                        last = c;
+                        break;
+                    }
+                    parameters.push(c);
+                }
+                match last {
+                    'H' => {
+                        let mut at = parameters
+                            .split(';')
+                            .map(|n| n.parse::<usize>().unwrap_or(1).max(1) - 1);
+                        row = at.next().unwrap_or(0);
+                        column = at.next().unwrap_or(0);
+                    }
+                    'J' if parameters == "2" => rows = vec![vec![' '; 100]; 30],
+                    _ => {}
+                }
+            } else if c == '\r' {
+                column = 0;
+            } else if c == '\n' {
+                row += 1;
+            } else if !c.is_control() {
+                if let Some(cell) = rows.get_mut(row).and_then(|line| line.get_mut(column)) {
+                    *cell = c;
+                }
+                column += 1;
+            }
+        }
+        rows.into_iter()
+            .map(|line| line.into_iter().collect::<String>().trim_end().to_owned())
+            .collect()
+    }
+
+    fn shows(&self, text: &str) {
+        let limit = std::time::Instant::now() + std::time::Duration::from_secs(15);
+        while std::time::Instant::now() < limit {
+            if self.screen().iter().any(|line| line.contains(text)) {
+                return;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(50));
+        }
+        panic!(
+            "waited fifteen seconds for the window to show {text:?}:\n{}",
+            self.screen().join("\n")
+        );
+    }
+
+    fn closed(&mut self) -> bool {
+        self.child.try_wait().unwrap().is_some()
+    }
+}
+
+impl Drop for Window {
+    fn drop(&mut self) {
+        let _ = self.child.kill();
+        let _ = self.child.wait();
+    }
+}
+
+/// Waits, a while but not for ever, for something to come true.
+fn until(what: &str, mut done: impl FnMut() -> bool) {
+    let limit = std::time::Instant::now() + std::time::Duration::from_secs(15);
+    while std::time::Instant::now() < limit {
+        if done() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+    panic!("waited fifteen seconds for {what}");
+}
+
+/// A copy of the program with a fake release updater beside it, which
+/// says 9.9.9 is out and runs `install` when told to install it. Each
+/// program is run once here, so that a test elsewhere holding a file this
+/// one just wrote has let go of it before the window runs it.
+fn beside_a_release(scratch: &TempDir, install: &str) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+
+    let binary = lone_copy(scratch);
+    let updater = binary.with_file_name("jobsdone-update");
+    std::fs::write(
+        &updater,
+        format!(
+            "#!/bin/sh\nhere=\"$(dirname \"$0\")\"\nif [ \"$1\" = --check ]; then\n    \
+             echo 'newer {} 9.9.9'\n    exit 0\nfi\n{install}\n",
+            env!("CARGO_PKG_VERSION")
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&updater, std::fs::Permissions::from_mode(0o755)).unwrap();
+    output_of_fresh(Command::new(&binary).arg("--version"));
+    output_of_fresh(Command::new(&updater).args(["--check", "--porcelain"]));
+    binary
+}
+
+/// The "new release": a program that writes down how it was started.
+fn a_new_release(scratch: &TempDir) -> std::path::PathBuf {
+    use std::os::unix::fs::PermissionsExt;
+
+    let marker = scratch.path().join("started-with");
+    let new = scratch.path().join("bin").join("new-jobsdone");
+    std::fs::write(
+        &new,
+        format!(
+            "#!/bin/sh\nfor word in \"$@\"; do echo \"$word\"; done > '{}'\n",
+            marker.display()
+        ),
+    )
+    .unwrap();
+    std::fs::set_permissions(&new, std::fs::Permissions::from_mode(0o755)).unwrap();
+    output_of_fresh(&mut Command::new(&new));
+    std::fs::remove_file(&marker).unwrap();
+    marker
+}
+
+fn updated_and_restarted(notes: bool) -> String {
+    let scratch = scratch();
+    let binary = beside_a_release(&scratch, "mv \"$here/new-jobsdone\" \"$here/jobsdone\"");
+    let marker = a_new_release(&scratch);
+    let data = scratch.path().join("data");
+
+    let mut arguments = format!("--data-dir '{}'", data.display());
+    if notes {
+        arguments.push_str(" --notes");
+    }
+    let mut window = Window::open(&binary, &arguments, scratch.path());
+    window.shows("Jobsdone 9.9.9");
+    window.type_("U");
+    window.shows("Update to Jobsdone 9.9.9?");
+    window.type_("\r");
+    until("the new release to be started", || {
+        std::fs::read_to_string(&marker).is_ok_and(|said| said.ends_with('\n'))
+    });
+    let said = std::fs::read_to_string(&marker).unwrap();
+    until("the window to close", || window.closed());
+    said.replace(&data.display().to_string(), "<data>")
+}
+
+#[test]
+fn updating_from_the_window_starts_the_new_release_over_the_same_data() {
+    assert_eq!(updated_and_restarted(false), "--data-dir\n<data>\n");
+}
+
+#[test]
+fn updating_from_the_notes_page_starts_the_new_release_on_it() {
+    assert_eq!(updated_and_restarted(true), "--data-dir\n<data>\n--notes\n");
+}
+
+#[test]
+fn a_failed_update_says_why_and_leaves_the_program_as_it_was() {
+    let scratch = scratch();
+    let binary = beside_a_release(
+        &scratch,
+        "echo 'Jobsdone: Download failed. Your installation has not changed.' >&2\nexit 1",
+    );
+    let before = std::fs::read(&binary).unwrap();
+    let data = scratch.path().join("data");
+
+    let mut window = Window::open(
+        &binary,
+        &format!("--data-dir '{}'", data.display()),
+        scratch.path(),
+    );
+    window.shows("Jobsdone 9.9.9");
+    window.type_("U");
+    window.shows("Update to Jobsdone 9.9.9?");
+    window.type_("\r");
+    window.shows("Could not update: Download failed. Your installation has not changed.");
+    assert!(
+        window.screen()[0].contains("Jobsdone 9.9.9 U"),
+        "and the notice is still there to try again"
+    );
+    window.type_("q");
+    until("the window to close", || window.closed());
+
+    assert_eq!(
+        std::fs::read(&binary).unwrap(),
+        before,
+        "the program is unchanged"
+    );
+    assert_eq!(
+        std::fs::read_to_string(scratch.path().join("state/jobsdone/update.log")).unwrap(),
+        "Jobsdone: Download failed. Your installation has not changed.\n"
+    );
 }

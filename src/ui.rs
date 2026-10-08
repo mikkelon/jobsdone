@@ -531,10 +531,23 @@ fn with(first: Option<Item>, rest: Vec<Item>) -> Vec<Item> {
     first.into_iter().chain(rest).collect()
 }
 
+/// The frames of the spinner an install turns, one a tick.
+const SPINNER: [char; 10] = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
+
 /// Navigation and global indicators; pane headers and tabs own page names.
 ///
 /// A narrow window keeps the indicators and drops the words around them.
 fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
+    if let Some((version, ticks)) = app.installing() {
+        let spinner = SPINNER[ticks as usize % SPINNER.len()];
+        canvas.put(
+            1,
+            y,
+            &format!("Updating to Jobsdone {version} {spinner}"),
+            bold(),
+        );
+        return;
+    }
     if app.popup().is_some()
         || app.editor().is_some()
         || app.setting_draft().is_some()

@@ -149,6 +149,12 @@ enum Work {
     Looking {
         asked: bool,
     },
+    /// The keys are put down until it is over, all but quit. `ticks`
+    /// turns the spinner, so that a long download still looks alive.
+    Installing {
+        version: String,
+        ticks: u32,
+    },
 }
 
 /// What is said when there is no updater to ask.
@@ -173,6 +179,8 @@ pub enum Flow {
     CopySelection(String),
     CutSelection(String),
     ReadClipboard,
+    /// A new release is installed: leave the terminal and start it.
+    Restart(Restart),
 }
 
 /// Which of the three pages the window is showing (DESIGN.md section 6).
@@ -1321,6 +1329,14 @@ impl App {
     /// a reload on a tick, and by the setting being turned off, and
     /// several of the arms in front of that return early.
     pub fn update(&mut self, action: Action) -> Flow {
+        if self.installing().is_some()
+            && !matches!(
+                action,
+                Action::Quit | Action::Tick | Action::Resize | Action::FocusGained
+            )
+        {
+            return Flow::Continue;
+        }
         if self.layout.input_blocked
             && !matches!(
                 action,
@@ -1494,7 +1510,9 @@ impl App {
                 // window manager waits for a tick.
                 if matches!(action, Action::Tick) {
                     self.pay_the_window(true);
-                    self.keep_up_with_releases();
+                    if let Some(restart) = self.keep_up_with_releases() {
+                        return Flow::Restart(restart);
+                    }
                 }
             }
             Action::Resize => {}
@@ -1789,23 +1807,30 @@ impl App {
     }
 
     /// What the updater has heard since the last tick, and a look of the
-    /// window's own when one is due.
-    fn keep_up_with_releases(&mut self) {
+    /// window's own when one is due. A finished install is the restart.
+    fn keep_up_with_releases(&mut self) -> Option<Restart> {
+        if let Some(Updates {
+            work: Work::Installing { ticks, .. },
+            ..
+        }) = &mut self.updates
+        {
+            *ticks = ticks.wrapping_add(1);
+        }
         while let Some(heard) = self
             .updates
             .as_mut()
             .and_then(|updates| updates.updater.heard())
         {
-            self.hear(heard);
+            if let Some(restart) = self.hear(heard) {
+                return Some(restart);
+            }
         }
 
         if !self.model.settings.check_for_updates() {
-            return;
+            return None;
         }
         let now = self.now();
-        let Some(updates) = self.updates.as_mut() else {
-            return;
-        };
+        let updates = self.updates.as_mut()?;
         let due = updates.looked.as_ref().is_none_or(|at| {
             now < *at
                 || at
@@ -1817,22 +1842,27 @@ impl App {
             updates.work = Work::Looking { asked: false };
             updates.updater.look(false);
         }
+        None
     }
 
-    fn hear(&mut self, heard: Heard) {
-        let Some(updates) = self.updates.as_mut() else {
-            return;
-        };
+    fn hear(&mut self, heard: Heard) -> Option<Restart> {
+        let updates = self.updates.as_mut()?;
         let asked = updates.work == Work::Looking { asked: true };
+        // A look that set out before an install began has nothing to
+        // say about what the window is doing now.
+        if matches!(heard, Heard::Looked(_) | Heard::Nothing)
+            && matches!(updates.work, Work::Looking { .. })
+        {
+            updates.work = Work::Idle;
+        }
         match heard {
             Heard::Looked(answer) => {
-                updates.work = Work::Idle;
                 if let Ok(release) = &answer {
                     updates.newer =
                         (release.standing == Standing::Newer).then(|| release.available.clone());
                 }
                 if !asked {
-                    return;
+                    return None;
                 }
                 let said = match answer {
                     Ok(release) => match release.standing {
@@ -1850,17 +1880,32 @@ impl App {
                 };
                 self.say(said, false);
             }
-            Heard::Nothing => updates.work = Work::Idle,
-            Heard::Installed(_) => {}
+            Heard::Nothing => {}
+            Heard::Installed(Ok(())) => {
+                return Some(Restart {
+                    notes: self.page == Page::Notes,
+                });
+            }
+            // The notice stays, so the next try is the same key.
+            Heard::Installed(Err(why)) => {
+                updates.work = Work::Idle;
+                self.say(format!("Could not update: {}.", unstopped(&why)), false);
+            }
         }
+        None
     }
 
-    /// `U`: a look at what the channel holds, which says what it finds.
+    /// `U`: the question about a newer release the window knows of, or
+    /// a look at what the channel holds, which says what it finds.
     fn update_or_look(&mut self) {
         let Some(updates) = self.updates.as_mut() else {
             self.say(NOT_A_RELEASE, false);
             return;
         };
+        if updates.newer.is_some() {
+            self.open(PopupKind::UpdateQuestion, None);
+            return;
+        }
         match &mut updates.work {
             Work::Idle => {
                 updates.work = Work::Looking { asked: true };
@@ -1868,8 +1913,37 @@ impl App {
             }
             // The look already on its way is the one that answers.
             Work::Looking { asked } => *asked = true,
+            Work::Installing { .. } => return,
         }
         self.say("Checking for updates…", false);
+    }
+
+    /// Enter on the update question: what quitting saves is saved, and
+    /// the install starts. The window stays up and drawn while it runs.
+    fn take_the_update(&mut self) {
+        self.popup = None;
+        if !self.save_the_note() {
+            self.say(
+                "What is typed in this note could not be saved, so the update waits.",
+                false,
+            );
+            return;
+        }
+        self.pay_the_window(false);
+        let Some(updates) = self.updates.as_mut() else {
+            return;
+        };
+        let Some(version) = updates.newer.clone() else {
+            return;
+        };
+        updates.work = Work::Installing { version, ticks: 0 };
+        updates.updater.install();
+    }
+
+    /// The newer release the window knows of, whatever the setting says.
+    /// The update question names it.
+    pub fn newer_release(&self) -> Option<&str> {
+        self.updates.as_ref()?.newer.as_deref()
     }
 
     /// The newer release the status line names, while the setting asks
@@ -1878,7 +1952,15 @@ impl App {
         if !self.model.settings.check_for_updates() {
             return None;
         }
-        self.updates.as_ref()?.newer.as_deref()
+        self.newer_release()
+    }
+
+    /// The release being installed, and the ticks since it began.
+    pub fn installing(&self) -> Option<(&str, u32)> {
+        match &self.updates.as_ref()?.work {
+            Work::Installing { version, ticks } => Some((version, *ticks)),
+            _ => None,
+        }
     }
 
     fn now(&self) -> Zoned {
@@ -3569,7 +3651,7 @@ impl App {
     }
 
     pub fn paste(&mut self, result: Result<String, String>) {
-        if self.layout.input_blocked {
+        if self.layout.input_blocked || self.installing().is_some() {
             return;
         }
         let Ok(pasted) = result else {
@@ -4487,6 +4569,9 @@ impl App {
     // ---- what the keyboard is on ------------------------------------
 
     pub fn key_context(&self) -> KeyContext {
+        if self.installing().is_some() {
+            return KeyContext::Updating;
+        }
         if self.leader {
             return KeyContext::Leader {
                 over: self.popup.as_ref().map(|popup| popup.kind),
@@ -5021,6 +5106,9 @@ impl App {
     /// so that a key is never silently dead. Escape on today is the one
     /// exception: it is as far back as there is to go, and says nothing.
     pub fn unbound(&mut self, key: &str) {
+        if self.installing().is_some() {
+            return;
+        }
         if std::mem::take(&mut self.leader) {
             self.say(format!("g{key} is not a place to go."), false);
             return;
@@ -5387,6 +5475,7 @@ impl App {
             PopupKind::Spelling => self.take_the_suggestion(),
             PopupKind::Dictionary => self.take_the_typed_word(),
             PopupKind::DeleteQuestion => self.take_the_delete(),
+            PopupKind::UpdateQuestion => self.take_the_update(),
             // The copy question has no answer safe enough to be Enter's.
             PopupKind::Help | PopupKind::CopyQuestion => {}
         }
