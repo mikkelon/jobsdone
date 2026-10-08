@@ -577,7 +577,9 @@ fn row_of(model: &Model, task: &Task, today: Date, on: Option<Date>) -> Row {
         title: task.title.clone(),
         place: task.place(),
         closed_at: task.closed_at.clone(),
-        focus: task.focus,
+        // Focus is a day's: a backlog task an older version left the
+        // flag on draws as any other.
+        focus: task.focus && task.day.is_some(),
         waiting: task.waiting,
         due: task.due_on.map(|on| DueChip {
             on,
