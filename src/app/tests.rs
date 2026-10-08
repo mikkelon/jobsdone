@@ -127,6 +127,17 @@ fn set_meta(key: &str, value: &str) -> Change {
     }
 }
 
+/// The launch `jobsdone --notes` makes.
+fn notes_at(store: MemStore, now: &str) -> App {
+    App::new_on_the_notes(
+        Box::new(store),
+        Box::new(Desk::here()),
+        Locale::default(),
+        &at(now),
+    )
+    .expect("an app")
+}
+
 fn app_at(store: MemStore, now: &str) -> App {
     App::new(
         Box::new(store),
@@ -607,40 +618,22 @@ fn a_date_unearthed_on_the_pile_makes_the_second_step() {
 }
 
 #[test]
-fn a_review_over_the_notes_page_takes_the_task_keys() {
-    let mut app = app_at(
-        left_behind(&[
-            ("Send the invoice", "2025-09-04"),
-            ("Prepare slides", "2025-09-04"),
-        ]),
-        NOW,
-    );
-    app.open_on_the_notes();
-    assert_eq!(step(&app), Some(ReviewStep::Pile));
+fn a_launch_on_the_notes_leaves_the_review_for_the_next_ordinary_launch() {
+    let store = left_behind(&[("Send the invoice", "2025-09-04")]);
 
-    app.update(Action::ToToday);
-    let review = app.review().expect("the review");
+    let notes = notes_at(store.clone(), NOW);
+    assert!(notes.review().is_none());
+    assert_eq!(notes.page(), Page::Notes);
+    assert_eq!(notes.focused(), List::Notes);
+    assert_eq!(notes.review_count(), 1, "the pile is counted all the same");
     assert_eq!(
-        review.decision(1),
-        Some(Decided::Moved(Place::Day(on(NOW_DAY))))
-    );
-    assert!(
-        app.message()
-            .is_none_or(|message| !message.text.contains("notes"))
+        notes.model().meta.get("review_on"),
+        None,
+        "the gate is left for the next ordinary launch"
     );
 
-    // `x` is about the task under the cursor, not a note on the page
-    // beneath the review.
-    app.update(Action::Delete);
-    assert_eq!(
-        app.review().expect("the review").decision(2),
-        Some(Decided::Deleted)
-    );
-
-    // Once the review is over, the page it lay over is the one asked for.
-    app.update(Action::Confirm);
-    assert!(app.review().is_none());
-    assert_eq!(app.page(), Page::Notes);
+    let ordinary = app_at(store, NOW);
+    assert_eq!(step(&ordinary), Some(ReviewStep::Pile));
 }
 
 #[test]
@@ -2587,8 +2580,7 @@ fn tab_opens_the_cursor_note_and_tab_in_it_goes_back_to_the_list() {
 
 #[test]
 fn an_app_opened_on_the_notes_starts_in_the_list_of_notes() {
-    let mut app = started();
-    app.open_on_the_notes();
+    let app = notes_at(MemStore::new(), NOW);
 
     assert_eq!(app.page(), Page::Notes);
     assert_eq!(app.notes_pane(), NotesPane::List);

@@ -44,7 +44,9 @@ half width. Both must feel right, and the floating case comes first.
   closing the window never asks anything; reopening lands where you were.
 - The morning review runs once per day, on the first open of a work day
   that has something to review, when it is set to open itself; otherwise
-  it waits for `gr`. Later opens go straight to Today. Closing the window
+  it waits for `gr`. Later opens go straight to Today. Opening straight
+  into the notes (`jobsdone --notes`) never shows the review and does not
+  count as the day's first open, so the next ordinary open still does. Closing the window
   mid-review leaves the pile intact; the status line counts what is on
   the pile, in red with `gr` beside it, until it is dealt with, and says
   nothing at all once the pile is empty.

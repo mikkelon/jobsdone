@@ -223,16 +223,18 @@ fn start(data_dir: Option<&Path>, notes: bool) -> Result<(), String> {
 
     let (database, store) = open_the_store(data_dir)?;
 
-    let mut app = App::new(
+    let launch = if notes {
+        App::new_on_the_notes
+    } else {
+        App::new
+    };
+    let app = launch(
         Box::new(store),
         Box::new(Hyprland::here()),
         locale(),
         &Zoned::now(),
     )
     .map_err(|error| format!("{} could not be read: {error}", database.display()))?;
-    if notes {
-        app.open_on_the_notes();
-    }
 
     terminal::run(app).map_err(|error| format!("the terminal could not be driven: {error}"))
 }
