@@ -581,6 +581,8 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
         })
     };
 
+    let notice = || update_notice(app, narrow);
+
     // A day that is not today says how far off it is and how to come
     // back, which leaves the right end no room for its own words.
     let (left, right) = match (app.page(), narrow) {
@@ -590,13 +592,19 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
             } else {
                 vec![quiet(&day_label(app.today(), app.dates()))]
             },
-            with(alert(""), vec![key("/", ""), key(":", ""), key("?", "")]),
+            with(
+                alert(""),
+                with(notice(), vec![key("/", ""), key(":", ""), key("?", "")]),
+            ),
         ),
         (Page::Home, false) if browsing => (
             vec![quiet(&ago(app.showing(), app.today())), key("esc", &back)],
             with(
                 alert(" on the pile"),
-                vec![notes, key("/", ""), key(":", ""), key("?", "")],
+                with(
+                    notice(),
+                    vec![notes, key("/", ""), key(":", ""), key("?", "")],
+                ),
             ),
         ),
         (Page::Home, false) => (
@@ -606,12 +614,15 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
             ),
             with(
                 alert(" on the pile"),
-                vec![
-                    notes,
-                    key("/", "search"),
-                    key(":", "commands"),
-                    key("?", ""),
-                ],
+                with(
+                    notice(),
+                    vec![
+                        notes,
+                        key("/", "search"),
+                        key(":", "commands"),
+                        key("?", ""),
+                    ],
+                ),
             ),
         ),
         // The notes page's counts are on the list's tabs, so the status
@@ -636,21 +647,48 @@ fn status_line(canvas: &mut Canvas, app: &App, y: u16, narrow: bool) {
         ),
         (Page::Notes, _) => (
             vec![],
-            vec![
-                key("esc", "back to tasks"),
-                key("/", ""),
-                key(":", ""),
-                key("?", ""),
-            ],
+            with(
+                notice(),
+                vec![
+                    key("esc", "back to tasks"),
+                    key("/", ""),
+                    key(":", ""),
+                    key("?", ""),
+                ],
+            ),
         ),
         // The settings are about the program rather than about a day, so
         // the indicators the other pages carry mean nothing here. The way
         // out is where the notes page puts its own.
-        (Page::Settings, _) => (vec![], vec![key("esc", "back"), key(":", ""), key("?", "")]),
+        (Page::Settings, _) => (
+            vec![],
+            with(
+                notice(),
+                vec![key("esc", "back"), key(":", ""), key("?", "")],
+            ),
+        ),
     };
 
     canvas.segments(1, y, &left, 2);
     canvas.rsegments(canvas.width() - 1, y, &right, 3);
+}
+
+/// A newer release, and the key that installs it. Only where that key is
+/// the update: the line never names a key the keyboard would type or a
+/// card would swallow (DESIGN.md section 8). A narrow window keeps the
+/// version and drops the name.
+fn update_notice(app: &App, narrow: bool) -> Option<Item> {
+    let version = app.update_notice()?;
+    let (shown, _) = input::bindings(app.key_context())
+        .iter()
+        .flat_map(|binding| binding.keys)
+        .find(|(_, action)| *action == input::Action::Update)?;
+    let named = if narrow {
+        format!("↑ {version}")
+    } else {
+        format!("↑ Jobsdone {version}")
+    };
+    Some(vec![words(&named, bold()), Part::Key((*shown).to_owned())])
 }
 
 /// The keys of the focused context, drawn from the key table and from

@@ -20,6 +20,7 @@ use jobsdone::cli::{self, Failure, Format, Operation, Parsed, Plan, Source, Then
 use jobsdone::desktop::Hyprland;
 use jobsdone::storage::Sqlite;
 use jobsdone::terminal;
+use jobsdone::updater::Beside;
 
 /// A development override, so `make run` never opens the real database.
 const DATA_DIR: &str = "JOBSDONE_DATA_DIR";
@@ -264,13 +265,16 @@ fn start(data_dir: Option<&Path>, notes: bool) -> Result<(), String> {
     } else {
         App::new
     };
-    let app = launch(
+    let mut app = launch(
         Box::new(store),
         Box::new(Hyprland::here()),
         locale(),
         &Zoned::now(),
     )
     .map_err(|error| format!("{} could not be read: {error}", database.display()))?;
+    if let Some(beside) = Beside::here(&state) {
+        app.watch_releases(Box::new(beside));
+    }
 
     terminal::run(app).map_err(|error| format!("the terminal could not be driven: {error}"))
 }

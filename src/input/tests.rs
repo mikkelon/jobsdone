@@ -1317,3 +1317,38 @@ fn the_palette_and_search_page_with_ctrl_d_and_ctrl_u() {
         );
     }
 }
+
+#[test]
+fn shift_u_is_the_update_on_every_page_and_typed_in_a_field() {
+    let pages = [
+        home(Pane::Day),
+        home(Pane::Backlog),
+        browsing(Pane::Day),
+        browsing(Pane::Backlog),
+        tab(Pane::Day),
+        tab(Pane::Backlog),
+        notes(NotesPane::List),
+        archive(false),
+        archive(true),
+        KeyContext::Settings { field: false },
+    ];
+    for context in pages {
+        assert_eq!(
+            action_for(&typing('U'), context),
+            Some(Action::Update),
+            "{context:?}"
+        );
+    }
+    for context in [
+        writing(Field::Adding),
+        notes(NotesPane::Note),
+        notes(NotesPane::Filter),
+        field(PopupKind::Palette),
+    ] {
+        assert_eq!(
+            action_for(&typing('U'), context),
+            Some(Action::Insert('U')),
+            "{context:?}"
+        );
+    }
+}

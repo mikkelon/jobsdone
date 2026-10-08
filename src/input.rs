@@ -203,6 +203,8 @@ pub enum Action {
     /// The morning review again, after it was left or on a day it has
     /// already run on.
     OpenReview,
+    /// `U`: the newer release the status line names, or a look for one.
+    Update,
 
     // The cursor row.
     Close,
@@ -613,6 +615,7 @@ macro_rules! home_table {
             LAST_ROW,
             HALF_PAGE,
             SEARCH,
+            UPDATE,
             COMMANDS,
             HELP,
             QUIT,
@@ -681,6 +684,16 @@ const SEARCH: Binding = Binding {
     keys: &[("/", Action::Search)],
     shown: "/",
     label: "search",
+    bar: Bar::Off,
+    narrow: Bar::Off,
+};
+
+/// The status line names a newer release with this key beside it, so the
+/// bar has no need to.
+const UPDATE: Binding = Binding {
+    keys: &[("U", Action::Update)],
+    shown: "U",
+    label: "update",
     bar: Bar::Off,
     narrow: Bar::Off,
 };
@@ -1209,6 +1222,7 @@ macro_rules! notes_table {
                 bar: Bar::Off,
                 narrow: Bar::Off,
             },
+            UPDATE,
             COMMANDS,
             HELP,
             QUIT,
@@ -2432,6 +2446,7 @@ const SETTINGS_LIST: &[Binding] = &[
     LAST_ROW,
     HALF_PAGE,
     SEARCH,
+    UPDATE,
     COMMANDS,
     Binding {
         bar: Bar::Right,

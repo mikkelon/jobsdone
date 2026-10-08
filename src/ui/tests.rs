@@ -7,7 +7,10 @@ use ratatui::backend::{CrosstermBackend, TestBackend};
 use ratatui::style::Color;
 use ratatui::{Terminal, TerminalOptions, Viewport};
 
-use crate::app::{App, Desktop, List, Locale, Popup, RowId, SettingRow, WindowSize, setting_rows};
+use crate::app::{
+    App, Desktop, Heard, List, Locale, Popup, Release, RowId, SettingRow, Standing, Updater,
+    WindowSize, setting_rows,
+};
 use crate::domain::tests::MemStore;
 use crate::domain::{
     DateStyle, DueChip, FromPlace, Model, Note, Placement, Schedule, Task, WeekStart, Weekday,
@@ -4305,4 +4308,90 @@ fn a_backlog_task_due_tomorrow_says_tomorrow() {
         row.contains("[due tomorrow]  [◷ Mon]"),
         "the chips say the day: {row:?}"
     );
+}
+
+// ---- releases ----------------------------------------------------------
+
+/// An updater that has already heard what it will say, in order.
+struct Heards(Vec<Heard>);
+
+impl Updater for Heards {
+    fn look(&mut self, _asked: bool) {}
+
+    fn install(&mut self) {}
+
+    fn heard(&mut self) -> Option<Heard> {
+        (!self.0.is_empty()).then(|| self.0.remove(0))
+    }
+}
+
+/// The wireframe app, told on its first tick that 1.5.0 is out.
+fn told_of_a_release() -> App {
+    let mut app = app();
+    app.watch_releases(Box::new(Heards(vec![Heard::Looked(Ok(Release {
+        standing: Standing::Newer,
+        installed: "1.4.0".to_owned(),
+        available: "1.5.0".to_owned(),
+    }))])));
+    app.update(Action::Tick);
+    app
+}
+
+#[test]
+fn the_notice_names_the_release_and_the_key_that_installs_it() {
+    let mut app = told_of_a_release();
+    let mut terminal = Terminal::new(TestBackend::new(120, 36)).expect("a test terminal");
+    terminal
+        .draw(|frame| _ = draw(&app, frame))
+        .expect("a frame");
+    let status = lines(terminal.backend().buffer()).remove(0);
+    assert!(
+        status.contains("● 2 on the pile gr   ↑ Jobsdone 1.5.0 U   4 notes gn"),
+        "after the pile, before the notes: {status}"
+    );
+    let buffer = terminal.backend().buffer();
+    let arrow = status.chars().position(|c| c == '↑').expect("the notice") as u16;
+    assert_eq!(buffer[(arrow, 0)].fg, Color::Reset, "plain words");
+    assert!(buffer[(arrow, 0)].modifier.contains(Modifier::BOLD));
+    let key = arrow + count("↑ Jobsdone 1.5.0 ");
+    assert_eq!(buffer[(key, 0)].symbol(), "U");
+    assert_eq!(buffer[(key, 0)].fg, Color::Blue, "the key in accent");
+
+    app.update(Action::NotesPage);
+    assert!(look(&app, 120, 36)[0].contains("↑ Jobsdone 1.5.0 U   esc back to tasks"));
+    app.update(Action::SettingsPage);
+    assert!(look(&app, 120, 36)[0].contains("↑ Jobsdone 1.5.0 U   esc back"));
+}
+
+#[test]
+fn a_narrow_window_keeps_the_version_and_drops_the_name() {
+    let app = told_of_a_release();
+    let status = look(&app, 80, 30).remove(0);
+    assert!(status.contains("↑ 1.5.0 U"), "{status}");
+    assert!(!status.contains("Jobsdone"), "{status}");
+}
+
+#[test]
+fn the_notice_is_not_offered_where_u_would_be_typed_or_swallowed() {
+    let mut app = told_of_a_release();
+    app.update(Action::NotesPage);
+    app.update(Action::Filter);
+    assert!(
+        !look(&app, 120, 36)[0].contains("1.5.0"),
+        "the filter types it"
+    );
+    app.update(Action::Cancel);
+    app.update(Action::Add);
+    assert!(
+        !look(&app, 120, 36)[0].contains("1.5.0"),
+        "the open note types it"
+    );
+    app.update(Action::Cancel);
+    app.update(Action::Commands);
+    assert!(
+        !look(&app, 120, 36)[0].contains("1.5.0"),
+        "the palette types it"
+    );
+    app.update(Action::Cancel);
+    assert!(look(&app, 120, 36)[0].contains("↑ Jobsdone 1.5.0 U"));
 }

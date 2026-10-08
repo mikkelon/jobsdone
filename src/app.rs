@@ -126,6 +126,35 @@ pub struct Restart {
     pub notes: bool,
 }
 
+/// How often an open window looks at what the updater last heard. The
+/// network itself is asked far less often than this (`updater`).
+const LOOK_EVERY: i64 = 60;
+
+/// The updater, and what it is doing for this window.
+struct Updates {
+    updater: Box<dyn Updater>,
+    work: Work,
+    /// The release the notice names, which is newer than this binary.
+    newer: Option<String>,
+    /// When this window last started a look of its own accord.
+    looked: Option<Zoned>,
+}
+
+/// One thing at a time: a look, or an install, or neither.
+#[derive(Clone, Debug, PartialEq, Eq)]
+enum Work {
+    Idle,
+    /// `asked` is a look somebody pressed a key for, which says what it
+    /// found; one the window started of its own accord says nothing.
+    Looking {
+        asked: bool,
+    },
+}
+
+/// What is said when there is no updater to ask.
+const NOT_A_RELEASE: &str =
+    "This copy was not installed from a release; update it the way it was installed.";
+
 /// What the environment says about the person at the keyboard. The
 /// domain reads no environment, so `main.rs` resolves this once and the
 /// application settles it against the `date_style` setting.
@@ -1156,6 +1185,10 @@ pub struct App {
     /// jump landed on goes back there, once (DESIGN.md section 4).
     returns_to: Option<WayBack>,
     layout: Layout,
+    /// The release updater and what it is doing, or nothing when there is
+    /// no updater beside this binary: a package or a build from source is
+    /// updated the way it was installed.
+    updates: Option<Updates>,
     /// Where the clock comes from. The application is the only module
     /// that reads it (ARCHITECTURE.md section 3), which is also what
     /// makes it something a test can hold still: a test's app keeps the
@@ -1246,6 +1279,7 @@ impl App {
             leader: false,
             returns_to: None,
             layout: Layout::default(),
+            updates: None,
             #[cfg(test)]
             clock: now.clone(),
         };
@@ -1460,6 +1494,7 @@ impl App {
                 // window manager waits for a tick.
                 if matches!(action, Action::Tick) {
                     self.pay_the_window(true);
+                    self.keep_up_with_releases();
                 }
             }
             Action::Resize => {}
@@ -1490,6 +1525,7 @@ impl App {
             Action::ArchivePage => self.go_to_the_notes(NotesList::Archive),
             Action::SettingsPage => self.turn_to_the_settings(),
             Action::OpenReview => self.reopen_the_review(),
+            Action::Update => self.update_or_look(),
 
             Action::Commands => self.open(PopupKind::Palette, None),
             Action::Search => {
@@ -1738,6 +1774,111 @@ impl App {
             },
             false,
         );
+    }
+
+    /// Hands the window the release updater beside the binary. Its first
+    /// look is on the first tick, so that a launch does nothing more than
+    /// it did before there was one.
+    pub fn watch_releases(&mut self, updater: Box<dyn Updater>) {
+        self.updates = Some(Updates {
+            updater,
+            work: Work::Idle,
+            newer: None,
+            looked: None,
+        });
+    }
+
+    /// What the updater has heard since the last tick, and a look of the
+    /// window's own when one is due.
+    fn keep_up_with_releases(&mut self) {
+        while let Some(heard) = self
+            .updates
+            .as_mut()
+            .and_then(|updates| updates.updater.heard())
+        {
+            self.hear(heard);
+        }
+
+        if !self.model.settings.check_for_updates() {
+            return;
+        }
+        let now = self.now();
+        let Some(updates) = self.updates.as_mut() else {
+            return;
+        };
+        let due = updates.looked.as_ref().is_none_or(|at| {
+            now < *at
+                || at
+                    .checked_add(Span::new().seconds(LOOK_EVERY))
+                    .is_ok_and(|next| now >= next)
+        });
+        if updates.work == Work::Idle && due {
+            updates.looked = Some(now);
+            updates.work = Work::Looking { asked: false };
+            updates.updater.look(false);
+        }
+    }
+
+    fn hear(&mut self, heard: Heard) {
+        let Some(updates) = self.updates.as_mut() else {
+            return;
+        };
+        let asked = updates.work == Work::Looking { asked: true };
+        match heard {
+            Heard::Looked(answer) => {
+                updates.work = Work::Idle;
+                if let Ok(release) = &answer {
+                    updates.newer =
+                        (release.standing == Standing::Newer).then(|| release.available.clone());
+                }
+                if !asked {
+                    return;
+                }
+                let said = match answer {
+                    Ok(release) => match release.standing {
+                        Standing::Newer => format!(
+                            "Jobsdone {} is available. Press U to update.",
+                            release.available
+                        ),
+                        Standing::Same => format!("Jobsdone {} is up to date.", release.installed),
+                        Standing::Older => format!(
+                            "Jobsdone {} is newer than the latest release, {}.",
+                            release.installed, release.available
+                        ),
+                    },
+                    Err(why) => format!("Could not check for updates: {}.", unstopped(&why)),
+                };
+                self.say(said, false);
+            }
+            Heard::Nothing => updates.work = Work::Idle,
+            Heard::Installed(_) => {}
+        }
+    }
+
+    /// `U`: a look at what the channel holds, which says what it finds.
+    fn update_or_look(&mut self) {
+        let Some(updates) = self.updates.as_mut() else {
+            self.say(NOT_A_RELEASE, false);
+            return;
+        };
+        match &mut updates.work {
+            Work::Idle => {
+                updates.work = Work::Looking { asked: true };
+                updates.updater.look(true);
+            }
+            // The look already on its way is the one that answers.
+            Work::Looking { asked } => *asked = true,
+        }
+        self.say("Checking for updates…", false);
+    }
+
+    /// The newer release the status line names, while the setting asks
+    /// for the window to look.
+    pub fn update_notice(&self) -> Option<&str> {
+        if !self.model.settings.check_for_updates() {
+            return None;
+        }
+        self.updates.as_ref()?.newer.as_deref()
     }
 
     fn now(&self) -> Zoned {
@@ -5981,4 +6122,10 @@ pub fn set_window(
     } else {
         "the window tiles".to_owned()
     })
+}
+
+/// The updater's own sentence, ready to be the end of one of the
+/// window's: it signs off with a full stop that the window adds again.
+fn unstopped(why: &str) -> &str {
+    why.trim_end().trim_end_matches('.')
 }
