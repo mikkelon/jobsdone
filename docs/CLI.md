@@ -120,6 +120,15 @@ The database rejects changes computed from a stale snapshot while holding the
 write transaction. A conflict saves no part of the request. Reload and reassess
 before retrying; another window may have changed the order or the undo target.
 
+## Updating
+
+`jobsdone update [OPTIONS]` runs `jobsdone-update`, the release updater a
+release install puts beside the binary (or in `~/.local/bin`), with every
+argument after the word passed through untouched; `--help`, `--version` and
+`--json` there are the updater's, not this program's. `update` must be the
+first word on the line. Without the updater, as for a package-manager or
+source install, it fails with `updater_missing` and exit code 1.
+
 ## Window settings
 
 Settings are saved in the database. To apply changed floating/window-size settings

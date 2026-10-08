@@ -799,6 +799,21 @@ flag left off keeps the setting as it is. Touches no other part of the
 program: it makes no recurring copies and opens no review.",
     },
     Spec {
+        name: "update",
+        op: "",
+        options: NO_OPTIONS,
+        view: View::None,
+        then: Then::Nothing,
+        summary: "install the latest release, or check for one",
+        usage: "jobsdone update [--check] [--channel beta|stable] [--version vX.Y.Z] [OPTIONS]",
+        detail: "\
+Runs jobsdone-update, which a release install puts beside this program,
+with everything after the word. `jobsdone update --help` lists its options:
+the channel, a particular release, and the window and shortcuts on Omarchy.
+A copy installed by a package manager or built from source is updated the
+way it was installed. Must be the first word on the line.",
+    },
+    Spec {
         name: "help",
         op: "",
         options: NO_OPTIONS,

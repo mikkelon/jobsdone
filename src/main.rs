@@ -86,6 +86,10 @@ fn main() -> ExitCode {
             print!("{}", cli::SKILL);
             ExitCode::SUCCESS
         }
+        Plan::Update(ref arguments) => {
+            let failure = update(arguments);
+            complain(&failure, Format::Text)
+        }
         Plan::Operate(ref operation) => match operate(operation.clone(), &parsed) {
             Ok(said) => {
                 print!("{said}");
@@ -94,6 +98,38 @@ fn main() -> ExitCode {
             Err(failure) => complain(&failure, parsed.format),
         },
     }
+}
+
+/// The release updater a release install puts beside the binary, or in
+/// `~/.local/bin` for a copy run from somewhere else.
+const UPDATER: &str = "jobsdone-update";
+
+/// `jobsdone update`: become the release updater, so that it owns the
+/// terminal, the exit code and the binary it replaces. Returns only when
+/// it could not be started.
+fn update(arguments: &[String]) -> Failure {
+    use std::os::unix::process::CommandExt;
+
+    let beside = std::env::current_exe()
+        .ok()
+        .and_then(|binary| binary.parent().map(|dir| dir.join(UPDATER)));
+    let home =
+        std::env::var_os("HOME").map(|home| Path::new(&home).join(".local/bin").join(UPDATER));
+    let Some(updater) = beside.into_iter().chain(home).find(|path| path.is_file()) else {
+        return Failure::runtime(
+            "updater_missing",
+            format!(
+                "{UPDATER} was not found beside this program or in ~/.local/bin. A release \
+                 install puts it there; a copy from a package manager or built from source \
+                 is updated the way it was installed"
+            ),
+        );
+    };
+    let error = std::process::Command::new(&updater).args(arguments).exec();
+    Failure::runtime(
+        "updater_failed",
+        format!("could not run {}: {error}", updater.display()),
+    )
 }
 
 /// The failure, on standard error, in the shape the command line asked

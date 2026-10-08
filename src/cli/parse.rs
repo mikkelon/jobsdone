@@ -78,6 +78,19 @@ impl Given {
 
 /// A command line, read.
 pub fn parse(arguments: &[String]) -> Result<Parsed, Failure> {
+    // `update` belongs to the release updater, whose options (`--version`
+    // and `--help` among them) mean something else there. Everything after
+    // the word is handed over as it was written.
+    if let Some((first, rest)) = arguments.split_first()
+        && first == "update"
+    {
+        return Ok(Parsed {
+            plan: Plan::Update(rest.to_vec()),
+            format: Format::Text,
+            data_dir: None,
+        });
+    }
+
     let (words, tokens) = words_and_tokens(arguments);
 
     let spec = match words.as_slice() {
@@ -271,6 +284,13 @@ fn build(
             format,
             data_dir,
         });
+    }
+    // Reached only when an option stood in front of the word, which the
+    // updater would never be shown.
+    if spec.name == "update" {
+        return Err(Failure::usage(
+            "write update first: everything after it goes to the updater, as in `jobsdone update --check`",
+        ));
     }
     if spec.name == "desktop" {
         return Ok(Parsed {

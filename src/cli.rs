@@ -60,6 +60,9 @@ pub enum Plan {
     Version,
     /// The bundled agent skill.
     Skill,
+    /// `update`: hand everything after the word to the release updater,
+    /// untouched, because its options are its own.
+    Update(Vec<String>),
     /// One operation for the service.
     Operate(Operation),
 }

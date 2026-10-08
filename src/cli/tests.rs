@@ -254,6 +254,7 @@ const SAMPLES: &[(&str, &[&str])] = &[
     ("undo get", &["undo", "get"]),
     ("undo apply", &["undo", "apply", "--entry", "1"]),
     ("desktop", &["desktop", "--tiled"]),
+    ("update", &["update"]),
     ("help", &["help"]),
 ];
 
@@ -850,6 +851,42 @@ fn text_read_in_and_text_written_out_are_still_one_field() {
     assert!(said.contains("body"), "{said}");
 }
 
+// ---- update hands its line to the release updater ------------------
+
+#[test]
+fn update_hands_everything_after_it_to_the_updater_untouched() {
+    assert_eq!(read(&["update"]).unwrap().plan, Plan::Update(vec![]));
+    let passed = [
+        "--check",
+        "--version",
+        "v1.2.0",
+        "--help",
+        "--json",
+        "--keybind",
+        "SUPER + J",
+    ];
+    let mut line = vec!["update"];
+    line.extend(passed);
+    assert_eq!(
+        read(&line).unwrap().plan,
+        Plan::Update(passed.iter().map(|word| (*word).to_owned()).collect())
+    );
+}
+
+#[test]
+fn update_behind_an_option_is_refused_rather_than_half_read() {
+    assert!(refused(&["--json", "update"]).contains("write update first"));
+    assert!(refused(&["--data-dir", "/tmp/x", "update", "--check"]).contains("update"));
+}
+
+#[test]
+fn help_for_update_is_the_program_s_own() {
+    let Plan::Help(text) = read(&["help", "update"]).unwrap().plan else {
+        panic!("help update is help");
+    };
+    assert!(text.contains("jobsdone-update"));
+}
+
 // ---- what the desktop command was, and still is ---------------------
 
 #[test]
@@ -1064,7 +1101,11 @@ fn the_help_lists_every_command_the_program_takes() {
 
 #[test]
 fn every_command_s_help_says_the_operation_it_sends() {
-    for spec in parse::all_commands() {
+    // `update --help` is the updater's own help; `help update` is this one.
+    for spec in parse::all_commands()
+        .iter()
+        .filter(|spec| spec.name != "update")
+    {
         let words: Vec<&str> = spec.name.split(' ').chain(["--help"]).collect();
         let Plan::Help(text) = read(&words).unwrap().plan else {
             panic!("{} has no help", spec.name)

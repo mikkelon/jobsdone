@@ -28,6 +28,7 @@ while [ "$#" -gt 0 ]; do
 Install or update Jobsdone from a published Linux release.
 
 Usage: install.sh [OPTIONS]
+       jobsdone update [OPTIONS]
        jobsdone-update [OPTIONS]
 
   --check          Show available versions without changing files

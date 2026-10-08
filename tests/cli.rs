@@ -787,3 +787,78 @@ fn a_popped_undo_identity_cannot_target_a_new_action() {
         "B"
     );
 }
+
+// ---- update: the release updater takes over the process -------------
+
+/// The built program copied into a directory of its own, beside whatever
+/// the test puts there, with a home that has nothing in it.
+fn lone_copy(within: &TempDir) -> std::path::PathBuf {
+    let bin = within.path().join("bin");
+    std::fs::create_dir_all(&bin).unwrap();
+    let binary = bin.join("jobsdone");
+    std::fs::copy(env!("CARGO_BIN_EXE_jobsdone"), &binary).unwrap();
+    binary
+}
+
+/// Runs a program this test has just written. Another test's child, forked
+/// while the file was still open for writing, can hold that descriptor for
+/// a moment and make the kernel refuse the exec as busy, so that is waited out.
+fn output_of_fresh(command: &mut Command) -> std::process::Output {
+    for _ in 0..50 {
+        match command.output() {
+            Err(error) if error.kind() == std::io::ErrorKind::ExecutableFileBusy => {
+                std::thread::sleep(std::time::Duration::from_millis(20));
+            }
+            result => return result.unwrap(),
+        }
+    }
+    panic!("the program stayed busy");
+}
+
+#[test]
+fn update_runs_the_updater_beside_it_with_the_rest_of_the_line() {
+    use std::os::unix::fs::PermissionsExt;
+
+    let scratch = scratch();
+    let binary = lone_copy(&scratch);
+    let updater = binary.with_file_name("jobsdone-update");
+    std::fs::write(
+        &updater,
+        "#!/bin/sh\necho \"${0##*/}\"\nfor word in \"$@\"; do echo \"[$word]\"; done\nexit 7\n",
+    )
+    .unwrap();
+    std::fs::set_permissions(&updater, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+    let output = Command::new(&binary)
+        .args([
+            "update",
+            "--check",
+            "--version",
+            "v1.0.0",
+            "--keybind",
+            "SUPER + J",
+        ])
+        .env("HOME", scratch.path())
+        .output()
+        .unwrap();
+    assert_eq!(output.status.code(), Some(7));
+    assert_eq!(
+        String::from_utf8(output.stdout).unwrap(),
+        "jobsdone-update\n[--check]\n[--version]\n[v1.0.0]\n[--keybind]\n[SUPER + J]\n"
+    );
+}
+
+#[test]
+fn update_without_an_updater_says_how_this_copy_is_updated() {
+    let scratch = scratch();
+    let binary = lone_copy(&scratch);
+    let output = output_of_fresh(
+        Command::new(&binary)
+            .arg("update")
+            .env("HOME", scratch.path()),
+    );
+    assert_eq!(output.status.code(), Some(1));
+    let err = String::from_utf8(output.stderr).unwrap();
+    assert!(err.contains("jobsdone-update was not found"), "{err}");
+    assert!(output.stdout.is_empty());
+}

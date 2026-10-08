@@ -82,13 +82,14 @@ copies the app's selection.
 
 | What you want to do | Command |
 | --- | --- |
-| Check for an update | `jobsdone-update --check` |
-| Install the latest stable release | `jobsdone-update` |
+| Check for an update | `jobsdone update --check` |
+| Install the latest stable release | `jobsdone update` |
 | Remove the app | `jobsdone-uninstall` |
 
 Stable installations receive stable updates. If you installed a beta, run
-`jobsdone-update --channel stable` to move to the stable release. Use
-`jobsdone-update --channel beta` to try future beta releases.
+`jobsdone update --channel stable` to move to the stable release. Use
+`jobsdone update --channel beta` to try future beta releases.
+`jobsdone update` runs `jobsdone-update` with the same options, so either works.
 
 Updates keep your tasks, notes, settings and shortcut. Restart open Jobsdone
 windows after updating.
