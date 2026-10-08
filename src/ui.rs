@@ -26,7 +26,7 @@ use crate::app::{
 };
 use crate::domain::{
     self, DateOrder, DayListRow, MonthDay, NoteRow, Place, Rule, ScheduleRow, Stretch, Weekday,
-    day_label, short_label, stamp_label,
+    day_label, ordinal, short_label, stamp_label,
 };
 use crate::input::{self, Field, NotesList, NotesPane, Pane, Shown, Side};
 
@@ -384,15 +384,6 @@ fn weekday_word(day: Weekday) -> &'static str {
         Weekday::Fri => "Friday",
         Weekday::Sat => "Saturday",
         Weekday::Sun => "Sunday",
-    }
-}
-
-fn ordinal(day: u8) -> &'static str {
-    match (day % 10, day % 100) {
-        (1, 1 | 21 | 31) => "st",
-        (2, 2 | 22) => "nd",
-        (3, 3 | 23) => "rd",
-        _ => "th",
     }
 }
 

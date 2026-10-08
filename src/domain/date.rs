@@ -303,6 +303,18 @@ fn named(text: &str, names: &[&str]) -> Option<usize> {
         .position(|name| *name == text || name.starts_with(text) && text.len() == 3)
 }
 
+/// The English ordinal suffix of a day of the month: `st` for the 1st and
+/// the 21st, `th` for the 11th. Shared by the app and the command line, so
+/// a monthly rule reads the same in both.
+pub fn ordinal(day: u8) -> &'static str {
+    match (day % 10, day % 100) {
+        (1, 1 | 21 | 31) => "st",
+        (2, 2 | 22) => "nd",
+        (3, 3 | 23) => "rd",
+        _ => "th",
+    }
+}
+
 #[cfg(test)]
 mod boundary_tests {
     use super::*;

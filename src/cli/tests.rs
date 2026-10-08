@@ -1116,3 +1116,14 @@ fn every_command_s_help_says_the_operation_it_sends() {
         }
     }
 }
+
+#[test]
+fn a_monthly_rule_reads_with_the_ordinal_the_app_gives_it() {
+    let monthly = |day: Value| render::rule(&json!({ "kind": "monthly", "day": day }));
+    assert_eq!(monthly(json!(15)), "the 15th of the month");
+    assert_eq!(monthly(json!(1)), "the 1st of the month");
+    assert_eq!(monthly(json!(22)), "the 22nd of the month");
+    assert_eq!(monthly(json!(23)), "the 23rd of the month");
+    assert_eq!(monthly(json!(11)), "the 11th of the month");
+    assert_eq!(monthly(json!("last")), "the last day of the month");
+}

@@ -10,7 +10,7 @@ use std::fmt::Write as _;
 use jiff::civil::Date;
 use serde_json::Value;
 
-use crate::domain::{DateOrder, day_label};
+use crate::domain::{DateOrder, day_label, ordinal};
 
 use super::{Failure, Operation};
 
@@ -917,7 +917,10 @@ pub fn rule(rule: &Value) -> String {
         }
         Some("monthly") => match at(rule, "day") {
             Some(Value::String(last)) if last == "last" => "the last day of the month".to_owned(),
-            Some(day) => format!("the {} of the month", plain(day)),
+            Some(day) => match day.as_u64().and_then(|day| u8::try_from(day).ok()) {
+                Some(day) => format!("the {day}{} of the month", ordinal(day)),
+                None => format!("the {} of the month", plain(day)),
+            },
             None => "monthly".to_owned(),
         },
         Some("every_n_weeks") => {
