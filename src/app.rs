@@ -2186,9 +2186,16 @@ impl App {
             .map(|(_, group)| group)
     }
 
+    /// Whether the keyboard is on the notes page itself. A review opened
+    /// at launch can lie over the notes page, and while it is up the
+    /// keys are the review's, which are about tasks.
+    fn on_the_notes(&self) -> bool {
+        self.page == Page::Notes && self.review.is_none()
+    }
+
     /// The task a key on the cursor row acts on, or nothing and a reason.
     fn task_at_cursor(&mut self) -> Option<Id> {
-        if self.page == Page::Notes {
+        if self.on_the_notes() {
             self.say("That key is for tasks, and this page is notes.", false);
             return None;
         }
@@ -2342,7 +2349,7 @@ impl App {
         // A note is left before it can be the row thrown away, so that
         // what was typed into it is written first (ARCHITECTURE.md rule
         // 8) and the keyboard is back on the list to answer.
-        if self.page == Page::Notes && !self.leave_the_note() {
+        if self.on_the_notes() && !self.leave_the_note() {
             return;
         }
         let Some(row) = self.row_to_delete() else {
@@ -2358,6 +2365,11 @@ impl App {
     /// The row `x` is about: a note on the notes page, a task everywhere
     /// else, each with the reason when there is none.
     fn row_to_delete(&mut self) -> Option<RowId> {
+        // The review lies over the page it opened on, and its rows are
+        // tasks whatever that page is.
+        if self.review.is_some() {
+            return self.task_at_cursor().map(RowId::Task);
+        }
         match self.page {
             Page::Notes => self.note_at_cursor().map(RowId::Note),
             Page::Home => self.task_at_cursor().map(RowId::Task),
