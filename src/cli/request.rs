@@ -699,7 +699,7 @@ Keys: day_starts_at 0-23, week_starts_on monday|sunday, work_days mon,tue,…,
 review_opens_itself, due_ahead_days 0-365, backfill_days 0-365,
 pile_horizon_days 0-3650, floating_window, window_size WxH, mouse,
 message_seconds 0-60, date_style locale|day_first|month_first,
-confirm_delete, spell_check_notes. Booleans take true/false, on/off, yes/no.
+confirm_delete, spell_check_notes, check_for_updates. Booleans take true/false, on/off, yes/no.
 
 A value outside its range is refused rather than held to the range. Changing
 the window settings does not touch the window manager: run `jobsdone
@@ -1655,6 +1655,7 @@ const SETTINGS: &[(&str, Shape)] = &[
     ("date_style", Shape::Word),
     ("confirm_delete", Shape::Flag),
     ("spell_check_notes", Shape::Flag),
+    ("check_for_updates", Shape::Flag),
 ];
 
 #[derive(Clone, Copy)]

@@ -98,11 +98,12 @@ fn written(settings: &Settings) -> Value {
         },
         "confirm_delete": settings.confirm_delete(),
         "spell_check_notes": settings.spell_check_notes(),
+        "check_for_updates": settings.check_for_updates(),
     })
 }
 
 /// The keys a request may name, which are the keys of the table.
-const KEYS: [&str; 14] = [
+const KEYS: [&str; 15] = [
     "day_starts_at",
     "week_starts_on",
     "work_days",
@@ -117,6 +118,7 @@ const KEYS: [&str; 14] = [
     "date_style",
     "confirm_delete",
     "spell_check_notes",
+    "check_for_updates",
 ];
 
 /// The settings with the named ones changed, each held to its range by
@@ -154,6 +156,7 @@ fn patched(settings: &Settings, patch: &Map<String, Value>) -> Result<Settings, 
             }),
             "confirm_delete" => settings.set_confirm_delete(flag(key, value)?),
             "spell_check_notes" => settings.set_spell_check_notes(flag(key, value)?),
+            "check_for_updates" => settings.set_check_for_updates(flag(key, value)?),
             _ => {}
         }
     }

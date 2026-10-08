@@ -365,7 +365,7 @@ Rejected:
   would sit next to the data it is not.
 - **A configuration file in `~/.config/jobsdone/`.** The most familiar
   place to put settings, but a second file format to design, parse,
-  validate and keep in step with the database, for fourteen values that
+  validate and keep in step with the database, for fifteen values that
   several open windows already follow each other through `data_version`
   to pick up. In the database they are one backup, one writer and one
   reload path.

@@ -31,6 +31,7 @@ const MESSAGE_SECONDS: &str = "message_seconds";
 const DATE_STYLE: &str = "date_style";
 const CONFIRM_DELETE: &str = "confirm_delete";
 const SPELL_CHECK_NOTES: &str = "spell_check_notes";
+const CHECK_FOR_UPDATES: &str = "check_for_updates";
 
 /// Where a week begins, which is where the history's weeks fall and
 /// which column a calendar opens with.
@@ -215,6 +216,7 @@ pub struct Settings {
     date_style: DateStyle,
     confirm_delete: bool,
     spell_check_notes: bool,
+    check_for_updates: bool,
 }
 
 impl Default for Settings {
@@ -234,6 +236,7 @@ impl Default for Settings {
             date_style: DateStyle::default(),
             confirm_delete: false,
             spell_check_notes: false,
+            check_for_updates: true,
         }
     }
 }
@@ -382,6 +385,14 @@ impl Settings {
         self.spell_check_notes = check;
     }
 
+    pub fn check_for_updates(&self) -> bool {
+        self.check_for_updates
+    }
+
+    pub fn set_check_for_updates(&mut self, check: bool) {
+        self.check_for_updates = check;
+    }
+
     /// The rows of the `settings` table, read into a value. Anything the
     /// codec does not recognise leaves that setting at its default.
     pub fn from_pairs<K: AsRef<str>, V: AsRef<str>>(
@@ -422,6 +433,7 @@ impl Settings {
                 },
                 CONFIRM_DELETE => flag(value, |on| settings.confirm_delete = on),
                 SPELL_CHECK_NOTES => flag(value, |on| settings.spell_check_notes = on),
+                CHECK_FOR_UPDATES => flag(value, |on| settings.check_for_updates = on),
                 _ => {}
             }
         }
@@ -464,6 +476,7 @@ impl Settings {
             ),
             (CONFIRM_DELETE, self.confirm_delete.to_string()),
             (SPELL_CHECK_NOTES, self.spell_check_notes.to_string()),
+            (CHECK_FOR_UPDATES, self.check_for_updates.to_string()),
         ]
         .into_iter()
         .map(|(key, value)| (key.to_owned(), value))

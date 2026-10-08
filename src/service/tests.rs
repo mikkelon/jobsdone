@@ -444,6 +444,21 @@ fn deleting_asks_first_while_the_setting_says_to() {
 }
 
 #[test]
+fn looking_for_updates_is_on_until_the_setting_says_off() {
+    let mut world = World::new();
+    let data = world.ok(json!({"op": "settings.get"}));
+    assert_eq!(data["settings"]["check_for_updates"], true);
+
+    let data = world.ok(json!({"op": "settings.set", "settings": {"check_for_updates": false}}));
+    assert_eq!(data["settings"]["check_for_updates"], false);
+    assert!(!world.model().settings.check_for_updates());
+
+    let error =
+        world.err(json!({"op": "settings.set", "settings": {"check_for_updates": "sometimes"}}));
+    assert_eq!(error.code, "invalid_argument");
+}
+
+#[test]
 fn moving_several_tasks_takes_them_all_to_the_same_place() {
     let mut world = World::new();
     let first = world.task("First");

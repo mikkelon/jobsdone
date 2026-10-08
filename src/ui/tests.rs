@@ -2794,6 +2794,46 @@ fn spell_check_row(app: &App) -> String {
 }
 
 #[test]
+fn the_update_check_row_is_under_updates_and_reads_on_or_off() {
+    let mut app = app();
+    app.update(Action::SettingsPage);
+    for _ in 0..setting_rows().len() {
+        if app.cursor(List::Settings) == Some(RowId::Setting(SettingRow::CheckForUpdates)) {
+            break;
+        }
+        app.update(Action::Down);
+    }
+
+    let text = look(&app, 120, 36).join("\n");
+    assert!(text.contains("UPDATES"), "the group it is under:\n{text}");
+    assert!(
+        text.contains("Check for updates") && text.contains("Looks for a newer release"),
+        "the row and the pane beside it:\n{text}"
+    );
+    assert!(text.contains("Default: on"), "and its default:\n{text}");
+    assert!(
+        check_row(&app).ends_with(" on"),
+        "on to begin with: {}",
+        check_row(&app)
+    );
+
+    app.update(Action::Pick);
+    assert!(check_row(&app).ends_with(" off"), "{}", check_row(&app));
+}
+
+fn check_row(app: &App) -> String {
+    look(app, 120, 36)
+        .into_iter()
+        .find(|line| line.starts_with("  Check for updates"))
+        .expect("the update check row")
+        .split('\u{2502}')
+        .next()
+        .expect("the list column")
+        .trim_end()
+        .to_owned()
+}
+
+#[test]
 fn a_narrow_settings_page_keeps_the_list_and_drops_the_description() {
     let mut app = app();
     app.update(Action::SettingsPage);

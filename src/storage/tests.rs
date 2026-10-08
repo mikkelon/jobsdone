@@ -350,6 +350,7 @@ fn the_settings_read_back_as_what_was_committed() {
     settings.set_window_size(domain::WindowSize::new(1200, 800));
     settings.set_confirm_delete(true);
     settings.set_spell_check_notes(true);
+    settings.set_check_for_updates(false);
 
     world.commit(&Change {
         writes: vec![Write::PutSettings(settings.clone())],

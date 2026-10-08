@@ -242,6 +242,7 @@ pub enum SettingRow {
     MessageSeconds,
     ConfirmDelete,
     SpellCheckNotes,
+    CheckForUpdates,
     /// Not a value of its own: the way into the personal dictionary,
     /// which is a list of words rather than a setting with states to
     /// step through. Enter opens the manager over the page.
@@ -275,12 +276,13 @@ pub enum SettingGroup {
     Window,
     Looks,
     Notes,
+    Updates,
 }
 
 /// The rows of the settings page, in the order they are drawn, each
 /// under its group. One list, so the cursor walks it the way it walks
 /// any other.
-const SETTINGS: [(SettingGroup, SettingRow); 21] = [
+const SETTINGS: [(SettingGroup, SettingRow); 22] = [
     (SettingGroup::Day, SettingRow::DayStartsAt),
     (SettingGroup::Day, SettingRow::WeekStartsOn),
     (SettingGroup::WorkDays, SettingRow::WorkDay(Weekday::Mon)),
@@ -302,6 +304,7 @@ const SETTINGS: [(SettingGroup, SettingRow); 21] = [
     (SettingGroup::Looks, SettingRow::ConfirmDelete),
     (SettingGroup::Notes, SettingRow::SpellCheckNotes),
     (SettingGroup::Notes, SettingRow::PersonalDictionary),
+    (SettingGroup::Updates, SettingRow::CheckForUpdates),
 ];
 
 /// The settings page as a list of rows. `ui` draws them in this order
@@ -5742,6 +5745,7 @@ fn stepped(settings: &Settings, row: SettingRow, forward: bool) -> Settings {
         }
         SettingRow::ConfirmDelete => next.set_confirm_delete(forward),
         SettingRow::SpellCheckNotes => next.set_spell_check_notes(forward),
+        SettingRow::CheckForUpdates => next.set_check_for_updates(forward),
         // The dictionary is a list of words, not a value with a step on
         // either side of it.
         SettingRow::PersonalDictionary => {}
@@ -5773,6 +5777,7 @@ fn cycled(settings: &Settings, row: SettingRow) -> Settings {
         SettingRow::SpellCheckNotes => {
             next.set_spell_check_notes(!settings.spell_check_notes());
         }
+        SettingRow::CheckForUpdates => next.set_check_for_updates(!settings.check_for_updates()),
         SettingRow::DayStartsAt
         | SettingRow::DueAheadDays
         | SettingRow::BackfillDays

@@ -60,6 +60,7 @@ fn group_label(group: SettingGroup) -> &'static str {
         SettingGroup::Window => "Window",
         SettingGroup::Looks => "Looks",
         SettingGroup::Notes => "Notes",
+        SettingGroup::Updates => "Updates",
     }
 }
 
@@ -130,6 +131,7 @@ fn label(row: SettingRow) -> &'static str {
         SettingRow::MessageSeconds => "Hint bar messages stand for",
         SettingRow::ConfirmDelete => "Confirm before delete",
         SettingRow::SpellCheckNotes => "Spell-check notes in US English",
+        SettingRow::CheckForUpdates => "Check for updates",
         SettingRow::PersonalDictionary => "Personal dictionary",
     }
 }
@@ -213,6 +215,7 @@ fn value(settings: &Settings, row: SettingRow) -> String {
         },
         SettingRow::ConfirmDelete => on_off(settings.confirm_delete()),
         SettingRow::SpellCheckNotes => on_off(settings.spell_check_notes()),
+        SettingRow::CheckForUpdates => on_off(settings.check_for_updates()),
         // The dictionary is not held in the settings; the row reads its
         // count off the model instead.
         SettingRow::PersonalDictionary => String::new(),
@@ -285,6 +288,10 @@ fn about(row: SettingRow) -> &'static str {
         SettingRow::SpellCheckNotes => {
             "Whether a note being written is checked against a US English dictionary and the \
              words it does not know are marked. Off, nothing in a note is marked."
+        }
+        SettingRow::CheckForUpdates => {
+            "Looks for a newer release every fifteen minutes. Only a release install can \
+             update itself; other installs are updated the way they were installed."
         }
         SettingRow::PersonalDictionary => {
             "The words the checker is told to accept: names, jargon, anything a US English \

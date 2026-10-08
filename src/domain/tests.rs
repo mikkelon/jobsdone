@@ -3478,6 +3478,7 @@ fn the_defaults_are_what_section_19_says() {
     assert_eq!(settings.date_style(), DateStyle::Locale);
     assert!(!settings.confirm_delete());
     assert!(!settings.spell_check_notes());
+    assert!(settings.check_for_updates());
 }
 
 #[test]
@@ -3497,8 +3498,19 @@ fn every_setting_reads_back_as_what_was_written() {
     settings.set_date_style(DateStyle::MonthFirst);
     settings.set_confirm_delete(true);
     settings.set_spell_check_notes(true);
+    settings.set_check_for_updates(false);
 
     assert_eq!(Settings::from_pairs(settings.to_pairs()), settings);
+}
+
+/// A database written before the setting existed has no row for it, and
+/// a row it cannot read is no better, so both leave the looking on.
+#[test]
+fn updates_are_looked_for_until_explicitly_switched_off() {
+    assert!(Settings::from_pairs([("day_starts_at", "8")]).check_for_updates());
+    assert!(Settings::from_pairs([("check_for_updates", "sometimes")]).check_for_updates());
+    assert!(Settings::from_pairs([("check_for_updates", "true")]).check_for_updates());
+    assert!(!Settings::from_pairs([("check_for_updates", "false")]).check_for_updates());
 }
 
 #[test]

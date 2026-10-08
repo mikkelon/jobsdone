@@ -741,6 +741,12 @@ fn a_setting_outside_its_range_is_refused_rather_than_held_to_it() {
     .json();
     assert_eq!(saved["data"]["settings"]["day_starts_at"], 6);
     assert_eq!(saved["data"]["settings"]["mouse"], false);
+    let saved = ok(
+        data,
+        &["--json", "settings", "set", "check_for_updates=off"],
+    )
+    .json();
+    assert_eq!(saved["data"]["settings"]["check_for_updates"], false);
     assert!(saved["data"]["undo"].is_null(), "a setting is not undoable");
 }
 

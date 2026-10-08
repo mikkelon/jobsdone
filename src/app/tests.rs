@@ -5268,6 +5268,21 @@ fn nothing_is_read_until_there_is_a_note_with_something_in_it() {
 }
 
 #[test]
+fn the_update_check_is_a_toggle_that_starts_on_and_is_committed() {
+    let mut app = started();
+    app.update(Action::SettingsPage);
+    cursor_to(&mut app, SettingRow::CheckForUpdates);
+    assert!(app.settings().check_for_updates());
+
+    app.update(Action::Left);
+    assert!(!app.settings().check_for_updates());
+    app.update(Action::Right);
+    assert!(app.settings().check_for_updates());
+    app.update(Action::Pick);
+    assert!(!app.settings().check_for_updates());
+}
+
+#[test]
 fn turning_the_setting_off_takes_the_marks_away_and_on_brings_them_back() {
     let mut app = spell_started();
     app.update(Action::NotesPage);

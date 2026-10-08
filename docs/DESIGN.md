@@ -606,9 +606,9 @@ shown at all.
 The Settings heading shows the running app's version in dim text, taken
 from the build's package version, as `jobsdone --version` is.
 
-`gs` opens a page of the fourteen settings of DOMAIN.md section 19, in
-six groups: the day, the work days, the review, the window, the
-looks and notes. Every row is a label dotted across to its value, because a
+`gs` opens a page of the fifteen settings of DOMAIN.md section 19, in
+seven groups: the day, the work days, the review, the window, the
+looks, notes and updates. Every row is a label dotted across to its value, because a
 page of settings is read down the labels and across to the values. A toggle reads
 `on` or `off`; a number carries its unit, and the number that means none
 of it is written as what none of it does: `on its day`, `every missed

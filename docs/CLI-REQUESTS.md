@@ -301,7 +301,7 @@ note when asked.
 
 ### Settings and the dictionary
 
-**`settings.set`** — `settings`, an object of one or more of the fourteen keys in
+**`settings.set`** — `settings`, an object of one or more of the fifteen keys in
 section 7. Unknown keys and values outside the documented range are
 `invalid_argument`: the request is refused rather than clamped, unlike the
 tolerant database codec. Not undoable.
@@ -392,6 +392,7 @@ Values are typed, not text. Out-of-range is refused.
 | `date_style`          | `"locale"` \| `"day_first"` \| `"month_first"`  |                          |
 | `confirm_delete`      | bool                                            |                          |
 | `spell_check_notes`   | bool                                            |                          |
+| `check_for_updates`   | bool                                            |                          |
 
 `date_order` beside them in a response is the resolved order, `"day_first"` or
 `"month_first"`: the `dates` argument `execute` was given when `date_style` is

@@ -32,7 +32,7 @@ through every wireframe and names the view it is drawn from.
 | stack           | The live notes that are not archived, newest first.                      |
 | archived        | A live note put out of the stack without being deleted.                  |
 | command         | One change to the model. Every command has an inverse.                   |
-| settings        | The fourteen values that change what the rules do. Section 19.           |
+| settings        | The fifteen values that change what the rules do. Section 19.           |
 
 ## 2. Time
 
@@ -776,7 +776,7 @@ Notes on the schema:
 - `settings` keys are the ones in section 19, every value text. A
   `PutSettings` writes the whole table: the rows are deleted and written
   again in one transaction, because the settings are one value in the
-  model rather than fourteen. Loading is the same in reverse, so a
+  model rather than fifteen. Loading is the same in reverse, so a
   missing key is that setting's default and a key this build does not
   know is ignored. The delete takes those unknown keys with it, which is
   the price of the value being whole: an older binary can read a newer
@@ -812,7 +812,7 @@ narrows a view.
 
 ## 19. Settings
 
-Fourteen settings, held in the `settings` table and loaded into the model
+Fifteen settings, held in the `settings` table and loaded into the model
 as one typed value. The domain owns the type, its defaults, its
 validation and its codec; storage only moves the rows and the settings
 page only draws them.
@@ -833,6 +833,7 @@ page only draws them.
 | `date_style`         | `locale`, `day_first`, `month_first`   | `locale`   | Date order            | `Fri 5 Sep` or `Fri Sep 5`, everywhere a date is written. `locale` follows the environment's locale (STACK.md section 8). |
 | `confirm_delete`     | `true`/`false`                         | `false`    | Confirm before delete | `x` asks first instead of deleting and offering `u`. Applies to tasks, notes and the review pile. |
 | `spell_check_notes`  | `true`/`false`                         | `false`    | Spell-check notes in US English | Underline possible US English spelling mistakes in notes. The application checks locally; note text is unchanged. |
+| `check_for_updates`  | `true`/`false`                         | `true`     | Check for updates     | Look for a newer release every fifteen minutes. Only a release install can update itself; other installs are updated the way they were installed. |
 
 ### The window sizes
 
