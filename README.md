@@ -91,8 +91,16 @@ Stable installations receive stable updates. If you installed a beta, run
 `jobsdone update --channel beta` to try future beta releases.
 `jobsdone update` runs `jobsdone-update` with the same options, so either works.
 
-Updates keep your tasks, notes, settings and shortcut. Restart open Jobsdone
-windows after updating.
+A release installation also looks for updates from inside the app, at most
+once every fifteen minutes. When a newer release is out, the status line at the
+top names it, such as `↑ Jobsdone 1.5.0 U`. Press `U` to install it. Jobsdone
+asks first, then updates and restarts itself. When no newer release is known,
+`U` checks straight away and the hint bar says what it found. To stop the app
+looking, turn off "Check for updates" in settings (`gs`); `U` still checks when
+you press it.
+
+Updates keep your tasks, notes, settings and shortcut. Restart other open
+Jobsdone windows after updating.
 
 Uninstall keeps your data. Reinstall to pick up where you left off.
 

@@ -101,3 +101,27 @@ Uninstall removes the user-local executable, helpers, desktop launcher, icon,
 terminal profiles and Jobsdone's Hyprland blocks. It leaves the database and log.
 Database downgrades are not guaranteed: retain a database backup before explicitly
 installing an older release after running a version with schema changes.
+
+## The in-app update check
+
+The window finds releases the way `jobsdone-update` does, because it asks
+that script: it runs `jobsdone-update --check --porcelain` beside its own
+binary. The updater reads the version in `release-<channel>/Cargo.toml` for
+the installed channel and prints `newer`, `same` or `older`, the installed
+version and the channel's version. The script makes that comparison with the
+rule it uses to refuse downgrades, so the window never compares versions
+itself. A release becomes visible to open windows once `scripts/publish-channel`
+has moved the channel branch. Windows ask at most once every fifteen minutes
+between them and read the shared answer once a minute (STACK.md section 7),
+so an open window can take sixteen minutes to name a new release.
+
+The check can only be tried first hand once a release newer than the one
+containing it exists. Until then, simulate it. `tests/release.sh` installs
+with a fake `curl` that answers the channel manifests from
+`JOBSDONE_TEST_STABLE_VERSION` and `JOBSDONE_TEST_BETA_VERSION`, which is how
+it tests the porcelain line. For the window, copy the built binary into a
+directory of its own and put a fake `jobsdone-update` beside it that prints a
+porcelain line for `--check` and does the install otherwise; `tests/cli.rs`
+does this to update and restart a real window. Run such a copy with a scratch
+`HOME`, `XDG_STATE_HOME` and `--data-dir`, so that the shared record of the
+last check and the database are not your own.

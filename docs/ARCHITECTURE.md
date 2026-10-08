@@ -17,7 +17,7 @@ The terminal module owns the loop and the raw-mode side effects.
 
 ## 1. Modules
 
-One crate, `jobsdone`, with `lib.rs` declaring nine top-level modules and
+One crate, `jobsdone`, with `lib.rs` declaring ten top-level modules and
 a thin `main.rs`. Each module is `src/<module>.rs` plus, when it needs more
 than one file, `src/<module>/*.rs`.
 
@@ -32,7 +32,8 @@ than one file, `src/<module>/*.rs`.
 | `desktop`  | The window rule the program keeps for itself: the block in Hyprland's configuration, the reload, and the resize that shows a size being chosen. |
 | `service`  | Validated headless requests, stable response objects, and compound application operations shared with the domain and persistence seam. |
 | `cli`      | Command parsing, JSON/file/stdin transport, help, output formatting, and noninteractive dispatch. |
-| `main.rs`  | The command line, XDG paths, the locale, logging to the state directory, opening storage, building the desktop, running the terminal. |
+| `updater`  | The release updater beside the binary, as the window speaks to it: what the channel holds, the fifteen-minute throttle every window shares, and the install. |
+| `main.rs`  | The command line, XDG paths, the locale, logging to the state directory, opening storage, building the desktop and the updater, running the terminal, and starting the new release after an install. |
 
 Anything not on this list is not a top-level module. Helpers live inside
 the module that needs them.
@@ -69,6 +70,7 @@ depended on:
                               -> app
     main.rs -> app
     main.rs -> desktop -> app
+    main.rs -> updater -> app
 
 Module names in the table may be wrapped in backticks; the test strips
 them, and normalises `-` to `_` so a crate is written the way a path writes
@@ -325,12 +327,14 @@ adds it here first, the way a new dependency is added to section 2 first.
 
 - `Action`: the named actions. Cursor-relative (`Close` means the cursor
   row), never carrying an id. Includes `Tick`, `Resize`, `FocusGained`,
-  the page actions `NotesPage` and `SettingsPage`, the mouse actions
-  `MouseDown`, `MouseUp`, `MouseDrag`, `Scroll` with cell coordinates,
+  the page actions `NotesPage` and `SettingsPage`, `Update` for `U`, the
+  mouse actions `MouseDown`, `MouseUp`, `MouseDrag`, `Scroll` with cell
+  coordinates,
   and in text fields `Insert(char)` and the editing keys.
 - `KeyContext`: `Home { pane, day }`, `Notes { pane }`,
   `Settings { field }`, `Review { step, asks }`, `Popup { kind }`, each
-  with a text-field overlay, and `KeyContext::text_field()` to read it.
+  with a text-field overlay, and `KeyContext::text_field()` to read it,
+  and `Updating`, while a release installs, whose table is quit alone.
   Home's overlay is a
   `Option<Field>` rather than a bool, because the hint bar has to say
   which field it is: adding offers Shift+Enter to keep the field open,
@@ -353,7 +357,8 @@ adds it here first, the way a new dependency is added to section 2 first.
 - `Pane`, `NotesPane`, `ReviewStep`, `Shown`, `Field` and `PopupKind`:
   what a context is of. `PopupKind` includes `DeleteQuestion`, the card
   `confirm_delete` puts in front of `x`, whose table is Enter to delete
-  and Escape to keep.
+  and Escape to keep, and `UpdateQuestion`, the card `U` opens over a
+  newer release, Enter to update and Escape to keep.
 - `action_for(Event, KeyContext) -> Option<Action>`.
 - `bindings(KeyContext) -> &[Binding]`: the rows of the key table for a
   context. The hint bar, the command palette and the help overlay are
@@ -398,6 +403,21 @@ adds it here first, the way a new dependency is added to section 2 first.
   `Locale` is what the environment says dates look like here, which
   `main.rs` resolves once. `WindowSize` and `DateOrder` are re-exported
   here so that both seams are spoken in one vocabulary.
+- `Updater`: the release updater as the window speaks to it,
+  `look(asked)`, `install()` and `heard() -> Option<Heard>`, implemented
+  by `updater` and by a fake in the tests. The first two only start
+  something; what it came to is heard on a later tick, so a slow network
+  is never a slow key. `Heard` is `Looked(Result<Release, String>)`,
+  `Nothing`, a look with nothing to say because the remembered answer is
+  about another version or its request failed, or
+  `Installed(Result<(), String>)`. A `Release` is the installed and the
+  available version and their `Standing`, `Newer`, `Same` or `Older`,
+  which the updater decides: the application never compares versions.
+- `App::watch_releases(Box<dyn Updater>)`: hands the window the updater.
+  `main.rs` calls it only when there is one beside the binary, so `App::new`
+  is unchanged and an app without one says how its copy is updated. The
+  first look is on the first tick, and a tick starts another a minute
+  after the last while `check_for_updates` is on.
 - `App::settings() -> &Settings`, `App::dates() -> DateOrder`, the
   setting resolved against the locale, and `App::change_settings(Settings)`,
   which commits, works the day out again in case the day now starts at
@@ -421,7 +441,9 @@ adds it here first, the way a new dependency is added to section 2 first.
   review. What comes back is the line the command prints, or what the
   window manager said, the settings being saved either way.
 - `App::update(&mut self, Action) -> Flow`: dispatches keys and ticks and
-  returns continuation, quit, or a clipboard request. `CopyTask`,
+  returns continuation, quit, a clipboard request, or `Flow::Restart`
+  once an install from the window is over. Its `Restart` says whether the
+  new launch opens on the notes page, as `--notes` does. `CopyTask`,
   `CopyNote`, `CopySelection`, and `CutSelection` carry the text to write;
   `ReadClipboard` requests text to paste. The terminal adapter uses
   `wl-copy`/`wl-paste` on Wayland or `xclip` on X11 and reports the result
@@ -474,7 +496,11 @@ adds it here first, the way a new dependency is added to section 2 first.
   `days`, `notes` and `review_count`, `page`, `pane`, `notes_pane`,
   `focused`, `popup`, `review`, `editor`, `message`, `cursor`,
   `palette_rows`, `search_results`, `move_choices`, `date_choices`,
-  `repeat_preview`, `draft`, `setting_draft` and `layout`.
+  `repeat_preview`, `draft`, `setting_draft` and `layout`, and for the
+  updates `update_notice`, the newer release the status line names while
+  the setting is on, `newer_release`, the same whatever the setting says,
+  which the update question names, and `installing`, the release being
+  installed and the ticks since, which turn the spinner.
   `Page` is `Home`, `Notes` or `Settings`, and the review is none of the
   three: it is a mode over the page, `Review`, which the window draws
   instead of the panes while it is there. It holds the step on screen, the `Pile` and
@@ -500,7 +526,7 @@ adds it here first, the way a new dependency is added to section 2 first.
   needs the name because a key means something different in each, and
   `ui` because a group is drawn under its own rule. The settings page is
   one group for all of its rows: every key on it means the same thing
-  wherever the cursor is, and the six labels it is drawn under are
+  wherever the cursor is, and the seven labels it is drawn under are
   `setting_rows()`.
 
 ### `ui`
@@ -527,10 +553,36 @@ adds it here first, the way a new dependency is added to section 2 first.
   other than `ok` is the error. Where no Hyprland is running there is no
   window to dispatch to, which is `false` rather than a failure.
 
+### `updater`
+
+- `Beside::here(state_dir) -> Option<Beside>`: the `jobsdone-update`
+  beside `current_exe()`, when it is an executable file. Only beside: a
+  copy run from anywhere else is not the program the updater replaces,
+  so it gets no `Beside` even when `~/.local/bin` has an updater.
+  `Beside::binary()` is the `jobsdone` beside it, which `main.rs` starts
+  after an install, with `--data-dir` when it was given and `--notes`
+  when the `Restart` asks.
+- `Beside` implements `app::Updater`. A look runs on a thread and holds
+  an exclusive lock on `update-check` in the state directory from reading
+  it to writing the answer, so a second window looking at the same moment
+  waits and then reads the first one's answer. The file is one line, the
+  Unix time of the last request and its porcelain answer or `failed`, and
+  is rewritten in place so the lock stays on the file the other windows
+  read. The updater is run, as `jobsdone-update --check --porcelain`, only
+  when the look was asked for or the last request is fifteen minutes old,
+  in the future, or missing; it is killed after 30 seconds. A remembered
+  answer is applied only when it is about the version running here.
+- An install runs `jobsdone-update` in a process group of its own with
+  its output in `update.log` in the state directory, and a thread waits
+  for it. A failure is the log's last line without the updater's
+  `Jobsdone: `, or the exit status when the log is empty.
+
 ### `terminal`
 
-- `run(App) -> std::io::Result<()>`: enters raw mode, installs the panic
-  hook, loops until `Flow::Quit`, restores the terminal. The error type is
+- `run(App) -> std::io::Result<Option<Restart>>`: enters raw mode,
+  installs the panic hook, loops until `Flow::Quit` or `Flow::Restart`,
+  restores the terminal, and hands back the restart, if there is one, for
+  `main.rs` to make once the terminal is the shell's again. The error type is
   the terminal's own, not the store's: by rule 10 a failed commit becomes a
   hint inside the loop and never escapes it, so `terminal` has no reason to
   name a domain type and section 2 does not let it.
@@ -648,6 +700,7 @@ section 2, in the commit that needs it, with the reason in the message.
 | A setting: what it may hold, what it defaults to, what it means | `domain` |
 | The settings page and the keys that change a setting | `app`, `ui`   |
 | What a setting does outside the program            | `desktop` (the window), `terminal` (the mouse) |
+| Asking the release updater, the throttle, the install | `updater` (the process and the record), `app` (what the window says and does about it) |
 | A new view, count or annotation on a screen       | `domain` (the view), `ui` (its formatting) |
 | A migration or a change to how rows are written   | `storage`         |
 | A new key, or a key that means something new      | `input`           |

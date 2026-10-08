@@ -149,6 +149,7 @@ are kept with the tasks, so every open window picks a change up at once.
 | Date order                  | as the locale writes it | `Fri 5 Sep` or `Fri Sep 5`, everywhere a date is written. |
 | Confirm before delete       | off                    | On, `x` asks first instead of deleting and offering to undo. |
 | Spell-check notes in US English | off                 | Underline possible US English spelling mistakes in notes. Checking works offline. |
+| Check for updates           | on                     | Off, the app stops looking for a newer release on its own; `U` still checks. Only a release install looks. |
 
 Colour and font are not here: they come from the terminal, which Omarchy
 themes.

@@ -19,7 +19,7 @@ strictly.
 | tab         | One of a short, fixed set of things a single pane can show, named in its header with the one it is on picked out, and switched with Shift+Tab. The notes list pane has two tabs, the Stack and the Archive; the help overlay has two, the current mode's keys and all keys. |
 | stack       | The notes that are not archived: the first tab of the notes list pane. |
 | scratchpad  | The pane a note is open in, beside the list, where it is written. |
-| popup, card | A box drawn over the panes. It takes the keyboard while it is open, and is not a pane. A card is a popup that asks for an answer: date, repeat, move, and the two questions. |
+| popup, card | A box drawn over the panes. It takes the keyboard while it is open, and is not a pane. A card is a popup that asks for an answer: date, repeat, move, and the three questions. |
 | field       | A place where text is being typed. While one has the keyboard, letters type rather than act. |
 | mode        | What the keyboard is in right now, named at the left of the hint bar: a pane, a field, a popup, or the review. |
 
@@ -196,10 +196,16 @@ Conventions, so the map is guessable:
   page: `/` search (on the notes page it filters the list instead), `:`
   command palette, `?` help, `q` quit. `[` `]` step to the previous and
   next day, because stepping is pressed over and over.
+- `U` is the update, on every page's lists and nowhere a letter types:
+  the update question when the window knows of a newer release, and a
+  check for one when it does not (section 12). The hint bar leaves it out,
+  because the status line names it beside the release it would install;
+  help and the palette list it as "update".
 - `G` is the last row and `ctrl-d` and `ctrl-u` move half of what the list
-  shows, in every list and every card that is a list. `G` is, with `gg`,
-  the one uppercase key that is not about the cursor row. `ctrl-d` and
-  `ctrl-u` also page the palette and search, where letters type.
+  shows, in every list and every card that is a list. Of the uppercase
+  keys, `G` and `U` are the two that are not about the cursor row.
+  `ctrl-d` and `ctrl-u` also page the palette and search, where letters
+  type.
 - `Enter` confirms, `Escape` backs out one level, `u` undoes. The levels
   run towards today: a field, then a card, then a `g` waiting for its
   place, then the review, then the notes or settings page, then another
@@ -455,9 +461,11 @@ comes right after it, is never pushed off. The offer is left off while a
 field has the keyboard, because `u` types there: the bar never names a
 key the line would swallow.
 
-The one question asked whether or not it was asked for: editing the title
-of a recurring copy asks whether the change is for this copy or this and
-future copies, because PRODUCT.md gives both answers meaning.
+Two questions are asked whether or not they were asked for. Editing the
+title of a recurring copy asks whether the change is for this copy or this
+and future copies, because PRODUCT.md gives both answers meaning. `U` on a
+newer release asks before it installs, because an update restarts the
+program and `u` cannot take that back (section 12).
 
 ## 9. Notes are text, and only text
 
@@ -648,6 +656,50 @@ so what the page says and what Hyprland has never disagree. There is no
 preferences file: the settings are rows in the database, beside the
 tasks, so a second window picks a change up the way it picks up any
 other.
+
+## 12. A newer release is named, and installed when asked
+
+A release install, the one with `jobsdone-update` beside its binary, looks
+for a newer release by itself (STACK.md section 7). When it knows of one,
+the status line says so on the home, notes and settings pages, after the
+pile alert and before the other keys: `↑ Jobsdone 1.5.0` in bold, then `U`
+in the accent colour. A narrow window drops the name, `↑ 1.5.0 U`. The
+notice is drawn only where `U` is the update. In a field, an open note, a
+card or the review the key types or means nothing, and the line never
+names a key the keyboard would swallow (section 8). With
+`check_for_updates` off there is no notice and no looking, and `U` still
+works.
+
+`U` on a known newer release opens the update question, a card headed
+Update that reads "Update to Jobsdone 1.5.0?" over "Jobsdone will
+restart.", with `⏎` update and `esc` keep; the status line names it
+UPDATE. Enter first saves what quitting saves, the open note and a window
+rule still owed. A note that cannot be saved stops it there: "What is
+typed in this note could not be saved, so the update waits."
+
+While the release installs, the keyboard is in UPDATING, whose one key is
+`q` quit (`ctrl-c` quits as it does everywhere). The status line reads
+`Updating to Jobsdone 1.5.0 ⠋` in bold, its braille spinner turning a
+frame every tick so that a slow download still looks alive. Quitting
+leaves the install to finish on its own, and the next launch is the new
+release. When the install is done the window starts the new release in
+its place, over the same database, on the notes page if that is where it
+was and on home otherwise. When it fails, the window is as it was and the
+notice stays, so `U` is the next try, and the hint bar says "Could not
+update: " and the updater's last line.
+
+`U` with no newer release known checks for one straight away. The hint
+bar says "Checking for updates…" and then one of:
+
+- "Jobsdone 1.4.0 is up to date."
+- "Jobsdone 1.5.0 is available. Press U to update.", and the notice appears.
+- "Jobsdone 1.4.0 is newer than the latest release, 1.3.0."
+- "Could not check for updates: " and the reason, which is the updater's
+  last line or "no answer in 30 seconds".
+
+A copy with no updater beside it says "This copy was not installed from a
+release; update it the way it was installed." The looks the window makes
+by itself say nothing: they only put the notice up or take it down.
 
 ## Screen inventory
 

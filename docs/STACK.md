@@ -44,8 +44,11 @@ and the bold, dim and reverse attributes are all in crossterm.
 
 Rejected:
 
-- **tokio and async event streams.** The program has no network and no
-  long-running work; a runtime adds start time and buys nothing.
+- **tokio and async event streams.** The only work that waits on the
+  network is asking the release updater what is out, or telling it to
+  install (section 7): each is one child process, waited on by a thread
+  of its own, whose answer the next tick picks up. A runtime adds start time
+  and buys nothing for that.
 - **termion or termwiz backends.** Smaller communities and no advantage
   over crossterm for this program.
 
@@ -162,10 +165,26 @@ Rejected:
 `scripts/install-release` downloads and verifies a prebuilt Linux release,
 then calls `scripts/install --binary PATH`. Release installations include
 `jobsdone-update` (also run as `jobsdone update`) for explicit updates and
-`jobsdone-uninstall` for removal.
-The app itself has no network update check. Prerelease installations follow
+`jobsdone-uninstall` for removal. Prerelease installations follow
 the beta channel; final releases follow stable. Published channel branches
 point to tested release commits, and `--channel` selects either channel explicitly.
+
+The window looks for a newer release by running
+`jobsdone-update --check --porcelain`, the updater beside its own binary, on a
+thread. The updater's `curl` asks the network, so the program has no HTTP crate
+of its own, and the updater decides how the two versions stand, so the window
+and `jobsdone update` cannot disagree. Every window on the machine shares one
+record of the last request, `update-check` in the state directory, locked while
+a window reads it and asks. A window reads the record at launch and once a
+minute after, and runs the updater only when no window has asked for fifteen
+minutes, so looking on its own asks the network at most once every fifteen
+minutes however many windows are open. A failed request counts as a request, so
+an offline machine is not asked every minute. `U` asks at once, whatever the
+record says. The `check_for_updates` setting turns the looking off. A copy with
+no `jobsdone-update` beside it, a source install or one run from somewhere
+else, never looks. Installing from the window runs `jobsdone-update` in a
+process group of its own with its output in `update.log`, so a window closed
+while it runs leaves it to finish (DESIGN.md section 12).
 
 `scripts/install`, behind `make install`, builds from source for the current
 user; running it again updates in place. `scripts/uninstall` takes everything
@@ -330,7 +349,7 @@ the `settings` table, which the settings page writes (DOMAIN.md section
 | Kind      | Path                             | Contents                        |
 |-----------|----------------------------------|---------------------------------|
 | data      | `$XDG_DATA_HOME/jobsdone/`       | the SQLite database             |
-| state     | `$XDG_STATE_HOME/jobsdone/`      | the log file                    |
+| state     | `$XDG_STATE_HOME/jobsdone/`      | the log file, the record of the last update check, and what the last install from the window said |
 
 With the defaults these are `~/.local/share/jobsdone/` and
 `~/.local/state/jobsdone/`. A backup of the data directory is a backup of

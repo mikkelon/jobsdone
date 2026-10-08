@@ -129,6 +129,18 @@ argument after the word passed through untouched; `--help`, `--version` and
 first word on the line. Without the updater, as for a package-manager or
 source install, it fails with `updater_missing` and exit code 1.
 
+`jobsdone update --check --porcelain` prints one line for programs and
+changes nothing:
+
+    newer|same|older INSTALLED AVAILABLE
+
+The first word is how the channel's latest release stands against the
+installed program, `INSTALLED` is the installed version or `-` when there is
+none, and `AVAILABLE` is the channel's version, both without the `v`. A
+failure exits non-zero with the reason on stderr. `--porcelain` without
+`--check` is refused. This line is what the window reads to name a newer
+release in its status line.
+
 ## Window settings
 
 Settings are saved in the database. To apply changed floating/window-size settings
