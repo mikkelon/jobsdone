@@ -4,6 +4,7 @@ set -euo pipefail
 die() { printf 'Jobsdone: %s\n' "$*" >&2; exit 1; }
 version=""
 check=no
+porcelain=no
 channel=""
 options=()
 while [ "$#" -gt 0 ]; do
@@ -14,6 +15,7 @@ while [ "$#" -gt 0 ]; do
         --channel)
             case "${2:-}" in beta | stable) channel="$2"; shift 2 ;; *) die 'Use --channel beta or --channel stable.' ;; esac ;;
         --check) check=yes; shift ;;
+        --porcelain) porcelain=yes; shift ;;
         --keybind | --notes-keybind)
             options+=("$1"); shift
             if [ "$#" -gt 0 ] && [[ "$1" != -* ]]; then options+=("$1"); shift; fi ;;
@@ -32,6 +34,8 @@ Usage: install.sh [OPTIONS]
        jobsdone-update [OPTIONS]
 
   --check          Show available versions without changing files
+  --porcelain      With --check, print one line for programs:
+                   newer|same|older INSTALLED AVAILABLE
   --channel NAME   Select beta or stable releases
   --version vX.Y.Z Install a specific release
   --keybind [KEYS] Set an Omarchy shortcut (default: SUPER + SHIFT + J)
@@ -56,6 +60,7 @@ EOF
         *) die "unknown option: $1" ;;
     esac
 done
+[ "$porcelain" = no ] || [ "$check" = yes ] || die '--porcelain goes with --check'
 [ "$(uname -s)" = Linux ] || die 'only Linux is supported'
 case "$(uname -m)" in
     x86_64) target=x86_64-unknown-linux-musl ;;
@@ -83,12 +88,32 @@ if [ -n "$version" ]; then
     explicit=yes
     version="v${version#v}"
 else
-    manifest="$(fetch "https://raw.githubusercontent.com/mikkelon/jobsdone/release-$channel/Cargo.toml")" || die "Could not find a $channel release. Check your connection and try again, or visit $base."
+    quick=()
+    # A program waiting on the answer kills the check after 30 seconds.
+    if [ "$porcelain" = yes ]; then quick=(--max-time 20 --retry 0); fi
+    manifest="$(fetch "${quick[@]}" "https://raw.githubusercontent.com/mikkelon/jobsdone/release-$channel/Cargo.toml")" || die "Could not find a $channel release. Check your connection and try again, or visit $base."
     version="v$(printf '%s\n' "$manifest" | sed -n 's/^version = "\([^"]*\)"$/\1/p' | head -n 1)"
 fi
 [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]] || die "invalid release version: $version"
 if [ "$explicit" = no ] && [ "$channel" = stable ] && [[ "$version" == *-* ]]; then
     die 'The stable channel contains a prerelease. Your installation has not changed.'
+fi
+current_version="${current#jobsdone }"
+standing=newer
+if [ -n "$current" ]; then
+    # GNU version sort places a tilde before the corresponding final release.
+    current_order="${current_version/-/\~}"
+    available_order="${version#v}"
+    available_order="${available_order/-/\~}"
+    if [ "$current_order" = "$available_order" ]; then
+        standing=same
+    elif [ "$(printf '%s\n' "$current_order" "$available_order" | sort -V | tail -n 1)" = "$current_order" ]; then
+        standing=older
+    fi
+fi
+if [ "$porcelain" = yes ]; then
+    printf '%s %s %s\n' "$standing" "${current_version:--}" "${version#v}"
+    exit 0
 fi
 if [ "$check" = yes ]; then
     if [ "$current" = "jobsdone ${version#v}" ]; then
@@ -105,15 +130,8 @@ fi
 if [ -n "$installed" ] && [ "$(realpath "$installed")" != "$(realpath -m "$binary")" ]; then
     die "jobsdone is installed at $installed; update it through its package manager or remove it before switching"
 fi
-if [ "$explicit" = no ] && [ -n "$current" ]; then
-    current_version="${current#jobsdone }"
-    # GNU version sort places a tilde before the corresponding final release.
-    current_order="${current_version/-/\~}"
-    available_order="${version#v}"
-    available_order="${available_order/-/\~}"
-    if [ "$current_order" != "$available_order" ] && [ "$(printf '%s\n' "$current_order" "$available_order" | sort -V | tail -n 1)" = "$current_order" ]; then
-        die "installed version $current_version is newer; use --version to select a release explicitly"
-    fi
+if [ "$explicit" = no ] && [ "$standing" = older ]; then
+    die "installed version $current_version is newer; use --version to select a release explicitly"
 fi
 if [ "${0##*/}" = jobsdone-update ] && [ "$current" = "jobsdone ${version#v}" ] && [ "${#options[@]}" -eq 0 ]; then
     printf 'Jobsdone %s is already up to date.\n' "${version#v}"

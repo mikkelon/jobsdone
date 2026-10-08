@@ -88,6 +88,27 @@ if env -u JOBSDONE_TEST_STABLE_VERSION "$HOME/.local/bin/jobsdone-update" --chan
 fi
 [ "$(sha256sum "$binary")" = "$before" ]
 JOBSDONE_TEST_BETA_VERSION=0.1.0-beta.10 "$HOME/.local/bin/jobsdone-update" --channel beta --check | grep -F '0.1.0-beta.10'
+porcelain() { "$HOME/.local/bin/jobsdone-update" --check --porcelain "$@"; }
+[ "$(porcelain --channel beta)" = "same ${JOBSDONE_TEST_VERSION#v} ${JOBSDONE_TEST_VERSION#v}" ]
+printf '#!/usr/bin/env bash\necho "jobsdone 0.1.0-beta.2"\n' > "$binary"
+[ "$(JOBSDONE_TEST_BETA_VERSION=0.1.0-beta.10 porcelain)" = 'newer 0.1.0-beta.2 0.1.0-beta.10' ]
+printf '#!/usr/bin/env bash\necho "jobsdone 0.1.0-beta.10"\n' > "$binary"
+[ "$(JOBSDONE_TEST_BETA_VERSION=0.1.0-beta.2 porcelain)" = 'older 0.1.0-beta.10 0.1.0-beta.2' ]
+[ "$(JOBSDONE_TEST_BETA_VERSION=0.1.0 porcelain --channel beta)" = 'newer 0.1.0-beta.10 0.1.0' ]
+printf '#!/usr/bin/env bash\necho "jobsdone 0.1.0"\n' > "$binary"
+[ "$(JOBSDONE_TEST_BETA_VERSION=0.1.0-beta.10 porcelain --channel beta)" = 'older 0.1.0 0.1.0-beta.10' ]
+[ "$(JOBSDONE_TEST_STABLE_VERSION=0.1.0 porcelain)" = 'same 0.1.0 0.1.0' ]
+[ "$(JOBSDONE_TEST_STABLE_VERSION=0.2.0 porcelain)" = 'newer 0.1.0 0.2.0' ]
+if env -u JOBSDONE_TEST_STABLE_VERSION "$HOME/.local/bin/jobsdone-update" --check --porcelain 2> "$scratch/porcelain-error"; then
+    echo 'a channel that cannot be read must fail the porcelain check' >&2; exit 1
+fi
+grep -F 'Jobsdone: Could not find a stable release' "$scratch/porcelain-error"
+if "$HOME/.local/bin/jobsdone-update" --porcelain 2> "$scratch/porcelain-error"; then
+    echo '--porcelain without --check must be refused' >&2; exit 1
+fi
+grep -F -- '--porcelain goes with --check' "$scratch/porcelain-error"
+cp "$scratch/installed-binary" "$binary"
+[ "$(sha256sum "$binary")" = "$before" ]
 printf '#!/usr/bin/env bash\necho "jobsdone 0.1.0-beta.10"\n' > "$binary"
 if JOBSDONE_TEST_BETA_VERSION=0.1.0-beta.2 "$HOME/.local/bin/jobsdone-update"; then
     echo 'beta updates must not downgrade beta.10 to beta.2' >&2; exit 1
