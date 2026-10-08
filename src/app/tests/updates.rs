@@ -212,16 +212,23 @@ fn a_look_somebody_asked_for_says_what_it_found() {
 }
 
 #[test]
-fn u_during_a_look_of_the_windows_own_makes_it_one_that_answers() {
+fn u_during_a_look_of_the_windows_own_asks_once_that_one_is_back() {
     let mut app = started();
     let fake = watched(&mut app);
     app.update(Action::Tick);
     app.update(Action::Update);
-    assert_eq!(fake.looks(), [false], "the look on its way is the one");
+    app.update(Action::Update);
+    assert_eq!(fake.looks(), [false], "one look at a time");
+    assert_eq!(hint(&app), "Checking for updates…");
+
+    fake.say(Heard::Nothing);
+    app.update(Action::Tick);
+    assert_eq!(fake.looks(), [false, true], "the press is a look that asks");
 
     fake.say(Heard::Looked(Ok(release(Standing::Same, "1.4.0", "1.4.0"))));
     app.update(Action::Tick);
     assert_eq!(hint(&app), "Jobsdone 1.4.0 is up to date.");
+    assert_eq!(fake.looks(), [false, true]);
 }
 
 /// An app that has heard of 1.5.0 on a look of its own.

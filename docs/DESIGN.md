@@ -688,8 +688,10 @@ was and on home otherwise. When it fails, the window is as it was and the
 notice stays, so `U` is the next try, and the hint bar says "Could not
 update: " and the updater's last line.
 
-`U` with no newer release known checks for one straight away. The hint
-bar says "Checking for updates…" and then one of:
+`U` with no newer release known asks the channel straight away, whatever
+the fifteen minutes say; pressed while the window's own look is out, it
+asks once that look is back. The hint bar says "Checking for updates…"
+and then one of:
 
 - "Jobsdone 1.4.0 is up to date."
 - "Jobsdone 1.5.0 is available. Press U to update.", and the notice appears.

@@ -144,17 +144,27 @@ struct Updates {
 #[derive(Clone, Debug, PartialEq, Eq)]
 enum Work {
     Idle,
-    /// `asked` is a look somebody pressed a key for, which says what it
-    /// found; one the window started of its own accord says nothing.
-    Looking {
-        asked: bool,
-    },
+    Looking(Look),
     /// The keys are put down until it is over, all but quit. `ticks`
     /// turns the spinner, so that a long download still looks alive.
     Installing {
         version: String,
         ticks: u32,
     },
+}
+
+/// Whose look is on its way, which decides whether it says what it found.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Look {
+    /// One the window started of its own accord, which says nothing.
+    Own,
+    /// The window's own, with `U` pressed while it was out. It may have
+    /// been answered from the record rather than the network, so a look
+    /// that asks follows it.
+    Owed,
+    /// One somebody pressed a key for, which asks the network and says
+    /// what it found.
+    Asked,
 }
 
 /// What is said when there is no updater to ask.
@@ -1839,7 +1849,7 @@ impl App {
         });
         if updates.work == Work::Idle && due {
             updates.looked = Some(now);
-            updates.work = Work::Looking { asked: false };
+            updates.work = Work::Looking(Look::Own);
             updates.updater.look(false);
         }
         None
@@ -1847,13 +1857,19 @@ impl App {
 
     fn hear(&mut self, heard: Heard) -> Option<Restart> {
         let updates = self.updates.as_mut()?;
-        let asked = updates.work == Work::Looking { asked: true };
+        let look = match updates.work {
+            Work::Looking(look) => Some(look),
+            _ => None,
+        };
+        let asked = look == Some(Look::Asked);
         // A look that set out before an install began has nothing to
         // say about what the window is doing now.
-        if matches!(heard, Heard::Looked(_) | Heard::Nothing)
-            && matches!(updates.work, Work::Looking { .. })
-        {
+        if matches!(heard, Heard::Looked(_) | Heard::Nothing) && look.is_some() {
             updates.work = Work::Idle;
+            if look == Some(Look::Owed) {
+                updates.work = Work::Looking(Look::Asked);
+                updates.updater.look(true);
+            }
         }
         match heard {
             Heard::Looked(answer) => {
@@ -1908,11 +1924,11 @@ impl App {
         }
         match &mut updates.work {
             Work::Idle => {
-                updates.work = Work::Looking { asked: true };
+                updates.work = Work::Looking(Look::Asked);
                 updates.updater.look(true);
             }
-            // The look already on its way is the one that answers.
-            Work::Looking { asked } => *asked = true,
+            Work::Looking(look @ Look::Own) => *look = Look::Owed,
+            Work::Looking(Look::Owed | Look::Asked) => {}
             Work::Installing { .. } => return,
         }
         self.say("Checking for updates…", false);
